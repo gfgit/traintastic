@@ -30,6 +30,8 @@
 #include "../../hardware/decoder/decoderchangeflags.hpp"
 #include "../../train/train.hpp"
 
+#include "../../utils/threaded_cout.hpp"
+
 PoweredRailVehicle::PoweredRailVehicle(World& world, std::string_view id_)
   : RailVehicle(world, id_)
   , power{*this, "power", 0, PowerUnit::KiloWatt, PropertyFlags::ReadWrite | PropertyFlags::Store}
@@ -167,6 +169,10 @@ void PoweredRailVehicle::registerDecoder()
           }
           return;
         }
+
+        print("DECODER UPDATE ", self.name.value(), " throttle: ", self.throttle,
+              " step: ", (int)Decoder::throttleToSpeedStep(self.throttle, self.speedSteps),
+              " SPEED: ", kmph, " km/h\n");
 
         activeTrain.value()->throttleSpeed.setValue(kmph);
       }

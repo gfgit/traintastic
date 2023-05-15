@@ -38,6 +38,8 @@
 #include "../utils/almostzero.hpp"
 #include "../utils/displayname.hpp"
 
+#include "../utils/threaded_cout.hpp"
+
 CREATE_IMPL(Train)
 
 static inline bool isPowered(const RailVehicle& vehicle)
@@ -79,6 +81,7 @@ Train::Train(World& world, std::string_view _id) :
     [this](double value, SpeedUnit unit)
     {
       const double currentSpeed = speed.getValue(unit);
+      print("TRAIN requested speed: ", value, " now: ", currentSpeed, "\n");
 
       emergencyStop.setValueInternal(false);
 
@@ -233,6 +236,7 @@ void Train::worldEvent(WorldState state, WorldEvent event)
 
 void Train::setSpeed(const double kmph)
 {
+  print("TRAIN SPEED: ", kmph, " km/h\n");
   for(const auto& vehicle : m_poweredVehicles)
     vehicle->setSpeed(kmph);
   speed.setValueInternal(convertUnit(kmph, SpeedUnit::KiloMeterPerHour, speed.unit()));
