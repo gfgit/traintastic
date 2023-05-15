@@ -31,6 +31,8 @@
 #include "../../../log/log.hpp"
 #include "../../../utils/inrange.hpp"
 
+#include "../../../utils/threaded_cout.hpp"
+
 namespace Z21 {
 
 ClientKernel::ClientKernel(std::string logId_, const ClientConfig& config, bool simulation)
@@ -298,6 +300,10 @@ void ClientKernel::receive(const Message& message)
                       decoder->setFunctionValue(i, val[i]);
                     }
                   }
+                }
+                catch(std::exception& e)
+                {
+
                 }
                 catch(...)
                 {
