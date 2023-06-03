@@ -170,10 +170,6 @@ void PoweredRailVehicle::registerDecoder()
           return;
         }
 
-        print("DECODER UPDATE ", self.name.value(), " throttle: ", self.throttle,
-              " step: ", (int)Decoder::throttleToSpeedStep(self.throttle, self.speedSteps),
-              " SPEED: ", kmph, " km/h\n");
-
         activeTrain.value()->throttleSpeed.setValue(kmph);
       }
 

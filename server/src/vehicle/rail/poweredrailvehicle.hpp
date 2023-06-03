@@ -27,11 +27,15 @@
 #include <traintastic/enum/direction.hpp>
 #include "../../core/powerproperty.hpp"
 
+void printInfo(const std::string &caption, const std::shared_ptr<Decoder>& decoder);
+
 class PoweredRailVehicle : public RailVehicle
 {
   protected:
     PoweredRailVehicle(World& world, std::string_view id_);
     ~PoweredRailVehicle() override;
+
+    friend void ::printInfo(const std::string &caption, const std::shared_ptr<Decoder>& decoder);
 
     void destroying() override;
     void loaded() override;

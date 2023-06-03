@@ -39,9 +39,12 @@ enum class DecoderChangeFlags;
 class DecoderFunction;
 class Throttle;
 
+void printInfo(const std::string &caption, const std::shared_ptr<Decoder>& decoder);
+
 class Decoder : public IdObject
 {
   friend class DecoderFunction;
+    friend void ::printInfo(const std::string &caption, const std::shared_ptr<Decoder>& decoder);
 
   private:
     bool m_worldMute;

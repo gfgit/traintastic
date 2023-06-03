@@ -3,6 +3,7 @@
 
 #include <sstream>
 #include <mutex>
+#include <memory>
 
 inline std::ostream&
 print_one(std::ostream& os)
@@ -40,5 +41,19 @@ print(const Args& ...args)
     os << std::flush;
     real_print(ss.str());
 }
+
+class Decoder;
+
+void printInfo(const std::string &caption, const std::shared_ptr<const Decoder>& decoder);
+
+template <class ...Args>
+void
+printInfoHelper(const std::string &caption, const std::shared_ptr<const Decoder>& decoder, const Args& ...args)
+{
+    std::stringstream ss;
+    print_all(ss, caption, "\n", args...);
+    printInfo(ss.str(), decoder);
+}
+
 
 #endif // THREADED_COUT_HPP
