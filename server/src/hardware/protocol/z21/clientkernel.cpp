@@ -165,6 +165,7 @@ void ClientKernel::receive(const Message& message)
             LocoCache &cache = getLocoCache(reply.address());
 
             DecoderChangeFlags changes = DecoderChangeFlags(0);
+            bool rejected = false;
 
             //Rescale everything to 126 steps
             int currentSpeedStep = reply.speedStep();
@@ -237,6 +238,7 @@ void ClientKernel::receive(const Message& message)
                   cache.speedSteps = reply.speedSteps();
                   cache.speedStep = reply.speedStep();
                 }
+                rejected = true;
               }
             }
 
@@ -261,6 +263,27 @@ void ClientKernel::receive(const Message& message)
             //Store last received speed step converted to 126 steps scale
             cache.lastReceivedSpeedStep = currentSpeedStep;
 
+            {
+            std::stringstream ss;
+            ss << "Z21 RECV addr: " << reply.address() << " kernel: " << m_isUpdatingDecoderFromKernel
+               << " flags: ";
+
+#define flag_to_text(flag) if(has(changes, flag)) ss << #flag << " "
+            flag_to_text(DecoderChangeFlags::EmergencyStop);
+            flag_to_text(DecoderChangeFlags::Direction);
+            flag_to_text(DecoderChangeFlags::Throttle);
+            flag_to_text(DecoderChangeFlags::FunctionValue);
+            flag_to_text(DecoderChangeFlags::FunctionMomentary);
+            ss << "\n";
+#undef flag_to_text
+
+            ss << " dir: " << int(reply.direction()) << " estop: " << reply.isEmergencyStop()
+               << " step: " << (int)reply.speedStep() << "\n"
+               << " rejected: " << rejected << "\n\n";
+
+            print(ss.str());
+            }
+
             EventLoop::call(
               [this, address=reply.address(), isEStop=reply.isEmergencyStop(),
               speed = reply.speedStep(), speedMax=reply.speedSteps(),
@@ -271,6 +294,25 @@ void ClientKernel::receive(const Message& message)
                   if(auto decoder = m_decoderController->getDecoder(DCC::getProtocol(address), address))
                   {
                     float throttle = Decoder::speedStepToThrottle(speed, speedMax);
+
+                    std::stringstream ss;
+                    ss << "Z21 EVENTLOOP addr: " << address
+                       << " kernel: " << m_isUpdatingDecoderFromKernel
+                       << " flags: ";
+
+                    #define flag_to_text(flag) if(has(changes, flag)) ss << #flag << " "
+                    flag_to_text(DecoderChangeFlags::EmergencyStop);
+                    flag_to_text(DecoderChangeFlags::Direction);
+                    flag_to_text(DecoderChangeFlags::Throttle);
+                    flag_to_text(DecoderChangeFlags::FunctionValue);
+                    flag_to_text(DecoderChangeFlags::FunctionMomentary);
+                    ss << "\n";
+                    #undef flag_to_text
+
+                    ss << " dir: " << int(dir) << " estop: " << isEStop
+                       << " step: " << (int)speed << "\n\n";
+
+                    print(ss.str());
 
                     if(has(changes, DecoderChangeFlags::EmergencyStop))
                     {
@@ -541,6 +583,26 @@ void ClientKernel::decoderChanged(const Decoder& decoder, DecoderChangeFlags cha
   if(const auto& f = decoder.getFunction(functionNumber))
     funcVal = toTriState(f->value);
 
+  {
+  std::stringstream ss;
+  ss << "DECODER CHANGED addr: " << address << " kernel: " << m_isUpdatingDecoderFromKernel
+     << " flags: ";
+
+#define flag_to_text(flag) if(has(changes, flag)) ss << #flag << " "
+  flag_to_text(DecoderChangeFlags::EmergencyStop);
+  flag_to_text(DecoderChangeFlags::Direction);
+  flag_to_text(DecoderChangeFlags::Throttle);
+  flag_to_text(DecoderChangeFlags::FunctionValue);
+  flag_to_text(DecoderChangeFlags::FunctionMomentary);
+  ss << "\n";
+#undef flag_to_text
+
+  ss << " dir: " << int(direction) << " estop: " << isEStop
+     << " step: " << (int)Decoder::throttleToSpeedStep<uint8_t>(throttle, 126) << "\n\n";
+
+  print(ss.str());
+  }
+
   if(m_isUpdatingDecoderFromKernel)
   {
     //This change was caused by Z21 message so there is not point
@@ -613,6 +675,25 @@ void ClientKernel::decoderChanged(const Decoder& decoder, DecoderChangeFlags cha
       {
         newTargetSpeedStep = float(newTargetSpeedStep) / float(cmd.speedSteps()) * 126.0;
       }
+
+      std::stringstream ss;
+      ss << "DECODER CHANGED CALLBACK addr: " << address << " kernel: " << m_isUpdatingDecoderFromKernel
+         << " flags: ";
+
+#define flag_to_text(flag) if(has(changes, flag)) ss << #flag << " "
+      flag_to_text(DecoderChangeFlags::EmergencyStop);
+      flag_to_text(DecoderChangeFlags::Direction);
+      flag_to_text(DecoderChangeFlags::Throttle);
+      flag_to_text(DecoderChangeFlags::FunctionValue);
+      flag_to_text(DecoderChangeFlags::FunctionMomentary);
+      ss << "\n";
+#undef flag_to_text
+
+      ss << " dir: " << int(direction) << " estop: " << isEStop
+         << " step: " << (int)Decoder::throttleToSpeedStep<uint8_t>(throttle, 126) << "\n"
+         << "changed: " << changed << "\n\n";
+
+      print(ss.str());
 
       if(changed)
       {
