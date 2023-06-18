@@ -230,6 +230,18 @@ void ClientKernel::receive(const Message& message)
                   //These messages are probably feedback of our own changes arrived with some delay.
                   //If we get values outside this range or changing trend we pass them to let Train adjust.
                   maybeOldFeedback = true;
+                  rejected = true;
+                }
+
+                {
+                  std::stringstream ss;
+                  ss << "Z21 TIMEOUT: " << reply.address() << " kernel: " << m_isUpdatingDecoderFromKernel
+                     << " lastSpeedSteps: " << (int)cache.speedSteps << " recvSpeedSteps: " << (int)reply.speedSteps() << "\n"
+                     << " lastSpeedStep: " << (int)cache.lastReceivedSpeedStep << " curSeedStep: " << currentSpeedStep << " target: " << targetSpeedStep << "\n"
+                     << " trend: " << (cache.speedTrend == LocoCache::Trend::Ascending ? "asc" : "des")
+                     << " reject: " << rejected;
+
+                  print(ss.str());
                 }
 
                 if(!maybeOldFeedback)
@@ -663,6 +675,8 @@ void ClientKernel::decoderChanged(const Decoder& decoder, DecoderChangeFlags cha
         }
       }
 
+      int oldReceivedStep = cache.lastReceivedSpeedStep;
+
       //Rescale everything to 126 steps
       int oldTargetSpeedStep = cache.speedStep;
       if(cache.speedSteps != 126)
@@ -675,25 +689,6 @@ void ClientKernel::decoderChanged(const Decoder& decoder, DecoderChangeFlags cha
       {
         newTargetSpeedStep = float(newTargetSpeedStep) / float(cmd.speedSteps()) * 126.0;
       }
-
-      std::stringstream ss;
-      ss << "DECODER CHANGED CALLBACK addr: " << address << " kernel: " << m_isUpdatingDecoderFromKernel
-         << " flags: ";
-
-#define flag_to_text(flag) if(has(changes, flag)) ss << #flag << " "
-      flag_to_text(DecoderChangeFlags::EmergencyStop);
-      flag_to_text(DecoderChangeFlags::Direction);
-      flag_to_text(DecoderChangeFlags::Throttle);
-      flag_to_text(DecoderChangeFlags::FunctionValue);
-      flag_to_text(DecoderChangeFlags::FunctionMomentary);
-      ss << "\n";
-#undef flag_to_text
-
-      ss << " dir: " << int(direction) << " estop: " << isEStop
-         << " step: " << (int)Decoder::throttleToSpeedStep<uint8_t>(throttle, 126) << "\n"
-         << "changed: " << changed << "\n\n";
-
-      print(ss.str());
 
       if(changed)
       {
@@ -721,6 +716,27 @@ void ClientKernel::decoderChanged(const Decoder& decoder, DecoderChangeFlags cha
         //In less than 1 seconds from now
         cache.lastSetTime = std::chrono::steady_clock::now();
       }
+
+      std::stringstream ss;
+      ss << "DECODER CHANGED CALLBACK addr: " << address << " kernel: " << m_isUpdatingDecoderFromKernel
+         << " flags: ";
+
+#define flag_to_text(flag) if(has(changes, flag)) ss << #flag << " "
+      flag_to_text(DecoderChangeFlags::EmergencyStop);
+      flag_to_text(DecoderChangeFlags::Direction);
+      flag_to_text(DecoderChangeFlags::Throttle);
+      flag_to_text(DecoderChangeFlags::FunctionValue);
+      flag_to_text(DecoderChangeFlags::FunctionMomentary);
+      ss << "\n";
+#undef flag_to_text
+
+      ss << " dir: " << int(direction) << " estop: " << isEStop
+         << " step: " << (int)Decoder::throttleToSpeedStep<uint8_t>(throttle, 126) << "\n"
+         << " oldTarget: " << oldTargetSpeedStep << " newTarget: " << newTargetSpeedStep << "\n"
+         << " lastSpeedStep: " << oldReceivedStep << " corrected: " << (int)cache.lastReceivedSpeedStep
+         << " changed: " << changed << "\n\n";
+
+      print(ss.str());
 
       if(changed)
       {
