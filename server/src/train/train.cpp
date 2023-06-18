@@ -258,12 +258,12 @@ void Train::updateSpeed()
   if(m_speedState == SpeedState::Accelerate)
   {
     //! \todo add realistic acceleration
-    acceleration = 1; // m/s^2
+    acceleration = 2; // m/s^2
   }
   else if(m_speedState == SpeedState::Braking)
   {
     //! \todo add realistic braking
-    acceleration = -0.5; // m/s^2
+    acceleration = -2; // m/s^2
   }
   else
     assert(false);
