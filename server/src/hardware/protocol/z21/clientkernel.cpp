@@ -88,6 +88,8 @@ void ClientKernel::receive(const Message& message)
               [this, address=reply.address() + 1, on]()
               {
                 // Z21 turnout addresses start at 0 so add one
+                // TODO: should we ignore it if matched request
+                // or process it anyway because it contains updated status?
                 m_outputController->updateOutputValue(OutputController::defaultOutputChannel, address, on);
               });
           }
@@ -1086,8 +1088,7 @@ std::optional<ClientKernel::PendingRequest> ClientKernel::matchPendingReplyAndRe
         switch (lanX.xheader)
         {
         case LAN_X_TURNOUT_INFO:
-          // not (yet) implemented
-          //address = static_cast<const LanXTurnoutInfo&>(lanX).address();
+          address = static_cast<const LanXTurnoutInfo&>(lanX).address();
           break;
 
         case LAN_X_LOCO_INFO:
