@@ -1444,6 +1444,69 @@ constexpr std::string_view toString(LanXSetLocoFunction::SwitchType value)
   return {};
 }
 
+struct MessageReplyType
+{
+  enum Priority
+  {
+    LowPriority = 0,
+    Normal = 1,
+    Urgent = 2
+  };
+
+  enum Flags
+  {
+    CheckDb0       = 1,
+    CheckSpeedStep = 1 << 1,
+    CheckAddress   = 1 << 2
+  };
+
+  inline Priority getPriority() const
+  {
+    return Priority(m_flags & 0xF);
+  }
+
+  inline void setPriority(Priority priority)
+  {
+    m_flags = uint8_t(getFlags()) << 4 | (uint8_t(priority) & 0xF);
+  }
+
+  inline Flags getFlags() const
+  {
+    return Flags((m_flags >> 4) & 0xF);
+  }
+
+  inline bool hasFlag(Flags flag) const
+  {
+    return uint8_t(getFlags()) & uint8_t(flag);
+  }
+
+  inline void setFlag(Flags flag, bool on = true)
+  {
+    uint8_t flags = uint8_t(getFlags());
+    if(on)
+      flags |= uint8_t(flag);
+    else
+      flags &= ~uint8_t(flag);
+    setFlags(Flags(flags));
+  }
+
+  inline void setFlags(Flags flags)
+  {
+    m_flags = uint8_t(flags) << 4 | (uint8_t(getPriority()) & 0xF);
+  }
+
+  static constexpr Header noReply = Header(0);
+
+  Header header = noReply;
+  uint8_t xHeader = 0;
+  uint8_t db0 = 0;
+  uint16_t address = 0;
+  uint8_t m_flags = uint8_t(Priority::Normal);
+  uint8_t speedStep = 0;
+};
+
+MessageReplyType getReplyType(const Message &message);
+
 }
 
 inline bool operator ==(const Z21::Message& lhs, const Z21::Message& rhs)
