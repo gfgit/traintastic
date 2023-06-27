@@ -963,7 +963,8 @@ std::optional<ClientKernel::PendingRequest> ClientKernel::matchPendingReplyAndRe
         switch (lanX.xheader)
         {
         case LAN_X_TURNOUT_INFO:
-          address = static_cast<const LanXTurnoutInfo&>(lanX).address();
+          // not (yet) implemented
+          //address = static_cast<const LanXTurnoutInfo&>(lanX).address();
           break;
 
         case LAN_X_LOCO_INFO:
