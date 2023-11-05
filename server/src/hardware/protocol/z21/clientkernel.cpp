@@ -133,10 +133,11 @@ void ClientKernel::receive(const Message& message)
           {
             const auto& reply = static_cast<const LanXLocoInfo&>(message);
 
-            const int maxFunc = reply.supportsF29F31() ? 31 : 28;
-            bool val[31 + 1] = {};
+            //NOTE: there is also a function at index 0, hence +1
+            const int functionIndexMax = std::min(reply.functionIndexMax(), LanXLocoInfo::supportedFunctionIndexMax);
+            bool val[LanXLocoInfo::supportedFunctionIndexMax + 1] = {};
 
-            for(int i = 0; i <= maxFunc; i++)
+            for(int i = 0; i <= functionIndexMax; i++)
             {
               val[i] = reply.getFunction(i);
             }
@@ -243,7 +244,7 @@ void ClientKernel::receive(const Message& message)
             EventLoop::call(
               [this, address=reply.address(), isEStop=reply.isEmergencyStop(),
               speed = reply.speedStep(), speedMax=reply.speedSteps(),
-              dir = reply.direction(), val, maxFunc, changes]()
+              dir = reply.direction(), val, functionIndexMax, changes]()
               {
                 try
                 {
@@ -274,7 +275,7 @@ void ClientKernel::receive(const Message& message)
 
                     //Function get always updated because we do not store a copy in cache
                     //so there is no way to tell in advance if they changed
-                    for(int i = 0; i <= maxFunc; i++)
+                    for(int i = 0; i <= functionIndexMax; i++)
                     {
                       decoder->setFunctionValue(i, val[i]);
                     }
