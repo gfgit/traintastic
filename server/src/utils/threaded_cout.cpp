@@ -10,7 +10,7 @@
 #include "../train/train.hpp"
 #include "../world/world.hpp"
 
-std::mutex &get_cout_mutex()
+extern std::mutex &get_cout_mutex()
 {
     static std::mutex m;
     return m;

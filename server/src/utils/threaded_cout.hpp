@@ -26,7 +26,7 @@ print_all(std::ostream& os, const Args& ...args)
     return print_one(os, args...);
 }
 
-std::mutex&
+extern std::mutex&
 get_cout_mutex();
 
 void real_print(const std::string& str);
