@@ -23,6 +23,9 @@
 #ifndef TRAINTASTIC_SERVER_HARDWARE_PROTOCOL_Z21_CLIENTKERNEL_HPP
 #define TRAINTASTIC_SERVER_HARDWARE_PROTOCOL_Z21_CLIENTKERNEL_HPP
 
+#include <unordered_map>
+#include <optional>
+
 #include "kernel.hpp"
 #include <boost/asio/steady_timer.hpp>
 #include <traintastic/enum/tristate.hpp>
@@ -62,6 +65,8 @@ class ClientKernel final : public Kernel
   private:
     const bool m_simulation;
     boost::asio::steady_timer m_keepAliveTimer;
+    boost::asio::steady_timer m_inactiveDecoderPurgeTimer;
+    boost::asio::steady_timer m_schedulePendingRequestTimer;
     BroadcastFlags m_broadcastFlags;
     int m_broadcastFlagsRetryCount;
     static constexpr int maxBroadcastFlagsRetryCount = 10;
@@ -84,7 +89,7 @@ class ClientKernel final : public Kernel
     /*!
      * \brief m_trackPowerOn caches command station track power state.
      *
-     * NOTE: it must be accessed only from event loop thread or from
+     * \note It must be accessed only from event loop thread or from
      * Z21::ClientKernel::onStart().
      *
      * \sa EventLoop
@@ -94,7 +99,7 @@ class ClientKernel final : public Kernel
     /*!
      * \brief m_emergencyStop caches command station emergency stop state.
      *
-     * NOTE: it must be accessed only from event loop thread or from
+     * \note It must be accessed only from event loop thread or from
      * Z21::ClientKernel::onStart().
      *
      * \sa EventLoop
@@ -104,6 +109,39 @@ class ClientKernel final : public Kernel
     std::function<void()> m_onEmergencyStop;
 
     DecoderController* m_decoderController = nullptr;
+
+    struct LocoCache
+    {
+      enum class Trend : bool
+      {
+          Ascending = 0,
+          Descending
+      };
+
+      uint16_t dccAddress = 0;
+      bool isEStop = false;
+      uint8_t speedStep = 0;
+      uint8_t speedSteps = 0;
+      uint8_t lastReceivedSpeedStep = 0; //Always in 126 steps
+      Trend speedTrend = Trend::Ascending;
+      bool speedTrendExplicitlySet = false;
+      Direction direction = Direction::Unknown;
+      std::chrono::steady_clock::time_point lastSetTime;
+    };
+
+    std::unordered_map<uint16_t, LocoCache> m_locoCache;
+    bool m_isUpdatingDecoderFromKernel = false;
+
+    struct PendingRequest
+    {
+      std::vector<uint8_t> messageBytes;
+      Z21::MessageReplyType reply;
+      std::chrono::steady_clock::time_point sendTime;
+
+      //! Decrease at each re-send, remove request when reaches 0
+      uint8_t retryCount = 0;
+    };
+    std::vector<PendingRequest> m_pendingRequests;
 
     InputController* m_inputController = nullptr;
     std::array<TriState, rbusAddressMax - rbusAddressMin + 1> m_rbusFeedbackStatus;
@@ -119,21 +157,32 @@ class ClientKernel final : public Kernel
     void onStop() final;
 
     template<class T>
-    void postSend(const T& message)
+    void postSend(const T& message, bool wantReply = true, int customRetryCount = 0)
     {
       m_ioContext.post(
-        [this, message]()
+        [this, message, wantReply, customRetryCount]()
         {
-          send(message);
+          send(message, wantReply, customRetryCount);
         });
     }
 
-    void send(const Message& message);
+    void send(const Message& message, bool wantReply = true, int customRetryCount = 0);
 
     void startKeepAliveTimer();
     void keepAliveTimerExpired(const boost::system::error_code& ec);
 
-  public:
+    void startInactiveDecoderPurgeTimer();
+    void inactiveDecoderPurgeTimerExpired(const boost::system::error_code &ec);
+
+    LocoCache &getLocoCache(uint16_t dccAddr);
+
+    void addPendingRequest(const PendingRequest& request);
+    std::optional<PendingRequest> matchPendingReplyAndRemove(const Message& message);
+    void startSchedulePendingRequestTimer();
+    void schedulePendingRequestTimerExpired(const boost::system::error_code &ec);
+    void rescheduleTimedoutRequests();
+
+public:
     /**
      * @brief Create kernel and IO handler
      * @param[in] config Z21 client configuration
