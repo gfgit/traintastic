@@ -1084,6 +1084,35 @@ struct LanGetHardwareInfoReply : Message
 static_assert(sizeof(LanGetHardwareInfoReply) == 12);
 
 // LAN_X_TURNOUT_INFO
+struct LanXTurnoutInfo : LanX
+{
+    uint8_t db0;
+    uint8_t db1;
+    uint8_t db2;
+    uint8_t checksum;
+
+    LanXTurnoutInfo()
+        : LanX(sizeof(LanXTurnoutInfo), LAN_X_TURNOUT_INFO)
+    {
+        updateChecksum();
+    }
+
+    uint16_t address() const
+    {
+        return (static_cast<uint16_t>(db0) << 8) | db1;
+    }
+
+    bool positionUnknown() const
+    {
+        return db2 == 0;
+    }
+
+    bool state() const
+    {
+        return db2 == 0x02;
+    }
+} ATTRIBUTE_PACKED;
+static_assert(sizeof(LanXTurnoutInfo) == 9);
 
 // LAN_X_BC_TRACK_POWER_OFF
 struct LanXBCTrackPowerOff : LanX
