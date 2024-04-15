@@ -26,6 +26,7 @@
 #include "../../decoder/decoderchangeflags.hpp"
 #include "../../protocol/dcc/dcc.hpp"
 #include "../../input/inputcontroller.hpp"
+#include "../../output/outputcontroller.hpp"
 #include "../../../core/eventloop.hpp"
 #include "../../../log/log.hpp"
 #include "../../../utils/inrange.hpp"
@@ -70,6 +71,23 @@ void ClientKernel::receive(const Message& message)
 
       switch(lanX.xheader)
       {
+        case LAN_X_TURNOUT_INFO:
+          if(message.dataLen() == sizeof(LanXTurnoutInfo))
+          {
+              const auto& reply = static_cast<const LanXTurnoutInfo&>(message);
+              TriState on = toTriState(reply.state());
+              if(reply.positionUnknown())
+                  on = TriState::Undefined;
+
+              EventLoop::call(
+                  [this, address=reply.address() + 1, on]()
+                  {
+                      // Z21 turnout addresses start at 0 so add one
+                      m_outputController->updateOutputValue(OutputChannel::Turnout, address, on);
+                  });
+          }
+          break;
+
         case LAN_X_BC:
           if(message == LanXBCTrackPowerOff() || message == LanXBCTrackShortCircuit())
           {
