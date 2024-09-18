@@ -100,7 +100,7 @@ Train::Train(World& world, std::string_view _id) :
       setThrottleSpeed(speedPoint);
     }},
   accelerationRate{this, "acceleration_rate", 1.5, PropertyFlags::ReadWrite | PropertyFlags::Store},
-  brakingRate{this, "braking_rate", -1.0, PropertyFlags::ReadWrite | PropertyFlags::Store},
+  brakingRate{this, "braking_rate", 1.0, PropertyFlags::ReadWrite | PropertyFlags::Store},
   stop{*this, "stop", MethodFlags::ScriptCallable,
     [this]()
     {
@@ -193,7 +193,7 @@ Train::Train(World& world, std::string_view _id) :
   Attributes::addUnit(accelerationRate, "m/s" UTF8_SUPERSCRIPT_TWO);
   m_interfaceItems.add(accelerationRate);
 
-  Attributes::addMinMax(brakingRate, -10.0, -0.01);
+  Attributes::addMinMax(brakingRate, 0.01, 10.0);
   Attributes::addUnit(brakingRate, "m/s" UTF8_SUPERSCRIPT_TWO);
   m_interfaceItems.add(brakingRate);
 
@@ -480,7 +480,8 @@ void Train::setThrottleSpeed(const SpeedPoint& targetSpeed)
       if(m_speedState == SpeedState::Braking)
       {
         // We start from under last set speed
-        double deltaSpeed = (brakingRate / m_world.scaleRatio) * double(millis.count()) / 1000.0;
+        // NOTE: braking rate is positive so it needs minus
+        double deltaSpeed = ( -brakingRate / m_world.scaleRatio) * double(millis.count()) / 1000.0;
         currentSpeed += deltaSpeed; // Negative delta
         nextTableIdx--;
       }
@@ -534,7 +535,8 @@ void Train::scheduleAccelerationFrom(double currentSpeed, uint8_t newTableIdx, S
   double accelRate = accelerationRate;
   if(state == SpeedState::Braking)
   {
-    accelRate = brakingRate;
+    // Make it negative
+    accelRate = -brakingRate;
   }
   accelRate /= m_world.scaleRatio;
 
@@ -570,7 +572,8 @@ void Train::updateSpeed()
     double acceleration = accelerationRate;
     if(m_speedState == SpeedState::Braking)
     {
-      acceleration = brakingRate;
+      // Make it negative
+      acceleration = -brakingRate;
     }
 
     currentSpeed += acceleration * 0.1; // x 100ms
@@ -895,8 +898,7 @@ void Train::updateAcceleration()
         accelerationMax = itemAcceleration;
       }
 
-      // Braking rate is negative, we want lowest absolute value
-      if(!brakingRateSet || itemBrakingRate > brakingRateMax)
+      if(!brakingRateSet || itemBrakingRate < brakingRateMax)
       {
         brakingRateSet = true;
         brakingRateMax = itemBrakingRate;
@@ -913,11 +915,9 @@ void Train::updateAcceleration()
 
   if(brakingRateSet && !almostZero(brakingRateMax))
   {
-    // Braking rate is negative
-    // Max rate is lowest in absolute value and also the minimum
-    if(brakingRate < brakingRateMax)
+    if(brakingRate > brakingRateMax)
       brakingRate = brakingRateMax;
-    Attributes::setMin(brakingRate, brakingRateMax);
+    Attributes::setMax(brakingRate, brakingRateMax);
   }
 }
 
