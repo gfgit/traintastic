@@ -475,7 +475,7 @@ void Simulator::loadTrackPlan(const QJsonArray& trackPlan)
           const auto pt = origin(startSegment);
           curX = pt.x;
           curY = pt.y;
-          curRotation = startSegment.rotation;
+          curRotation = startSegment.rotation + 180.0f;
 
           lastSide = Side::Origin;
           lastSegmentIndex = startSegment.index;
