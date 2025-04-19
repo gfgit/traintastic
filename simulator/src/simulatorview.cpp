@@ -228,7 +228,9 @@ void SimulatorView::setSimulator(Simulator* value)
     {
       if(segment.type == Simulator::TrackSegment::Type::Turnout)
       {
-        m_turnouts.emplace_back(Turnout{segment.index, {origin(segment), straightEnd(segment), curveEnd(segment)}});
+        m_turnouts.emplace_back(Turnout{segment.index, {getEnd(segment, 0),
+                                                        getEnd(segment, 1),
+                                                        getEnd(segment, 2)}});
       }
     }
     connect(m_simulator, &Simulator::tick, this, qOverload<>(&SimulatorView::update));

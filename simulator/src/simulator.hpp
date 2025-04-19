@@ -56,6 +56,7 @@ public:
       Turnout,
     } type;
 
+    static constexpr auto invalidSide = std::numeric_limits<uint8_t>::max();
     size_t index = invalidIndex;
     size_t nextSegmentIndex[2] = {invalidIndex, invalidIndex};
 
@@ -111,6 +112,51 @@ public:
         return turnout.thrownSegmentIndex;
       }
       return nextSegmentIndex[1];
+    }
+
+    uint8_t getDefaultNextDirection(uint8_t from)
+    {
+      if(type == Type::Straight || type == Type::Curve)
+      {
+        assert((from == 0 || from == 1) && "invalid from direction");
+
+        return from == 0 ? 1 : 0;
+      }
+      else if(type == Type::Turnout)
+      {
+        assert((from >= 0 || from <= 2) && "invalid from direction");
+
+        if(from != 0)
+          return 0; // Origin
+
+        if(nextSegmentIndex[1] == invalidIndex)
+          return 1; // Straight end
+
+        return 2; // Curve end
+      }
+
+      assert(false);
+      return invalidSide;
+    }
+
+    void setNextSegment(uint8_t side, size_t nextIndex)
+    {
+      if(type == Type::Straight || type == Type::Curve)
+      {
+        assert((side == 0 || side == 1) && "invalid side");
+        nextSegmentIndex[side] = nextIndex;
+      }
+      else if(type == Type::Turnout)
+      {
+        assert((side >= 0 || side <= 2) && "invalid side");
+
+        if(side == 2)
+          turnout.thrownSegmentIndex = nextIndex;
+        else
+          nextSegmentIndex[side] = nextIndex;
+      }
+      else
+        assert(false);
     }
   };
 
@@ -268,9 +314,6 @@ constexpr Simulator::Point operator/(const Simulator::Point divided, const int d
   return {divided.x / divisor, divided.y / divisor};
 }
 
-Simulator::Point origin(const Simulator::TrackSegment& segment);
-Simulator::Point straightEnd(const Simulator::TrackSegment& segment);
-Simulator::Point curveEnd(const Simulator::TrackSegment& segment);
-Simulator::Point end(const Simulator::TrackSegment& segment);
+Simulator::Point getEnd(const Simulator::TrackSegment& segment, uint8_t side);
 
 #endif

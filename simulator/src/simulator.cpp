@@ -230,13 +230,34 @@ Simulator::Point curveEnd(const Simulator::TrackSegment& segment)
     cy - segment.curve.radius * cosf(qDegreesToRadians(angle + segment.curve.angle))};
 }
 
-Simulator::Point end(const Simulator::TrackSegment& segment)
+Simulator::Point getEnd(const Simulator::TrackSegment& segment, uint8_t side)
 {
   if(segment.type == Simulator::TrackSegment::Type::Curve)
   {
+    assert(side == 0 || side == 1);
+    if(side == 0)
+        return origin(segment);
     return curveEnd(segment);
   }
-  return straightEnd(segment);
+  else if(segment.type == Simulator::TrackSegment::Type::Straight)
+  {
+    assert(side == 0 || side == 1);
+    if(side == 0)
+        return origin(segment);
+    return straightEnd(segment);
+  }
+  else if(segment.type == Simulator::TrackSegment::Type::Turnout)
+  {
+    assert(side == 0 || side == 1 || side == 2);
+    if(side == 0)
+      return origin(segment);
+    else if(side == 1)
+      return straightEnd(segment);
+    return curveEnd(segment);
+  }
+
+  assert(false);
+  return Simulator::Point();
 }
 
 namespace {
@@ -401,7 +422,7 @@ void Simulator::loadTrackPlan(const QJsonArray& trackPlan)
 
   m_trackSegments.reserve(trackPlan.size());
 
-  Side lastSide = Side::Origin;
+  uint8_t lastSide = 0;
   size_t lastSegmentIndex = invalidIndex;
   float curX = 0;
   float curY = 0;
@@ -415,7 +436,7 @@ void Simulator::loadTrackPlan(const QJsonArray& trackPlan)
     }
     QJsonObject obj = value.toObject();
 
-    Side side = Side::Origin;
+    uint8_t side = 0;
     TrackSegment segment;
 
     if(auto id = obj["id"].toString(); !id.isEmpty())
@@ -444,11 +465,11 @@ void Simulator::loadTrackPlan(const QJsonArray& trackPlan)
       const QString sideStr = obj["side"].toString();
       if(sideStr == "straight")
       {
-        side = Side::End;
+        side = 1;
       }
       else if(sideStr == "curve")
       {
-        side = Side::TurnoutThrown;
+        side = 2;
       }
     }
 
@@ -466,23 +487,23 @@ void Simulator::loadTrackPlan(const QJsonArray& trackPlan)
     if(obj.contains("start"))
     {
       auto start = obj["start"].toString();
-      const int startPoint = obj["start_point"].toInt(-1);
+      const uint8_t startPoint = obj["start_point"].toInt(TrackSegment::invalidSide);
       if(auto it = m_trackSegmentId.find(start); it != m_trackSegmentId.end())
       {
         auto& startSegment = m_trackSegments[it->second];
-        if(startSegment.nextSegmentIndex[0] == invalidIndex && (startPoint == -1 || startPoint == 0))
+        if(startSegment.nextSegmentIndex[0] == invalidIndex && (startPoint == TrackSegment::invalidSide || startPoint == 0))
         {
-          const auto pt = origin(startSegment);
+          const auto pt = getEnd(startSegment, 0);
           curX = pt.x;
           curY = pt.y;
           curRotation = startSegment.rotation + 180.0f;
 
-          lastSide = Side::Origin;
+          lastSide = 0;
           lastSegmentIndex = startSegment.index;
         }
-        else if(startSegment.nextSegmentIndex[1] == invalidIndex && (startPoint == -1 || startPoint == 1))
+        else if(startSegment.nextSegmentIndex[1] == invalidIndex && (startPoint == TrackSegment::invalidSide || startPoint == 1))
         {
-          const auto pt = end(startSegment);
+          const auto pt = getEnd(startSegment, 1);
           curX = pt.x;
           curY = pt.y;
           curRotation = startSegment.rotation;
@@ -491,17 +512,17 @@ void Simulator::loadTrackPlan(const QJsonArray& trackPlan)
             curRotation += startSegment.curve.angle;
           }
 
-          lastSide = Side::End;
+          lastSide = 1;
           lastSegmentIndex = startSegment.index;
         }
-        else if(startSegment.type == TrackSegment::Type::Turnout && startSegment.turnout.thrownSegmentIndex == invalidIndex && (startPoint == -1 || startPoint == 2))
+        else if(startSegment.type == TrackSegment::Type::Turnout && startSegment.turnout.thrownSegmentIndex == invalidIndex && (startPoint == TrackSegment::invalidSide || startPoint == 2))
         {
-          const auto pt = curveEnd(startSegment);
+          const auto pt = getEnd(startSegment, 2);
           curX = pt.x;
           curY = pt.y;
           curRotation = startSegment.rotation + startSegment.curve.angle;
 
-          lastSide = Side::TurnoutThrown;
+          lastSide = 2;
           lastSegmentIndex = startSegment.index;
         }
         else
@@ -533,7 +554,7 @@ void Simulator::loadTrackPlan(const QJsonArray& trackPlan)
       }
     }
 
-    if(segment.type == TrackSegment::Type::Turnout && side == Side::End)
+    if(segment.type == TrackSegment::Type::Turnout && side == 1)
     {
       segment.rotation = curRotation + 180.0f;
       if(segment.rotation >= 360.0f)
@@ -545,7 +566,7 @@ void Simulator::loadTrackPlan(const QJsonArray& trackPlan)
       curX = segment.x;
       curY = segment.y;
     }
-    else if(segment.type == TrackSegment::Type::Turnout && side == Side::TurnoutThrown)
+    else if(segment.type == TrackSegment::Type::Turnout && side == 2)
     {
       const float curAngle = (segment.curve.angle < 0) ? curRotation : (curRotation + 180.0f);
 
@@ -619,69 +640,12 @@ void Simulator::loadTrackPlan(const QJsonArray& trackPlan)
     segment.index = m_trackSegments.size();
     if(lastSegmentIndex != invalidIndex)
     {
-      switch(side)
-      {
-        case Side::Origin:
-          segment.nextSegmentIndex[0] = lastSegmentIndex;
-          break;
-
-        case Side::End:
-          segment.nextSegmentIndex[1] = lastSegmentIndex;
-          break;
-
-        case Side::TurnoutThrown:
-          assert(segment.type == TrackSegment::Type::Turnout);
-          segment.turnout.thrownSegmentIndex = lastSegmentIndex;
-          break;
-
-        default:
-          assert(false);
-          break;
-      }
-
-      switch(lastSide)
-      {
-        case Side::Origin:
-          m_trackSegments[lastSegmentIndex].nextSegmentIndex[0] = m_trackSegments.size();
-          break;
-
-        case Side::End:
-          m_trackSegments[lastSegmentIndex].nextSegmentIndex[1] = m_trackSegments.size();
-          break;
-
-        case Side::TurnoutThrown:
-          assert(m_trackSegments[lastSegmentIndex].type == TrackSegment::Type::Turnout);
-          m_trackSegments[lastSegmentIndex].turnout.thrownSegmentIndex = m_trackSegments.size();
-          break;
-
-        default:
-          assert(false);
-          break;
-      }
+      segment.setNextSegment(side, lastSegmentIndex);
+      m_trackSegments[lastSegmentIndex].setNextSegment(lastSide, segment.index);
     }
     m_trackSegments.emplace_back(std::move(segment));
 
-    switch(side)
-    {
-      case Side::Origin:
-        lastSide = Side::End;
-        if(segment.type == TrackSegment::Type::Turnout)
-        {
-            if(segment.nextSegmentIndex[1] != invalidIndex)
-                lastSide = Side::TurnoutThrown;
-        }
-        break;
-
-      case Side::End:
-      case Side::TurnoutThrown:
-        lastSide = Side::Origin;
-        break;
-
-      default:
-        assert(false);
-        break;
-    }
-
+    lastSide = segment.getDefaultNextDirection(side);
     lastSegmentIndex = m_trackSegments.size() - 1;
   }
 
@@ -693,20 +657,20 @@ void Simulator::loadTrackPlan(const QJsonArray& trackPlan)
       for(size_t i = start + 1; i < count; ++i)
       {
         auto& segment = m_trackSegments[i];
-        if(segment.nextSegmentIndex[0] == invalidIndex && pointsClose(point, origin(segment)))
+        if(segment.nextSegmentIndex[0] == invalidIndex && pointsClose(point, getEnd(segment, 0)))
         {
           segment.nextSegmentIndex[0] = start;
           index = i;
           return;
         }
-        if(segment.nextSegmentIndex[1] == invalidIndex && pointsClose(point, end(segment)))
+        if(segment.nextSegmentIndex[1] == invalidIndex && pointsClose(point, getEnd(segment, 1)))
         {
           segment.nextSegmentIndex[1] = start;
           index = i;
           return;
         }
         if(segment.type == Simulator::TrackSegment::Type::Turnout && segment.turnout.thrownSegmentIndex == invalidIndex &&
-          pointsClose(point, curveEnd(segment)))
+          pointsClose(point, getEnd(segment, 2)))
         {
           segment.turnout.thrownSegmentIndex = start;
           index = i;
@@ -721,15 +685,15 @@ void Simulator::loadTrackPlan(const QJsonArray& trackPlan)
       auto& segment = m_trackSegments[i];
       if(segment.nextSegmentIndex[0] == invalidIndex)
       {
-        findSegment(segment.index, origin(segment), segment.nextSegmentIndex[0]);
+        findSegment(segment.index, getEnd(segment, 0), segment.nextSegmentIndex[0]);
       }
       else if(segment.nextSegmentIndex[1] == invalidIndex)
       {
-        findSegment(segment.index, end(segment), segment.nextSegmentIndex[1]);
+        findSegment(segment.index, getEnd(segment, 1), segment.nextSegmentIndex[1]);
       }
       else if(segment.type == Simulator::TrackSegment::Type::Turnout && segment.turnout.thrownSegmentIndex == invalidIndex)
       {
-        findSegment(segment.index, curveEnd(segment), segment.turnout.thrownSegmentIndex);
+        findSegment(segment.index, getEnd(segment, 2), segment.turnout.thrownSegmentIndex);
       }
     }
   }
