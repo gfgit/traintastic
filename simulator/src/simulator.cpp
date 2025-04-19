@@ -195,7 +195,7 @@ Simulator::Point origin(const Simulator::TrackSegment& segment)
 {
   if(segment.type == Simulator::TrackSegment::Type::Curve)
   {
-    const float angle = (segment.curve.angle < 0) ? (segment.rotation + 180) : segment.rotation;
+    const float angle = (segment.curve.angle < 0) ? (segment.rotation + 180.0f) : segment.rotation;
     return {segment.x + segment.curve.radius * sinf(qDegreesToRadians(angle)), segment.y - segment.curve.radius * cosf(qDegreesToRadians(angle))};
   }
   return {segment.x, segment.y};
@@ -212,7 +212,7 @@ Simulator::Point curveEnd(const Simulator::TrackSegment& segment)
 {
   assert(segment.type == Simulator::TrackSegment::Type::Curve || segment.type == Simulator::TrackSegment::Type::Turnout);
 
-  const float angle = (segment.curve.angle < 0) ? (segment.rotation + 180) : segment.rotation;
+  const float angle = (segment.curve.angle < 0) ? (segment.rotation + 180.0f) : segment.rotation;
   float cx;
   float cy;
 
@@ -547,7 +547,7 @@ void Simulator::loadTrackPlan(const QJsonArray& trackPlan)
     }
     else if(segment.type == TrackSegment::Type::Turnout && side == Side::TurnoutThrown)
     {
-      const float curAngle = (segment.curve.angle < 0) ? curRotation : (curRotation + 180);
+      const float curAngle = (segment.curve.angle < 0) ? curRotation : (curRotation + 180.0f);
 
       // Calc circle center:
       segment.x = curX - segment.curve.radius * sinf(qDegreesToRadians(curAngle));
@@ -581,7 +581,7 @@ void Simulator::loadTrackPlan(const QJsonArray& trackPlan)
       }
       else if(segment.type == TrackSegment::Curve)
       {
-        const float curAngle = (segment.curve.angle < 0) ? (curRotation + 180) : curRotation;
+        const float curAngle = (segment.curve.angle < 0) ? (curRotation + 180.0f) : curRotation;
 
         // Calc circle center:
         segment.x = curX - segment.curve.radius * sinf(qDegreesToRadians(curAngle));
@@ -958,7 +958,7 @@ bool Simulator::updateVehiclePosition(RailVehicle::Face& face, const float speed
       float angle = segment.rotation + (distance / segment.curve.length) * segment.curve.angle;
       if(segment.curve.angle < 0)
       {
-        angle += 180;
+        angle += 180.0f;
       }
 
       if(segment.type == TrackSegment::Curve)
@@ -968,7 +968,7 @@ bool Simulator::updateVehiclePosition(RailVehicle::Face& face, const float speed
       }
       else
       {
-        const float rotation = segment.curve.angle < 0 ? segment.rotation + 180 : segment.rotation;
+        const float rotation = segment.curve.angle < 0 ? segment.rotation + 180.0f : segment.rotation;
         const float cx = segment.x - segment.curve.radius * sinf(qDegreesToRadians(rotation));
         const float cy = segment.y + segment.curve.radius * cosf(qDegreesToRadians(rotation));
 
