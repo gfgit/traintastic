@@ -164,6 +164,7 @@ private:
   void showItemTooltip(const Simulator::Point &point, QHelpEvent *ev);
 
   void drawTracks();
+  void drawTrackObjects();
   void drawTrains();
   void drawMisc();
 
