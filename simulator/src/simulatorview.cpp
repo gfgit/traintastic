@@ -603,6 +603,12 @@ void SimulatorView::drawTracks(QPainter *painter)
     QPen trackPen(QColor(204, 204, 204), 1.1);
     trackPen.setCapStyle(Qt::FlatCap);
 
+    if(m_thinTracks)
+    {
+        trackPen.setWidth(1);
+        trackPen.setCosmetic(true);
+    }
+
     QPen trackPenOccupied = trackPen;
     trackPenOccupied.setColor(QColor(255, 0, 0));
 
@@ -616,6 +622,12 @@ void SimulatorView::drawTracks(QPainter *painter)
     trackPenCyan.setColor(QColor(0, 255, 255));
     trackPenCyan.setWidthF(0.5);
     trackPenCyan.setCosmetic(false);
+
+    if(m_thinTracks)
+    {
+        trackPenCyan.setWidth(1);
+        trackPenCyan.setCosmetic(true);
+    }
 
     QPen trackPenYellow = trackPenCyan;
     trackPenYellow.setColor(Qt::darkYellow);
@@ -697,7 +709,7 @@ void SimulatorView::drawTracks(QPainter *painter)
         assert(segment.turnout.index < m_stateData.turnouts.size());
         const auto state = m_stateData.turnouts[segment.turnout.index].state;
 
-        if(m_showTrackOccupancy && segment.hasSensor() && m_stateData.sensors[segment.sensor.index].value)
+        if(!m_stateData.powerOn || (m_showTrackOccupancy && segment.hasSensor() && m_stateData.sensors[segment.sensor.index].value))
         {
             // Cyan contrast on red
             painter->setPen(trackPenCyan);
@@ -1169,6 +1181,17 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
     const auto obj = copySegmentData(idx);
     QGuiApplication::clipboard()->setText(QString::fromStdString(obj.dump(2)));
   }
+}
+
+bool SimulatorView::thinTracks() const
+{
+    return m_thinTracks;
+}
+
+void SimulatorView::setThinTracks(bool newThinTracks)
+{
+    m_thinTracks = newThinTracks;
+    update();
 }
 
 void SimulatorView::mouseLeftClick(const Simulator::Point &point, bool shiftPressed)

@@ -86,6 +86,9 @@ public:
 
   nlohmann::json copySegmentData(size_t segmentIdx) const;
 
+  bool thinTracks() const;
+  void setThinTracks(bool newThinTracks);
+
 signals:
   void tickActiveChanged(float value);
   void powerOnChanged(bool value);
@@ -144,6 +147,7 @@ private:
   float m_zoomLevel = 1.0f;
   bool m_zoomFit = false;
   bool m_showTrackOccupancy = true;
+  bool m_thinTracks = false;
 
   QPoint m_leftClickMousePos;
   QPoint m_rightMousePos;
