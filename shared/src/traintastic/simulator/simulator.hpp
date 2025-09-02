@@ -283,8 +283,10 @@ public:
       Automatic = 2
     };
 
-    Mode mode = Mode::Manual;
+    Mode mode = Mode::SemiAutomatic;
     MainSignal *nextSignal = nullptr;
+    size_t nextSignalSegmentIdx = invalidIndex;
+    float nextSignalPosition = 0.0f;
     std::vector<size_t> nextTurnouts;
     bool nextSignalDirty = false;
   };
@@ -413,9 +415,12 @@ public:
   }
 
   bool removeTrain(const std::string_view& name, bool removeWagons);
+  void destroyTrain(Train *train);
 
   Vehicle *addVehicle(const std::string_view &baseName, float length, Color color);
   bool removeVehicle(Vehicle *vehicle);
+
+  bool checkNextSignal(Train *train);
 
 private:
   constexpr static auto tickRate = std::chrono::milliseconds(1000 / 30);
