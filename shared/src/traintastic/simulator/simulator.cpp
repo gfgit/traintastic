@@ -1156,10 +1156,10 @@ bool Simulator::updateVehiclePosition(VehicleState::Face& face,
     }
     else
     {
-      if(obj.position < facePos)
+      if(obj.position > facePos)
         return true;
 
-      if(obj.position > targetPos)
+      if(obj.position < targetPos)
         return false;
     }
 
@@ -1258,6 +1258,10 @@ bool Simulator::updateVehiclePosition(VehicleState::Face& face,
         return false; // no next segment
       }
 
+      // If no signal was found rescan on segment change
+      if(!trainState_.nextSignal)
+        trainState_.nextSignalDirty = true;
+
       auto& nextSegment = staticData.trackSegments[nextSegmentIndex];
 
       if(isTurnoutUnknownState(nextSegment, m_stateData))
@@ -1301,6 +1305,10 @@ bool Simulator::updateVehiclePosition(VehicleState::Face& face,
         outRemaining = face.distance;
         return false; // no next segment
       }
+
+      // If no signal was found rescan on segment change
+      if(!trainState_.nextSignal)
+        trainState_.nextSignalDirty = true;
 
       auto& nextSegment = staticData.trackSegments[nextSegmentIndex];
 
@@ -2497,7 +2505,7 @@ void Simulator::updateTrainNextSignal(Train *train)
     return;
 
   const Train::VehicleItem& firstItem = train->state.reverse ? train->vehicles.back() : train->vehicles.front();
-  const VehicleState::Face& face = firstItem.reversed ? firstItem.vehicle->state.rear : firstItem.vehicle->state.front;
+  const VehicleState::Face& face = (firstItem.reversed == train->state.reverse) ? firstItem.vehicle->state.front : firstItem.vehicle->state.rear;
 
   float totalDistance = 0.0f;
 
@@ -2652,11 +2660,10 @@ bool Simulator::checkNextSignal(Train *train)
       // Start at 30 km/h until next signal is found
       setTrainSpeed(train, 30 * SpeedKmHtoTick);
     }
-    return true;
   }
 
   const Train::VehicleItem& firstItem = train->state.reverse ? train->vehicles.back() : train->vehicles.front();
-  const VehicleState::Face& face = firstItem.reversed ? firstItem.vehicle->state.rear : firstItem.vehicle->state.front;
+  const VehicleState::Face& face = (firstItem.reversed == train->state.reverse) ? firstItem.vehicle->state.front : firstItem.vehicle->state.rear;
 
   float totalDistance = 0.0f;
 
@@ -2665,6 +2672,21 @@ bool Simulator::checkNextSignal(Train *train)
   float startPos = face.distance;
 
   bool dirFwd = inverted == train->state.reverse;
+
+  if(!train->state.nextSignal)
+  {
+    const float length = getSegmentLength(staticData.trackSegments[segmentIndex], m_stateData);
+    if(length >= 400)
+    {
+      // Long segments do not find signal and also do not set dirty
+      // Set dirty near to end to re-trigger signal scan
+      if((dirFwd && (length - startPos) < 400) || (!dirFwd && startPos < 400))
+      {
+        train->state.nextSignalDirty = true;
+      }
+    }
+    return true;
+  }
 
   while(totalDistance < 500)
   {
@@ -2715,42 +2737,37 @@ bool Simulator::checkNextSignal(Train *train)
   if(totalDistance >= 500)
     return true;
 
-  if(train->state.speed > train->state.nextSignal->maxSpeed)
+  if(train->state.speed > train->state.nextSignal->maxSpeed * SpeedKmHtoTick)
   {
     // Decrease speed
     float targetSpeed = train->speedMax;
 
-    if(totalDistance < 10)
+    static const std::pair<float, float> SpeedCurve[] = {
+      {10, 0},
+      {12, 1},
+      {15, 3},
+      {20, 7},
+      {30, 15},
+      {40, 22},
+      {50, 30},
+      {80, 50},
+      {120, 70},
+      {250, 100},
+      {300, 130},
+      {350, 140},
+      {400, 150},
+      {425, 170},
+      {450, 200},
+      {500, 250}
+    };
+
+    for(const auto& entry : SpeedCurve)
     {
-      targetSpeed = train->state.nextSignal->maxSpeed;
-    }
-    else if((totalDistance - 40) < train->state.speed)
-    {
-      targetSpeed = train->state.nextSignal->maxSpeed + 10 * SpeedKmHtoTick;
-    }
-    else if((totalDistance - 60) < train->state.speed)
-    {
-      targetSpeed = train->state.nextSignal->maxSpeed + 20 * SpeedKmHtoTick;
-    }
-    else if((totalDistance - 80) < train->state.speed)
-    {
-      targetSpeed = train->state.nextSignal->maxSpeed + 30 * SpeedKmHtoTick;
-    }
-    else if((totalDistance - 100) < train->state.speed)
-    {
-      targetSpeed = train->state.nextSignal->maxSpeed + 50 * SpeedKmHtoTick;
-    }
-    else if((totalDistance - 200) < train->state.speed)
-    {
-      targetSpeed = (train->state.nextSignal->maxSpeed + train->state.speed) / 2;
-    }
-    else if((totalDistance - 300) < train->state.speed)
-    {
-      targetSpeed = (train->state.nextSignal->maxSpeed + train->state.speed) / 2;
-    }
-    else if((totalDistance - 400) < train->state.speed)
-    {
-      targetSpeed = (train->state.nextSignal->maxSpeed + train->state.speed) / 2;
+      if(totalDistance < entry.first)
+      {
+        targetSpeed = (train->state.nextSignal->maxSpeed + entry.second) * SpeedKmHtoTick;
+        break;
+      }
     }
 
     targetSpeed = std::min(targetSpeed, train->speedMax);
