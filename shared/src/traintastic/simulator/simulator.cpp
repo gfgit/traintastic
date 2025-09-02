@@ -2768,9 +2768,9 @@ bool Simulator::checkNextSignal(Train *train)
         return false; // Stop
     }
   }
-  else if(train->state.mode == TrainState::Mode::Automatic && train->state.speed == 0.0f)
+  else if(train->state.mode == TrainState::Mode::Automatic && train->state.speed < train->state.nextSignal->maxSpeed * SpeedKmHtoTick)
   {
-    if(train->state.nextSignal->maxSpeed > 0 || totalDistance > 10)
+    if(train->state.speed< 30 * SpeedKmHtoTick)
     {
       // Get near at 30 km/h to next signal
       setTrainSpeed(train, 30 * SpeedKmHtoTick);
