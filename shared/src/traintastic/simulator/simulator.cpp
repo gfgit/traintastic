@@ -1024,9 +1024,6 @@ void Simulator::updateTrainPositions()
     Train* train = it.second;
     auto& trainState = train->state;
 
-    if(trainState.speedOrDirectionChanged)
-      trainState.nextSignalDirty = true;
-
     if(train->address != invalidAddress && trainState.speedOrDirectionChanged)
     {
         send(SimulatorProtocol::LocomotiveSpeedDirection(train->address,
@@ -1224,7 +1221,7 @@ bool Simulator::updateVehiclePosition(VehicleState::Face& face,
     const auto& segment = staticData.trackSegments[face.segmentIndex];
     const auto segmentLength = getSegmentLength(segment, m_stateData);
 
-    const bool dirFwd = !face.segmentDirectionInverted && speed > 0;
+    const bool dirFwd = face.segmentDirectionInverted == (speed < 0);
     if(dirFwd)
     {
         for(const TrackSegment::Object& obj : segment.objects)
@@ -1322,7 +1319,7 @@ bool Simulator::updateVehiclePosition(VehicleState::Face& face,
       if(!trainState_.nextSignal)
         trainState_.nextSignalDirty = true;
 
-      auto& nextSegment = staticData.trackSegments[nextSegmentIndex];
+      const auto& nextSegment = staticData.trackSegments[nextSegmentIndex];
 
       if(isTurnoutUnknownState(nextSegment, m_stateData))
       {
@@ -2557,7 +2554,7 @@ void Simulator::updateTrainNextSignal(Train *train)
           continue;
 
         signalPositionInSegment = trackObj.position;
-        totalDistance += getSegmentLength(curSegment, m_stateData) - startPos - trackObj.position;
+        totalDistance += trackObj.position - startPos;
         return it->second;
       }
 
@@ -2620,7 +2617,7 @@ void Simulator::updateTrainNextSignal(Train *train)
 
     startPos = 0.0;
     if(!dirFwd)
-      startPos = getSegmentLength(curSegment, m_stateData);
+      startPos = getSegmentLength(nextSegment, m_stateData);
   }
 }
 
