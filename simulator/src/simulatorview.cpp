@@ -1030,7 +1030,7 @@ void SimulatorView::drawMisc(QPainter *painter)
 
 bool SimulatorView::event(QEvent *e)
 {
-  if(e->type() == QEvent::ToolTip)
+  if(m_simulator && e->type() == QEvent::ToolTip)
   {
     QHelpEvent *ev = static_cast<QHelpEvent *>(e);
     showItemTooltip(mapToSim(ev->pos()), ev);
