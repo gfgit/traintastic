@@ -2663,7 +2663,7 @@ bool Simulator::checkNextSignal(Train *train)
   if(!train->state.nextSignal)
   {
     const float length = getSegmentLength(staticData.trackSegments[face.segmentIndex], m_stateData);
-    if(length >= 400)
+    if(length >= 100)
     {
       // Long segments do not find signal and also do not set dirty
       // Set dirty near to end to re-trigger signal scan

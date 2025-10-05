@@ -467,7 +467,7 @@ private:
   void updateTrainPositions();
   bool updateVehiclePosition(VehicleState::Face& face,
                              const float speed, bool isFirst_,
-                             TrainState &trainState_, float &outRemaining);
+                             Train &train_, float &outRemaining);
   void updateSensors();
 
   bool isStraight(const TrackSegment& segment);
