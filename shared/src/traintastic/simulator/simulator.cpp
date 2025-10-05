@@ -2727,13 +2727,10 @@ bool Simulator::checkNextSignal(Train *train)
         return false; // Stop
     }
   }
-  else if(train->state.mode == TrainState::Mode::Automatic && train->state.speed < train->state.nextSignal->maxSpeed * SpeedKmHtoTick)
+  else if(train->state.mode == TrainState::Mode::Automatic && train->state.speed < 30 * SpeedKmHtoTick)
   {
-    if(train->state.speed< 30 * SpeedKmHtoTick)
-    {
-      // Get near at 30 km/h to next signal
-      setTrainSpeed(train, 30 * SpeedKmHtoTick);
-    }
+    // Get near at 30 km/h to next signal
+    setTrainSpeed(train, 30 * SpeedKmHtoTick);
   }
 
   return true;
