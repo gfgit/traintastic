@@ -90,6 +90,9 @@ public:
   bool thinTracks() const;
   void setThinTracks(bool newThinTracks);
 
+  float signalsScaleFactor() const;
+  void setSignalsScaleFactor(float newSignalsScaleFactor);
+
 signals:
   void tickActiveChanged(float value);
   void powerOnChanged(bool value);
@@ -147,6 +150,8 @@ private:
   float m_cameraX = 0.0f;
   float m_cameraY = 0.0f;
   float m_zoomLevel = 1.0f;
+  float m_signalsScaleFactor = 1.0f;
+
   bool m_zoomFit = false;
   bool m_showTrackOccupancy = true;
   bool m_thinTracks = false;
