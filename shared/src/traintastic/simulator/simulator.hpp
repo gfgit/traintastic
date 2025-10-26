@@ -239,6 +239,8 @@ public:
 
   struct MainSignal
   {
+    uint16_t channel = defaultChannel;
+    uint16_t address = invalidAddress;
     std::string name;
     size_t ownerConnectionId = invalidIndex;
     double maxSpeed = 0;
@@ -427,7 +429,7 @@ private:
 
   void accept();
   void doReceive();
-  void onConnectionRemoved(const std::shared_ptr<SimulatorConnection> &);
+  void onConnectionRemoved(const std::shared_ptr<SimulatorConnection> &connection);
 
   void tick();
   void handShake();
