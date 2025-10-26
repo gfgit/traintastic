@@ -1017,6 +1017,11 @@ void SimulatorView::drawTrains(QPainter *painter)
 
   const float trainWidth = m_simulator->staticData.trainWidth;
 
+  const Simulator::Train *const activeTrain = m_simulator->getTrainAt(m_trainIndex);
+
+  QPen activeTrainPen(Qt::white, 1);
+  activeTrainPen.setCosmetic(true);
+
   painter->setPen(Qt::NoPen);
 
   for(auto it : m_stateData.vehicles)
@@ -1033,10 +1038,16 @@ void SimulatorView::drawTrains(QPainter *painter)
     painter->rotate(qRadiansToDegrees(angle));
 
     const auto& color = colors[static_cast<size_t>(vehicle->color)];
+    painter->setBrush(QColor(color.red * 255, color.green * 255, color.blue * 255));
+
+    if(activeTrain && activeTrain == vehicle->activeTrain)
+      painter->setPen(activeTrainPen);
+    else
+      painter->setPen(Qt::NoPen);
+
     QRectF veichleRect(-length / 2, -trainWidth / 2,
                        length, trainWidth);
-    painter->fillRect(veichleRect,
-                      QColor(color.red * 255, color.green * 255, color.blue * 255));
+    painter->drawRect(veichleRect);
 
     painter->setTransform(trasf);
   }
@@ -1583,6 +1594,9 @@ void SimulatorView::tick()
 {
   m_stateDataPrevious.powerOn = m_stateData.powerOn;
   m_stateData = m_simulator->stateData();
+
+  if(m_trainIndex >= m_stateData.trains.size())
+    m_trainIndex = m_stateData.trains.size() - 1;
 
   emit tickActiveChanged(m_stateData.tickActive);
 
