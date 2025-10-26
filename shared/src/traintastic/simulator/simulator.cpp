@@ -2747,10 +2747,7 @@ bool Simulator::checkNextSignal(Train *train)
 
   const float totalDistance = train->state.nextSignalDistance;
 
-  if(totalDistance > 650)
-    return true;
-
-  if(train->state.speed >= train->state.nextSignal->maxSpeed * SpeedKmHtoTick)
+  if(totalDistance <= 650 && train->state.speed >= train->state.nextSignal->maxSpeed * SpeedKmHtoTick)
   {
     // Decrease speed
     float targetSpeed = train->speedMax;
@@ -2794,7 +2791,9 @@ bool Simulator::checkNextSignal(Train *train)
         return false; // Stop
     }
   }
-  else if(train->state.mode == TrainState::Mode::Automatic && train->state.speed < 30 * SpeedKmHtoTick)
+
+  const bool underSignalSpeed = train->state.speed < train->state.nextSignal->maxSpeed * SpeedKmHtoTick;
+  if(totalDistance > 30 && (underSignalSpeed || train->state.speed == 0))
   {
     // Get near at 30 km/h to next signal
     setTrainSpeed(train, 30 * SpeedKmHtoTick);
