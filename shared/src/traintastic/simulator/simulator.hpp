@@ -125,7 +125,9 @@ public:
         enum class Type
         {
             PositionSensor = 0,
-            MainSignal = 1
+            MainSignal = 1,
+            ReverseDirection = 2,
+            RemoveTrain = 3
         };
 
         Point pos;
@@ -417,7 +419,7 @@ public:
   }
 
   bool removeTrain(const std::string_view& name, bool removeWagons);
-  void destroyTrain(Train *train);
+  void destroyTrain(Train *train, bool removeWagons);
 
   Vehicle *addVehicle(const std::string_view &baseName, float length, Color color);
   bool removeVehicle(Vehicle *vehicle);
@@ -467,7 +469,7 @@ private:
   void updateTrainPositions();
   bool updateVehiclePosition(VehicleState::Face& face,
                              const float speed, bool isFirst_,
-                             Train &train_, float &outRemaining);
+                             Train &train_, bool &trainRemoved, float &outRemaining);
   void updateSensors();
 
   bool isStraight(const TrackSegment& segment);

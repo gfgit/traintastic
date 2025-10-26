@@ -848,6 +848,10 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
 
   const QTransform trasf = painter->transform();
 
+  QPen trackPen(QColor(204, 204, 204), 1.1);
+  trackPen.setCapStyle(Qt::RoundCap);
+  const float trainWidth = m_simulator->staticData.trainWidth;
+
   for(const auto& segment : m_simulator->staticData.trackSegments)
   {
     using Object = Simulator::TrackSegment::Object;
@@ -953,6 +957,46 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
             i--;
         }
 
+        break;
+      }
+      case Object::Type::ReverseDirection:
+      {
+        // Draw a triangle
+        QPointF triangle[3] = {
+          {-trainWidth, obj.lateralDiff - trainWidth},
+          {trainWidth, obj.lateralDiff},
+          {-trainWidth, obj.lateralDiff + trainWidth}
+        };
+
+        if(obj.allowedDirection == Object::AllowedDirections::Forward)
+        {
+          std::swap(triangle[0].rx(), triangle[1].rx());
+          triangle[2].rx() = triangle[0].x();
+        }
+
+        painter->setBrush(Qt::green);
+        painter->setPen(trackPen);
+        painter->drawConvexPolygon(triangle, 3);
+        break;
+      }
+      case Object::Type::RemoveTrain:
+      {
+        // Draw a triangle
+        QPointF triangle[3] = {
+          {-trainWidth, obj.lateralDiff - trainWidth},
+          {trainWidth, obj.lateralDiff},
+          {-trainWidth, obj.lateralDiff + trainWidth}
+        };
+
+        if(obj.allowedDirection == Object::AllowedDirections::Backwards)
+        {
+          std::swap(triangle[0].rx(), triangle[1].rx());
+          triangle[2].rx() = triangle[0].x();
+        }
+
+        painter->setBrush(Qt::red);
+        painter->setPen(trackPen);
+        painter->drawConvexPolygon(triangle, 3);
         break;
       }
       default:

@@ -372,7 +372,7 @@ Simulator::~Simulator()
       while(it != m_stateData.trains.end())
       {
         Train *train = it->second;
-        destroyTrain(train);
+        destroyTrain(train, false);
         it = m_stateData.trains.erase(it);
       }
     }
@@ -1021,9 +1021,9 @@ void Simulator::updateTrainPositions()
     return;
   }
 
-  for(auto it : m_stateData.trains)
+  for(auto it = m_stateData.trains.begin(); it != m_stateData.trains.end(); )
   {
-    Train* train = it.second;
+    Train* train = it->second;
     auto& trainState = train->state;
 
     if(train->address != invalidAddress && trainState.speedOrDirectionChanged)
@@ -1043,22 +1043,23 @@ void Simulator::updateTrainPositions()
 
     auto updateHelper = [this](Simulator::Train::VehicleItem& item, float speed,
         bool reverse, bool isFirst,
-        TrainState &trainState_, float &outRemaining) -> bool
+        Train &train_, bool &trainRemoved, float &outRemaining) -> bool
     {
       if(reverse)
         speed = -speed;
 
       if(item.reversed == reverse)
-        return updateVehiclePosition(item.vehicle->state.front, speed, isFirst, trainState_, outRemaining) &&
-            updateVehiclePosition(item.vehicle->state.rear, speed, false, trainState_, outRemaining);
+        return updateVehiclePosition(item.vehicle->state.front, speed, isFirst, train_, trainRemoved, outRemaining) &&
+            updateVehiclePosition(item.vehicle->state.rear, speed, false, train_, trainRemoved, outRemaining);
       else
-        return updateVehiclePosition(item.vehicle->state.rear, speed, isFirst, trainState_, outRemaining) &&
-            updateVehiclePosition(item.vehicle->state.front, speed, false, trainState_, outRemaining);
+        return updateVehiclePosition(item.vehicle->state.rear, speed, isFirst, train_, trainRemoved, outRemaining) &&
+            updateVehiclePosition(item.vehicle->state.front, speed, false, train_, trainRemoved, outRemaining);
     };
 
     const float speed = m_stateData.powerOn ? trainState.speed : 0.0f;
 
     bool wasStopped = false;
+    bool trainRemoved = false;
 
     float outRemaining = 0.0f;
     float totalTravelled = 0.0f;
@@ -1081,8 +1082,11 @@ void Simulator::updateTrainPositions()
       {
         for(auto& vehicleItem : train->vehicles)
         {
-          if(!updateHelper(vehicleItem, tickPosDelta, trainState.reverse, isFirst, trainState, outRemaining))
+          if(!updateHelper(vehicleItem, tickPosDelta, trainState.reverse, isFirst, *train, trainRemoved, outRemaining))
           {
+            if(trainRemoved)
+              break;
+
             setTrainSpeed(train, 0.0f);
             if(isFirst)
               wasStopped = true;
@@ -1098,8 +1102,11 @@ void Simulator::updateTrainPositions()
       {
         for(auto& vehicleItem : train->vehicles | std::views::reverse)
         {
-          if(!updateHelper(vehicleItem, tickPosDelta, trainState.reverse, isFirst, trainState, outRemaining))
+          if(!updateHelper(vehicleItem, tickPosDelta, trainState.reverse, isFirst, *train, trainRemoved, outRemaining))
           {
+            if(trainRemoved)
+              break;
+
             setTrainSpeed(train, 0.0f);
             if(isFirst)
               wasStopped = true;
@@ -1115,10 +1122,20 @@ void Simulator::updateTrainPositions()
       if(!wasStopped)
         totalTravelled += tickPosDelta;
     }
-    while(outRemaining > 0.0f && speed != 0.0f);
+    while(!trainRemoved && outRemaining > 0.0f && speed != 0.0f);
+
+    if(trainRemoved)
+    {
+      destroyTrain(it->second, true);
+      it = m_stateData.trains.erase(it);
+      continue;
+    }
 
     if(!wasStopped && train->state.nextSignal)
       train->state.nextSignalDistance -= totalTravelled;
+
+    // Go to next train
+    it++;
   }
 }
 
@@ -1147,7 +1164,7 @@ inline bool isTurnoutUnknownState(const Simulator::TrackSegment& segment,
 
 bool Simulator::updateVehiclePosition(VehicleState::Face& face,
                                       const float speed, bool isFirst_,
-                                      TrainState &trainState_, float &outRemaining)
+                                      Train &train_, bool &trainRemoved, float &outRemaining)
 {
   using Object = Simulator::TrackSegment::Object;
 
@@ -1155,7 +1172,8 @@ bool Simulator::updateVehiclePosition(VehicleState::Face& face,
 
   auto objHelper = [this](const TrackSegment::Object& obj,
       const float facePos, const float targetPos,
-      TrainState &trainState, bool dirFwd_, bool isFirst, bool &stop) -> bool
+      Train &train, bool dirFwd_, bool isFirst, bool &stop,
+      bool &trainRemoved_) -> bool
   {
     if(dirFwd_)
     {
@@ -1185,7 +1203,7 @@ bool Simulator::updateVehiclePosition(VehicleState::Face& face,
         sensor.curTime = sensor.maxTime;
         sensor.occupied = 1;
     }
-    else if (isFirst && obj.type == Object::Type::MainSignal && trainState.mode != TrainState::Mode::Manual)
+    else if (isFirst && obj.type == Object::Type::MainSignal && train.state.mode != TrainState::Mode::Manual)
     {
       auto it = m_stateData.mainSignals.find(obj.signalName);
       if(it == m_stateData.mainSignals.end())
@@ -1201,14 +1219,26 @@ bool Simulator::updateVehiclePosition(VehicleState::Face& face,
         return false;
       }
 
-      if(trainState.mode == TrainState::Mode::SemiAutomatic && trainState.speed == 0)
+      if(train.state.mode == TrainState::Mode::SemiAutomatic && train.state.speed == 0)
         return true;
 
       // Apply signal speed on next tick
       // TODO: train max speed
-      trainState.speed = tickSpeed;
-      trainState.speedOrDirectionChanged = true;
-      trainState.nextSignalDirty = true;
+      setTrainSpeed(&train, tickSpeed);
+      train.state.nextSignalDirty = true;
+    }
+    else if (isFirst && obj.type == Object::Type::ReverseDirection && train.state.mode != TrainState::Mode::Manual)
+    {
+      // Apply direction change on next tick
+      setTrainDirection(&train, !train.state.reverse);
+      stop = true;
+      return false;
+    }
+    else if (isFirst && obj.type == Object::Type::RemoveTrain)
+    {
+      trainRemoved_ = true;
+      stop = true;
+      return false;
     }
 
     return true;
@@ -1230,7 +1260,7 @@ bool Simulator::updateVehiclePosition(VehicleState::Face& face,
         {
           bool stop = false;
           if(objHelper(obj, face.distance, distance,
-                       trainState_, true, isFirst_, stop))
+                       train_, true, isFirst_, stop, trainRemoved))
             continue;
 
           if(stop)
@@ -1247,7 +1277,7 @@ bool Simulator::updateVehiclePosition(VehicleState::Face& face,
       {
         bool stop = false;
         if(objHelper(obj, face.distance, distance,
-                     trainState_, false, isFirst_, stop))
+                     train_, false, isFirst_, stop, trainRemoved))
           continue;
 
         if(stop)
@@ -1270,8 +1300,8 @@ bool Simulator::updateVehiclePosition(VehicleState::Face& face,
       }
 
       // If no signal was found rescan on segment change
-      if(!trainState_.nextSignal)
-        trainState_.nextSignalDirty = true;
+      if(!train_.state.nextSignal)
+        train_.state.nextSignalDirty = true;
 
       auto& nextSegment = staticData.trackSegments[nextSegmentIndex];
 
@@ -1318,8 +1348,8 @@ bool Simulator::updateVehiclePosition(VehicleState::Face& face,
       }
 
       // If no signal was found rescan on segment change
-      if(!trainState_.nextSignal)
-        trainState_.nextSignalDirty = true;
+      if(!train_.state.nextSignal)
+        train_.state.nextSignalDirty = true;
 
       const auto& nextSegment = staticData.trackSegments[nextSegmentIndex];
 
@@ -1656,6 +1686,22 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                     size_t nLights = item.value("n_lights", std::max(size_t(1), signal->lights.size()));
                     nLights = std::clamp(size_t(1), size_t(3), nLights);
                     signal->lights.resize(nLights);
+                }
+                else if(type == "reverse_dir")
+                {
+                  trackObj.type = TrackSegment::Object::Type::ReverseDirection;
+                  trackObj.allowedDirection = trackObj.dirForward ?
+                                                  TrackSegment::Object::AllowedDirections::Forward :
+                                                  TrackSegment::Object::AllowedDirections::Backwards;
+                  trackObj.lateralDiff = 0; // Default on center
+                }
+                else if(type == "remove_train")
+                {
+                  trackObj.type = TrackSegment::Object::Type::RemoveTrain;
+                  trackObj.allowedDirection = trackObj.dirForward ?
+                                                  TrackSegment::Object::AllowedDirections::Forward :
+                                                  TrackSegment::Object::AllowedDirections::Backwards;
+                  trackObj.lateralDiff = 0; // Default on center
                 }
                 else
                 {
@@ -2437,15 +2483,7 @@ bool Simulator::removeTrain(const std::string_view &name, bool removeWagons)
         return false;
 
     Train *train = it->second;
-    for(const auto &item : train->vehicles)
-    {
-        item.vehicle->activeTrain = nullptr;
-        if(removeWagons)
-            removeVehicle(item.vehicle);
-    }
-    train->vehicles.clear();
-
-    destroyTrain(train);
+    destroyTrain(train, removeWagons);
     m_stateData.trains.erase(it);
     return true;
 }
@@ -2484,6 +2522,27 @@ bool Simulator::removeVehicle(Vehicle *vehicle)
 
     if(vehicle->activeTrain)
         return false;
+
+    // Free track sensors
+    if(vehicle->state.front.segmentIndex != invalidIndex)
+    {
+      const auto& segment = staticData.trackSegments[vehicle->state.front.segmentIndex];
+      if(segment.sensor.index != invalidIndex)
+      {
+        auto& sensor = m_stateData.sensors[segment.sensor.index];
+        sensor.occupied--;
+      }
+    }
+
+    if(vehicle->state.rear.segmentIndex != invalidIndex)
+    {
+      const auto& segment = staticData.trackSegments[vehicle->state.rear.segmentIndex];
+      if(segment.sensor.index != invalidIndex)
+      {
+        auto& sensor = m_stateData.sensors[segment.sensor.index];
+        sensor.occupied--;
+      }
+    }
 
     m_stateData.vehicles.erase(it);
     return true;
@@ -2623,7 +2682,7 @@ void Simulator::updateTrainNextSignal(Train *train)
   }
 }
 
-void Simulator::destroyTrain(Train *train)
+void Simulator::destroyTrain(Train *train, bool removeWagons)
 {
   train->state.nextSignal = nullptr;
   train->state.nextSignalSegmentIdx = invalidIndex;
@@ -2637,6 +2696,14 @@ void Simulator::destroyTrain(Train *train)
     });
   }
   train->state.nextTurnouts.clear();
+
+  for(const auto &item : train->vehicles)
+  {
+      item.vehicle->activeTrain = nullptr;
+      if(removeWagons)
+          removeVehicle(item.vehicle);
+  }
+  train->vehicles.clear();
 
   delete train;
 }
