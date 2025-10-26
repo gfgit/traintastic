@@ -2439,7 +2439,19 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
 
       const float segmentLength = getSegmentLength(segment, stateData);
       if(train->length >= segmentLength)
-          return false;
+      {
+        // Reset vehicle segment because we did not add them yet
+        for(const auto& item : train->vehicles)
+        {
+          auto& vehicleState = item.vehicle->state;
+          vehicleState.front.segmentIndex = invalidIndex;
+          vehicleState.front.distance = 0.0f;
+          vehicleState.rear.segmentIndex = invalidIndex;
+          vehicleState.rear.distance = 0.0f;
+        }
+
+        return false;
+      }
 
       if(segment.sensor.index != invalidIndex)
       {
