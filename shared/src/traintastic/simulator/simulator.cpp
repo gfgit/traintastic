@@ -23,7 +23,11 @@
 #include "simulatorconnection.hpp"
 #include <ranges>
 #include <bit>
+#include <format>
+#include <random>
 #include "protocol.hpp"
+
+static std::mt19937 rng = std::mt19937(std::random_device{}());
 
 void Simulator::updateView(Simulator::StaticData::View& view, Simulator::Point point)
 {
@@ -870,6 +874,112 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       }
       break;
     }
+    case OpCode::OwnSpawn:
+    {
+      const auto& m = static_cast<const OwnSpawn&>(message);
+      std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+      for(auto it : m_stateData.spawns)
+      {
+        Spawn *s = it.second;
+        if(s->ownerConnectionId != invalidIndex || s->address != m.address)
+          continue;
+
+        s->ownerConnectionId = fromConnId;
+        s->state = Spawn::State::Ready;
+        break;
+      }
+      break;
+    }
+    case OpCode::SpawnStateChange:
+    {
+      const auto& m = static_cast<const SpawnStateChange&>(message);
+      std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+      for(auto it : m_stateData.spawns)
+      {
+        Spawn *s = it.second;
+        if(s->ownerConnectionId != fromConnId || s->address != m.address)
+          continue;
+
+        if(s->state == Spawn::State::WaitingReset && m.state == SpawnStateChange::Reset)
+        {
+          s->state = Spawn::State::Ready;
+        }
+        else if(s->state == Spawn::State::Ready && m.state == SpawnStateChange::RequestActivate)
+        {
+          const std::string baseName = std::format("spawn{}_", s->address);
+          size_t count = 0;
+          static const size_t maxTrains = 10000;
+          while(count < maxTrains)
+          {
+            std::string candidate = baseName + std::to_string(count);
+            if(!m_stateData.trains.contains(candidate))
+              break;
+
+            count++;
+          }
+
+          if(count < maxTrains)
+          {
+            // Spawn a train
+
+            std::string trainName = baseName + std::to_string(count);
+            std::string vehicleBaseName = trainName + ".";
+
+            std::uniform_int_distribution<size_t> dist(1, s->maxWagons);
+            size_t numWagons = dist(rng);
+
+            const auto& segment = staticData.trackSegments[s->segmentIndex];
+            const float segmentLength = getSegmentLength(segment, m_stateData);
+            const float avgLength = s->wagonLength + staticData.trainCouplingLength;
+            const size_t maxWagons = size_t(std::floor(segmentLength / avgLength));
+
+            numWagons = std::min(numWagons, maxWagons);
+
+            std::vector<Simulator::Train::VehicleItem> vehicles;
+            for(size_t i = 0; i < numWagons; i++)
+            {
+              Simulator::Train::VehicleItem item;
+              item.vehicle = addVehicle(vehicleBaseName + std::to_string(i), s->wagonLength, Color::Aqua);
+              item.reversed = false;
+              vehicles.push_back(item);
+            }
+
+            if(addTrain(baseName + std::to_string(count), DecoderProtocol::DCCLong, 3,
+                         vehicles, s->segmentIndex))
+            {
+              // DONE!
+              Train *train = m_stateData.trains.at(trainName);
+              setTrainDirection(train, !s->forward);
+              setTrainMode(train, TrainState::Mode::Automatic);
+              s->state = Spawn::State::WaitingReset;
+            }
+            else
+            {
+              for(const auto &item : vehicles)
+              {
+                removeVehicle(item.vehicle);
+              }
+            }
+          }
+        }
+
+        for(const auto& connection : m_connections)
+        {
+          if(connection->connectionId() != fromConnId)
+            continue;
+
+          uint8_t state = SpawnStateChange::Reset;
+          if(s->state == Spawn::State::Ready)
+            state = SpawnStateChange::Ready;
+          else if(s->state == Spawn::State::WaitingReset)
+            state = SpawnStateChange::WaitingReset;
+
+          connection->send(SimulatorProtocol::SpawnStateChange(s->address, state));
+          break;
+        }
+      }
+      break;
+    }
   }
 }
 
@@ -907,17 +1017,12 @@ void Simulator::onConnectionRemoved(const std::shared_ptr<SimulatorConnection>& 
   // Turn off owned spawns
   for(auto it : m_stateData.spawns)
   {
-    MainSignal *s = it.second;
+    Spawn *s = it.second;
     if(s->ownerConnectionId != connId)
       continue;
 
     s->ownerConnectionId = invalidIndex;
-    s->maxSpeed = 0.0f;
-    for(MainSignal::Light& l : s->lights)
-    {
-        l.color = MainSignal::Light::Color::Red;
-        l.state = MainSignal::Light::State::Off;
-    }
+    s->state = Spawn::State::Inactive;
   }
 }
 

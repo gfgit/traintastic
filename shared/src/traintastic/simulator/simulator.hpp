@@ -287,8 +287,7 @@ public:
     {
       Inactive = 0,
       Ready = 1,
-      Busy = 2,
-      WaitingReset = 3
+      WaitingReset = 2
     };
 
     State state = State::Inactive;

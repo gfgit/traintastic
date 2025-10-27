@@ -848,8 +848,10 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
 
   const QTransform trasf = painter->transform();
 
-  QPen trackPen(QColor(204, 204, 204), 1.1);
+  QPen trackPen(QColor(204, 204, 204), 1);
   trackPen.setCapStyle(Qt::RoundCap);
+
+  QPen borderPen(Qt::red, 1);
   const float trainWidth = m_simulator->staticData.trainWidth;
 
   for(const auto& segment : m_simulator->staticData.trackSegments)
@@ -996,6 +998,44 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
 
         painter->setBrush(Qt::red);
         painter->setPen(trackPen);
+        painter->drawConvexPolygon(triangle, 3);
+        break;
+      }
+      case Object::Type::SpawnTrain:
+      {
+        // Draw a triangle
+        QPointF triangle[3] = {
+            {-trainWidth, obj.lateralDiff - trainWidth},
+            {trainWidth * 2, obj.lateralDiff},
+            {-trainWidth, obj.lateralDiff + trainWidth}
+        };
+
+        if(obj.allowedDirection == Object::AllowedDirections::Backwards)
+        {
+          std::swap(triangle[0].rx(), triangle[1].rx());
+          triangle[2].rx() = triangle[0].x();
+        }
+
+        Simulator::Spawn::State spawnState = Simulator::Spawn::State::Inactive;
+        Simulator::Spawn *spawn = m_stateData.spawns.at(obj.sensorIndex);
+        if(spawn)
+          spawnState = spawn->state;
+
+        switch (spawnState)
+        {
+        default:
+        case Simulator::Spawn::State::Inactive:
+          painter->setBrush(Qt::gray);
+          break;
+        case Simulator::Spawn::State::Ready:
+          painter->setBrush(Qt::darkGreen);
+          break;
+        case Simulator::Spawn::State::WaitingReset:
+          painter->setBrush(Qt::darkCyan);
+          break;
+        }
+
+        painter->setPen(borderPen);
         painter->drawConvexPolygon(triangle, 3);
         break;
       }
