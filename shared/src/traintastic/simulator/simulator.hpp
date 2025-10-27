@@ -127,7 +127,8 @@ public:
             PositionSensor = 0,
             MainSignal = 1,
             ReverseDirection = 2,
-            RemoveTrain = 3
+            RemoveTrain = 3,
+            SpawnTrain = 4
         };
 
         Point pos;
@@ -272,6 +273,27 @@ public:
     std::vector<Light> lights;
   };
 
+  struct Spawn
+  {
+    uint16_t address = invalidAddress;
+    size_t ownerConnectionId = invalidIndex;
+    size_t segmentIndex = invalidIndex;
+
+    size_t maxWagons = 20;
+    float wagonLength = 20.0f;
+    bool forward = true;
+
+    enum class State
+    {
+      Inactive = 0,
+      Ready = 1,
+      Busy = 2,
+      WaitingReset = 3
+    };
+
+    State state = State::Inactive;
+  };
+
   struct TrainState
   {
     float speed = 0.0f;
@@ -356,6 +378,7 @@ public:
     std::unordered_map<std::string, Train *, StringHash, StringEqual> trains;
     std::unordered_map<std::string, Vehicle *, StringHash, StringEqual> vehicles;
     std::unordered_map<std::string, MainSignal *, StringHash, StringEqual> mainSignals;
+    std::unordered_map<size_t, Spawn *> spawns;
   };
 
 private:

@@ -386,6 +386,15 @@ Simulator::~Simulator()
         it = m_stateData.vehicles.erase(it);
       }
     }
+
+    {
+        auto it = m_stateData.spawns.begin();
+        while(it != m_stateData.spawns.end())
+        {
+            delete it->second;
+            it = m_stateData.spawns.erase(it);
+        }
+    }
   }
 }
 
@@ -877,9 +886,26 @@ void Simulator::onConnectionRemoved(const std::shared_ptr<SimulatorConnection>& 
 {
   const size_t connId = connection->connectionId();
 
-  // Turn off owned signals
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+
+  // Turn off owned signals
   for(auto it : m_stateData.mainSignals)
+  {
+    MainSignal *s = it.second;
+    if(s->ownerConnectionId != connId)
+      continue;
+
+    s->ownerConnectionId = invalidIndex;
+    s->maxSpeed = 0.0f;
+    for(MainSignal::Light& l : s->lights)
+    {
+        l.color = MainSignal::Light::Color::Red;
+        l.state = MainSignal::Light::State::Off;
+    }
+  }
+
+  // Turn off owned spawns
+  for(auto it : m_stateData.spawns)
   {
     MainSignal *s = it.second;
     if(s->ownerConnectionId != connId)
@@ -1703,6 +1729,28 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                                                   TrackSegment::Object::AllowedDirections::Backwards;
                   trackObj.lateralDiff = 0; // Default on center
                 }
+                else if(type == "spawn_train")
+                {
+                  trackObj.type = TrackSegment::Object::Type::SpawnTrain;
+                  trackObj.allowedDirection = trackObj.dirForward ?
+                                                  TrackSegment::Object::AllowedDirections::Forward :
+                                                  TrackSegment::Object::AllowedDirections::Backwards;
+                  trackObj.lateralDiff = 0; // Default on center
+
+                  size_t spawnAddress = item.value("address", invalidAddress);
+                  if(spawnAddress == invalidAddress || stateData.spawns.contains(spawnAddress))
+                    continue;
+
+                  Spawn *spawn = new Spawn;
+                  spawn->address = spawnAddress;
+                  spawn->segmentIndex = data.trackSegments.size(); // TODO: HACK still has to be inserted
+                  spawn->maxWagons = item.value("max_wagons", spawn->maxWagons);
+                  spawn->wagonLength = item.value("wagons_length", spawn->wagonLength);
+                  stateData.spawns.insert({spawn->address, spawn});
+
+                  spawn->state = Spawn::State::Inactive;
+                  trackObj.sensorIndex = spawn->address;
+                }
                 else
                 {
                     // Unknown object type
@@ -1718,6 +1766,13 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                     trackObj.allowedDirection = TrackSegment::Object::AllowedDirections::Backwards;
 
                 trackObj.lateralDiff = item.value("lat_delta", trackObj.lateralDiff);
+
+                if(trackObj.type == TrackSegment::Object::Type::SpawnTrain)
+                {
+                  // Post init
+                  Spawn *spawn = stateData.spawns.at(trackObj.sensorIndex);
+                  spawn->forward = trackObj.allowedDirection == TrackSegment::Object::AllowedDirections::Forward;
+                }
 
                 segment.objects.push_back(trackObj);
             }
