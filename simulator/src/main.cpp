@@ -57,7 +57,7 @@ void parseOptions(QCoreApplication& app, Options& options)
 
   options.fullscreen = parser.isSet(fullscreen);
   options.localOnly = !parser.isSet(localOnly);
-  options.discoverable = parser.isSet(discoverable);
+  options.discoverable = true; //parser.isSet(discoverable);
 
   if(!parser.positionalArguments().isEmpty())
   {
