@@ -886,6 +886,22 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
 
         s->ownerConnectionId = fromConnId;
         s->state = Spawn::State::Ready;
+
+        for(const auto& connection : m_connections)
+        {
+          if(connection->connectionId() != fromConnId)
+            continue;
+
+          uint8_t state = SpawnStateChange::Reset;
+          if(s->state == Spawn::State::Ready)
+            state = SpawnStateChange::Ready;
+          else if(s->state == Spawn::State::WaitingReset)
+            state = SpawnStateChange::WaitingReset;
+
+          connection->send(SimulatorProtocol::SpawnStateChange(s->address, state));
+          break;
+        }
+
         break;
       }
       break;
