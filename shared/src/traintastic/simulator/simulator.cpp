@@ -2118,6 +2118,11 @@ void Simulator::loadTrackplan(const nlohmann::json& world, StaticData &data, Sta
                 {
                     segment.rotation -= 2 * pi;
                 }
+                else if(segment.rotation < 0)
+                {
+                  segment.rotation += 2 * pi;
+                }
+
                 segment.points[0].x = curPoint.x + segment.straight.length * std::cos(curRotation);
                 segment.points[0].y = curPoint.y + segment.straight.length * std::sin(curRotation);
                 nextPointIndex = 0;
@@ -2148,6 +2153,10 @@ void Simulator::loadTrackplan(const nlohmann::json& world, StaticData &data, Sta
                 {
                     segment.rotation -= 2 * pi;
                 }
+                else if(segment.rotation < 0)
+                {
+                  segment.rotation += 2 * pi;
+                }
 
                 nextPointIndex = 0;
             }
@@ -2155,11 +2164,29 @@ void Simulator::loadTrackplan(const nlohmann::json& world, StaticData &data, Sta
             {
                 segment.points[0] = curPoint;
                 segment.rotation = curRotation;
+                if(segment.rotation >= 2 * pi)
+                {
+                  segment.rotation -= 2 * pi;
+                }
+                else if(segment.rotation < 0)
+                {
+                  segment.rotation += 2 * pi;
+                }
 
                 if(segment.type == TrackSegment::Type::Curve || segment.type == TrackSegment::Type::TurnoutCurved)
                 {
                     curRotation += segment.curves[0].angle;
                 }
+            }
+
+            // Keep value in range [0, 2 * pi)
+            if(curRotation >= 2 * pi)
+            {
+              curRotation -= 2 * pi;
+            }
+            else if(curRotation < 0)
+            {
+              curRotation += 2 * pi;
             }
 
             assert(segment.points[0].isFinite()); // origin must be known now
