@@ -3010,9 +3010,10 @@ bool Simulator::checkNextSignal(Train *train)
   }
 
   const bool underSignalSpeed = train->state.speed < train->state.nextSignal->maxSpeed * SpeedKmHtoTick;
-  if(totalDistance > 30 && (underSignalSpeed || train->state.speed == 0))
+  if(train->state.speed < 30 * SpeedKmHtoTick && (totalDistance > 30 || underSignalSpeed))
   {
-    // Get near at 30 km/h to next signal
+    // Get near at 30 km/h to next signal if stopped or currently at less than 30 km/h
+    // If stopped at less than 30 meters from signal, remain stopped
     setTrainSpeed(train, 30 * SpeedKmHtoTick);
   }
 
