@@ -606,7 +606,7 @@ void SimulatorView::drawTracks(QPainter *painter)
 {
   assert(m_simulator);
 
-  QPen trackPen(QColor(204, 204, 204), 1.1);
+  QPen trackPen(QColor(204, 204, 204), 1.435);
   trackPen.setCapStyle(Qt::FlatCap);
 
   if(m_thinTracks)
@@ -906,57 +906,74 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
         size_t i = signal->lights.size() - 1;
         while(true)
         {
-            bool on = false;
-            switch (signal->lights.at(i).state)
+          if(signal->square)
+          {
+            // Draw circle light without extra border
+            // and with black square background
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(Qt::black);
+            painter->drawRect(lightRect);
+          }
+
+          bool on = false;
+          switch (signal->lights.at(i).state)
+          {
+          case Simulator::MainSignal::Light::State::Off:
+            on = false;
+            break;
+
+          case Simulator::MainSignal::Light::State::On:
+            on = true;
+            break;
+
+          case Simulator::MainSignal::Light::State::BlikOn:
+            on = signalBlinkState;
+            break;
+
+          case Simulator::MainSignal::Light::State::BlinkReverseOn:
+            on = !signalBlinkState;
+            break;
+          default:
+            break;
+          }
+
+          if(on)
+          {
+            switch (signal->lights.at(i).color)
             {
-            case Simulator::MainSignal::Light::State::Off:
-                on = false;
-                break;
-
-            case Simulator::MainSignal::Light::State::On:
-                on = true;
-                break;
-
-            case Simulator::MainSignal::Light::State::BlikOn:
-                on = signalBlinkState;
-                break;
-
-            case Simulator::MainSignal::Light::State::BlinkReverseOn:
-                on = !signalBlinkState;
-                break;
+            case Simulator::MainSignal::Light::Color::Red:
+              painter->setBrush(Qt::red);
+              break;
+            case Simulator::MainSignal::Light::Color::Yellow:
+              painter->setBrush(Qt::yellow);
+              break;
+            case Simulator::MainSignal::Light::Color::Green:
+              painter->setBrush(Qt::green);
+              break;
             default:
-                break;
+              break;
             }
+          }
+          else
+          {
+            painter->setBrush(Qt::black);
+          }
 
-            if(on)
-            {
-                switch (signal->lights.at(i).color)
-                {
-                case Simulator::MainSignal::Light::Color::Red:
-                    painter->setBrush(Qt::red);
-                    break;
-                case Simulator::MainSignal::Light::Color::Yellow:
-                    painter->setBrush(Qt::yellow);
-                    break;
-                case Simulator::MainSignal::Light::Color::Green:
-                    painter->setBrush(Qt::green);
-                    break;
-                default:
-                    break;
-                }
-            }
-            else
-            {
-                painter->setBrush(Qt::black);
-            }
+          painter->drawEllipse(lightRect);
 
-            painter->drawEllipse(lightRect);
+          if(signal->square)
+          {
+            // Now draw square border on top
+            painter->setPen(signalLightPen);
+            painter->setBrush(Qt::NoBrush);
+            painter->drawRect(lightRect);
+          }
 
-            lightRect.moveLeft(lightRect.left() + lightDiameter);
+          lightRect.moveLeft(lightRect.left() + lightDiameter);
 
-            if(i == 0)
-                break;
-            i--;
+          if(i == 0)
+            break;
+          i--;
         }
 
         break;

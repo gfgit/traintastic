@@ -251,6 +251,7 @@ public:
     std::string name;
     size_t ownerConnectionId = invalidIndex;
     double maxSpeed = 0;
+    bool square = false;
 
     struct Light
     {

@@ -1833,6 +1833,8 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                     size_t nLights = item.value("n_lights", std::max(size_t(1), signal->lights.size()));
                     nLights = std::clamp(size_t(1), size_t(3), nLights);
                     signal->lights.resize(nLights);
+
+                    signal->square = item.value("square", false);
                 }
                 else if(type == "reverse_dir")
                 {
