@@ -831,6 +831,16 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
         }
 
         s->maxSpeed = m.speed;
+
+        if(s->fixedLimit == Simulator::MainSignal::FixedLimit::Limit60)
+        {
+          s->maxSpeed = std::min(s->maxSpeed, 60.0);
+        }
+        else if(s->fixedLimit == Simulator::MainSignal::FixedLimit::Limit30)
+        {
+          s->maxSpeed = std::min(s->maxSpeed, 30.0);
+        }
+
         break;
       }
       break;
@@ -1835,6 +1845,20 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                     signal->lights.resize(nLights);
 
                     signal->square = item.value("square", false);
+
+                    size_t fixedLimit = item.value("fixed_limit", size_t(0));
+                    switch (fixedLimit)
+                    {
+                    case 30:
+                      signal->fixedLimit = MainSignal::FixedLimit::Limit30;
+                      break;
+                    case 60:
+                      signal->fixedLimit = MainSignal::FixedLimit::Limit60;
+                      break;
+                    default:
+                      signal->fixedLimit = MainSignal::FixedLimit::NoLimit;
+                      break;
+                    }
                 }
                 else if(type == "reverse_dir")
                 {

@@ -253,6 +253,13 @@ public:
     double maxSpeed = 0;
     bool square = false;
 
+    enum class FixedLimit
+    {
+      NoLimit = 0,
+      Limit30,
+      Limit60
+    } fixedLimit = FixedLimit::NoLimit;
+
     struct Light
     {
         enum class Color

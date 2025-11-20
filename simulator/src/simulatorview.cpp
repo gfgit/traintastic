@@ -28,6 +28,7 @@
 #include <QPainter>
 #include <QGuiApplication>
 
+#include <QFont>
 #include <QToolTip>
 #include <QGuiApplication>
 
@@ -840,11 +841,20 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
   QColor positionSensorInactive = Qt::darkGreen;
 
   // Make signals more visible at low zoom levels by scaling
-  const QPen signalMastPen(Qt::lightGray, 0.6 * m_signalsScaleFactor);
-  const QPen signalLightPen(Qt::lightGray, 0.2 * m_signalsScaleFactor);
+  QPen signalMastPen(Qt::lightGray, 0.6 * m_signalsScaleFactor);
+  signalMastPen.setCapStyle(Qt::FlatCap);
 
-  const qreal mustBaseLength = 3.0 * m_signalsScaleFactor;
+  const QPen signalLightPen(Qt::lightGray, 0.2 * m_signalsScaleFactor);
+  const QPen signalTrianglePen(Qt::black, 0.1 * m_signalsScaleFactor);
+
+  const qreal mastBaseLength = 3.0 * m_signalsScaleFactor;
   const qreal lightDiameter = 2.0 * m_signalsScaleFactor;
+  const qreal triangleEdge = 1.9 * m_signalsScaleFactor;
+
+  QFont triangleFont;
+  triangleFont.setBold(true);
+  triangleFont.setPointSizeF(triangleEdge * 0.3);
+  painter->setFont(triangleFont);
 
   const QTransform trasf = painter->transform();
 
@@ -889,22 +899,26 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
         if(signIt == m_stateData.mainSignals.end())
           continue;
 
+        // Draw with Y along mast
+        painter->rotate(90.0);
+
         Simulator::MainSignal *signal = signIt->second;
-        const int mastLength = mustBaseLength + lightDiameter * (signal->lights.size() - 1);
+
+        // Align every signal as if it had 3 lights (std::max() if wrongly specified more than 3 lights)
+        const int mastLength = mastBaseLength + lightDiameter * std::max(signal->lights.size() - 1, size_t(3));
 
         painter->setPen(signalMastPen);
-        painter->drawLine(QLineF(0, obj.lateralDiff,
-                                 mastLength, obj.lateralDiff));
+        painter->drawLine(QLineF(obj.lateralDiff, 0,
+                                 obj.lateralDiff, -mastLength));
 
         QRectF lightRect;
         lightRect.setSize(QSizeF(lightDiameter, lightDiameter));
-        lightRect.moveCenter(QPointF(mustBaseLength + lightDiameter / 2.0, obj.lateralDiff));
+        lightRect.moveCenter(QPointF(obj.lateralDiff, - mastLength + lightDiameter / 2.0));
 
         painter->setPen(signalLightPen);
 
-        // Draw in reverse order, light 0 is always topmost
-        size_t i = signal->lights.size() - 1;
-        while(true)
+        // Light 0 is always topmost
+        for(size_t i = 0; i < signal->lights.size(); i++)
         {
           if(signal->square)
           {
@@ -969,11 +983,33 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
             painter->drawRect(lightRect);
           }
 
-          lightRect.moveLeft(lightRect.left() + lightDiameter);
+          // Go down to next light
+          lightRect.moveTop(lightRect.top() + lightDiameter);
+        }
 
-          if(i == 0)
-            break;
-          i--;
+        if(signal->fixedLimit != Simulator::MainSignal::FixedLimit::NoLimit)
+        {
+          const QPointF triangle[3] = {
+              {obj.lateralDiff - triangleEdge / 2.0, lightRect.top() + triangleEdge * 0.14},
+              {obj.lateralDiff + triangleEdge / 2.0, lightRect.top() + triangleEdge * 0.14},
+              {obj.lateralDiff, lightRect.top() + triangleEdge}
+          };
+
+          // 0.55 to align text a bit above triangle center to better use its larger half
+          QRectF triangleRect(triangle[0].x(), triangle[0].y(),
+                              triangle[1].x() - triangle[0].x(),
+                              (triangle[2].y() - triangle[0].y()) * 0.55);
+
+          painter->setPen(signalTrianglePen);
+          painter->setBrush(Qt::white);
+          painter->drawConvexPolygon(triangle, 3);
+
+          if(signal->fixedLimit == Simulator::MainSignal::FixedLimit::Limit60)
+          {
+            painter->setPen(Qt::black);
+            painter->setBrush(Qt::NoBrush);
+            painter->drawText(triangleRect, Qt::AlignCenter, QLatin1String("60"));
+          }
         }
 
         break;
