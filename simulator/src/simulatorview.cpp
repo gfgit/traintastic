@@ -355,8 +355,6 @@ SimulatorView::SimulatorView(QWidget* parent)
   // 800 ms turnout blink
   turnoutBlinkTimer.start(std::chrono::milliseconds(800), Qt::PreciseTimer, this);
 
-  signalBlinkTimer.start(std::chrono::milliseconds(1100), Qt::PreciseTimer, this);
-
   setContextMenuPolicy(Qt::DefaultContextMenu);
 
   setMouseTracking(true);
@@ -923,6 +921,13 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
 
         painter->setPen(signalLightPen);
 
+        // Calculate current blink state, keep in range [0, 7]
+        int8_t blinkState = int8_t(m_stateData.signalBlinkState) - int8_t(signal->blinkStart);
+        if(blinkState >= 8)
+          blinkState -= 8;
+        else if(blinkState < 0)
+          blinkState += 8;
+
         // Light 0 is always topmost
         for(size_t i = 0; i < signal->lights.size(); i++)
         {
@@ -947,11 +952,11 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
             break;
 
           case Simulator::MainSignal::Light::State::BlikOn:
-            on = signalBlinkState;
+            on = blinkState < 4;
             break;
 
           case Simulator::MainSignal::Light::State::BlinkReverseOn:
-            on = !signalBlinkState;
+            on = blinkState >= 4;
             break;
           default:
             break;
@@ -1420,12 +1425,6 @@ void SimulatorView::timerEvent(QTimerEvent *e)
     turnoutBlinkState = !turnoutBlinkState;
     update();
     return;
-  }
-  else if(e->timerId() == signalBlinkTimer.timerId())
-  {
-      signalBlinkState = !signalBlinkState;
-      update();
-      return;
   }
   else if(e->timerId() == segmentHoverTimer.timerId())
   {

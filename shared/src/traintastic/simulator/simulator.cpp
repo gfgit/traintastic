@@ -351,6 +351,7 @@ Simulator::Simulator(const nlohmann::json& world)
   , m_handShakeTimer{m_ioContext}
   , m_acceptor{m_ioContext}
   , m_socketUDP{m_ioContext}
+  , m_signalBlinkStateTimer{m_ioContext}
 {
 
 }
@@ -457,6 +458,7 @@ void Simulator::start(bool discoverable)
       }
       tick();
       handShake();
+      blinkSignals();
       m_ioContext.run();
     });
 }
@@ -480,6 +482,7 @@ void Simulator::stop()
 
   m_tickTimer.cancel();
   m_handShakeTimer.cancel();
+  m_signalBlinkStateTimer.cancel();
   if(m_thread.joinable())
   {
     m_thread.join();
@@ -816,12 +819,23 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
         if(s->ownerConnectionId != fromConnId || s->address != m.address || s->channel != m.channel)
           continue;
 
+        bool wasBlinking = false;
+        bool isBlinking = false;
+
         for(size_t i = 0; i < s->lights.size(); i++)
         {
           if(i < (sizeof(m.lights) / sizeof(m.lights[0])))
           {
+            if(s->lights[i].state == MainSignal::Light::State::BlikOn ||
+                s->lights[i].state == MainSignal::Light::State::BlinkReverseOn)
+              wasBlinking = true;
+
             s->lights[i].color = MainSignal::Light::Color(m.lights[i].color);
             s->lights[i].state = MainSignal::Light::State(m.lights[i].state);
+
+            if(s->lights[i].state == MainSignal::Light::State::BlikOn ||
+                s->lights[i].state == MainSignal::Light::State::BlinkReverseOn)
+              isBlinking = true;
           }
           else
           {
@@ -842,6 +856,10 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
         }
 
         s->squareLightPowered = (m.squareLightOn == 1);
+
+        // If just started blinking, sync with current blink phase
+        if(isBlinking && !wasBlinking)
+          s->blinkStart = m_stateData.signalBlinkState;
 
         break;
       }
@@ -1170,6 +1188,26 @@ void Simulator::handShake()
     (*it)->setHandShakeResponseReceived(false);
     (*it)->send(SimulatorProtocol::HandShake(false));
     it++;
+  }
+}
+
+void Simulator::blinkSignals()
+{
+  m_signalBlinkStateTimer.expires_after(signalBlinkRate);
+  m_signalBlinkStateTimer.async_wait(
+      [this](std::error_code ec)
+      {
+        if(!ec)
+        {
+          blinkSignals();
+        }
+      });
+
+  {
+    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+    m_stateData.signalBlinkState++;
+    if(m_stateData.signalBlinkState >= 8)
+      m_stateData.signalBlinkState = 0;
   }
 }
 

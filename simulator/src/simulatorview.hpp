@@ -165,10 +165,6 @@ private:
   QBasicTimer turnoutBlinkTimer;
   bool turnoutBlinkState = false;
 
-  // Signal Blink TODO: per signal?
-  QBasicTimer signalBlinkTimer;
-  bool signalBlinkState = false;
-
   // Mouse hover
   QBasicTimer segmentHoverTimer;
   Simulator::Point m_lastHoverPos;

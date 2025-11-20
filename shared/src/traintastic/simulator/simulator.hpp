@@ -254,6 +254,7 @@ public:
     bool square = false;
     bool squareLight = false;
     bool squareLightPowered = true;
+    uint8_t blinkStart = 0;
 
     enum class FixedLimit
     {
@@ -382,6 +383,7 @@ public:
     float tickActive = 0.0f;
     float tickLoad = 0.0f;
     bool powerOn = false;
+    uint8_t signalBlinkState = 0; // Goes from 0 to 7
     std::vector<SensorState> sensors;
     std::vector<TurnoutState> turnouts;
     std::unordered_map<std::string, Train *, StringHash, StringEqual> trains;
@@ -468,6 +470,7 @@ public:
 private:
   constexpr static auto tickRate = std::chrono::milliseconds(1000 / 30);
   constexpr static auto handShakeRate = std::chrono::milliseconds(1000);
+  constexpr static auto signalBlinkRate = std::chrono::milliseconds(275);
 
   constexpr static float defaultSpeedKmH = 200;
   constexpr static float SpeedKmHtoTick = tickRate.count() / 3600.0;
@@ -480,6 +483,8 @@ private:
   boost::asio::ip::udp::socket m_socketUDP;
   std::array<char, 8> m_udpBuffer;
   boost::asio::ip::udp::endpoint m_remoteEndpoint;
+
+  boost::asio::steady_timer m_signalBlinkStateTimer;
 
   std::thread m_thread;
   mutable std::recursive_mutex m_stateMutex;
@@ -497,6 +502,7 @@ private:
 
   void tick();
   void handShake();
+  void blinkSignals();
 
   void updateTrainPositions();
   bool updateVehiclePosition(VehicleState::Face& face,
