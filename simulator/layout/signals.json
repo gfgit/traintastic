@@ -1,0 +1,61 @@
+{
+  "trackplan": [
+    {
+      "type": "straight",
+      "x": 150,
+      "y": 100,
+      "length": 50,
+      "sensor_address": 1,
+
+      "objects": [
+        {
+          "name": "Vigo.L",
+          "type": "main_signal",
+          "channel": 4,
+          "address": 10,
+          "pos": 10,
+          "dir": false,
+          "lat_delta": -2.5,
+          "n_lights": 3,
+          "square": false
+        },
+
+        {
+          "name": "Vigo.LL",
+          "type": "main_signal",
+          "channel": 4,
+          "address": 10,
+          "pos": 10,
+          "dir": false,
+          "lat_delta": 2.5,
+          "n_lights": 2,
+          "square": true
+        }
+      ]
+    }
+  ],
+  "trains": [
+    {
+      "address": 3,
+      "track_id": "top",
+      "vehicles": [
+        {
+          "length": 40.0,
+          "color": "red"
+        },
+        {
+          "length": 20.0,
+          "color": "green"
+        },
+        {
+          "length": 20.0,
+          "color": "green"
+        },
+        {
+          "length": 30.0,
+          "color": "blue"
+        }
+      ]
+    }
+  ]
+}

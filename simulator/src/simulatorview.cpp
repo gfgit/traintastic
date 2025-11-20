@@ -847,6 +847,12 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
   const QPen signalLightPen(Qt::lightGray, 0.2 * m_signalsScaleFactor);
   const QPen signalTrianglePen(Qt::black, 0.1 * m_signalsScaleFactor);
 
+  QPen signalLightArrowPenOff(Qt::darkGray, 0.2 * m_signalsScaleFactor);
+  signalLightArrowPenOff.setJoinStyle(Qt::RoundJoin);
+
+  QPen signalLightArrowPenOn = signalLightArrowPenOff;
+  signalLightArrowPenOn.setColor(Qt::white);
+
   const qreal mastBaseLength = 3.0 * m_signalsScaleFactor;
   const qreal lightDiameter = 2.0 * m_signalsScaleFactor;
   const qreal triangleEdge = 1.9 * m_signalsScaleFactor;
@@ -996,9 +1002,9 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
           };
 
           // 0.55 to align text a bit above triangle center to better use its larger half
-          QRectF triangleRect(triangle[0].x(), triangle[0].y(),
-                              triangle[1].x() - triangle[0].x(),
-                              (triangle[2].y() - triangle[0].y()) * 0.55);
+          const QRectF triangleRect(triangle[0].x(), triangle[0].y(),
+                                    triangle[1].x() - triangle[0].x(),
+                                    (triangle[2].y() - triangle[0].y()) * 0.55);
 
           painter->setPen(signalTrianglePen);
           painter->setBrush(Qt::white);
@@ -1010,6 +1016,31 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
             painter->setBrush(Qt::NoBrush);
             painter->drawText(triangleRect, Qt::AlignCenter, QLatin1String("60"));
           }
+        }
+
+        if(signal->squareLight)
+        {
+          const QPointF arrowCenter(obj.lateralDiff, - mastLength - lightDiameter / 2.0 - signalLightPen.widthF());
+          lightRect.moveCenter(arrowCenter);
+          painter->fillRect(lightRect, Qt::black);
+
+          const float arrowDelta = lightDiameter * 0.3;
+          const QPointF arrowDeltaPt(arrowDelta, -arrowDelta);
+
+          painter->setPen(signal->squareLightPowered ? signalLightArrowPenOn : signalLightArrowPenOff);
+          painter->drawLine(arrowCenter + arrowDeltaPt,
+                            arrowCenter - arrowDeltaPt * 0.7);
+
+          const QPointF bottomLeft = arrowCenter - arrowDeltaPt;
+          const QPointF triangle[3] =
+              {
+                  bottomLeft,
+                  bottomLeft + QPointF(arrowDelta / 2.0, -arrowDelta),
+                  bottomLeft + QPointF(arrowDelta, -arrowDelta / 2.0)
+              };
+
+          painter->setBrush(Qt::darkGray);
+          painter->drawConvexPolygon(triangle, 3);
         }
 
         break;

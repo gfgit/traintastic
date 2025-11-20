@@ -841,6 +841,8 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
           s->maxSpeed = std::min(s->maxSpeed, 30.0);
         }
 
+        s->squareLightPowered = (m.squareLightOn == 1);
+
         break;
       }
       break;
@@ -1845,6 +1847,8 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                     signal->lights.resize(nLights);
 
                     signal->square = item.value("square", false);
+                    if(signal->square)
+                      signal->squareLight = item.value("arrow_light", false);
 
                     size_t fixedLimit = item.value("fixed_limit", size_t(0));
                     switch (fixedLimit)

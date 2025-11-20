@@ -252,6 +252,8 @@ public:
     size_t ownerConnectionId = invalidIndex;
     double maxSpeed = 0;
     bool square = false;
+    bool squareLight = false;
+    bool squareLightPowered = true;
 
     enum class FixedLimit
     {
