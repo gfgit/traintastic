@@ -246,15 +246,61 @@ public:
 
   struct MainSignal
   {
+    // NOTE: keep in sync with protocol.hpp
+    enum class State
+    {
+      Off = 0,
+      On,
+      BlikOn,
+      BlinkReverseOn
+    };
+
+    static constexpr uint8_t StateMask = uint8_t(State::BlinkReverseOn);
+    static constexpr uint8_t ArrowLight = 0x04;
+
     uint16_t channel = defaultChannel;
     uint16_t address = invalidAddress;
     std::string name;
     size_t ownerConnectionId = invalidIndex;
     double maxSpeed = 0;
     bool square = false;
-    bool squareLight = false;
-    bool squareLightPowered = true;
+    bool hasSquareArrowLight = false;
+    bool hasStartSignal = false;
+
+    uint8_t startSignalStateAndArrow = 0;
+
+    inline State getStartSignalState() const { return State(startSignalStateAndArrow & StateMask); }
+    inline void setStartSignalState(State s)
+    {
+      startSignalStateAndArrow = (startSignalStateAndArrow & ~StateMask) | uint8_t(s);
+    }
+
+    inline bool isArrowLightOn() const { return (startSignalStateAndArrow & ArrowLight) == ArrowLight; }
+    inline void setArrowLightOn(bool on)
+    {
+      if(on)
+        startSignalStateAndArrow |= ArrowLight;
+      else
+        startSignalStateAndArrow &= ~ArrowLight;
+    }
+
+    // Signal blink phase
     uint8_t blinkStart = 0;
+
+    inline uint8_t getSignalBlinkStart(bool startSignal) const
+    {
+      if(startSignal)
+        return (blinkStart >> 4) & 0x0F;
+      return blinkStart & 0x0F;
+    }
+
+    inline void setSignalBlinkStart(bool startSignal, uint8_t state)
+    {
+      if(startSignal)
+        blinkStart = (startSignalStateAndArrow & 0x0F) | (state << 4);
+      else
+        blinkStart = (startSignalStateAndArrow & 0xF0) | state;
+    }
 
     enum class FixedLimit
     {
@@ -272,13 +318,7 @@ public:
             Green
         } color = Color::Red;
 
-        enum class State
-        {
-            Off = 0,
-            On,
-            BlikOn,
-            BlinkReverseOn
-        } state = State::Off;
+        State state = State::Off;
     };
 
     std::vector<Light> lights;

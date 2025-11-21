@@ -826,21 +826,21 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
         {
           if(i < (sizeof(m.lights) / sizeof(m.lights[0])))
           {
-            if(s->lights[i].state == MainSignal::Light::State::BlikOn ||
-                s->lights[i].state == MainSignal::Light::State::BlinkReverseOn)
+            if(s->lights[i].state == MainSignal::State::BlikOn ||
+                s->lights[i].state == MainSignal::State::BlinkReverseOn)
               wasBlinking = true;
 
             s->lights[i].color = MainSignal::Light::Color(m.lights[i].color);
-            s->lights[i].state = MainSignal::Light::State(m.lights[i].state);
+            s->lights[i].state = MainSignal::State(m.lights[i].state);
 
-            if(s->lights[i].state == MainSignal::Light::State::BlikOn ||
-                s->lights[i].state == MainSignal::Light::State::BlinkReverseOn)
+            if(s->lights[i].state == MainSignal::State::BlikOn ||
+                s->lights[i].state == MainSignal::State::BlinkReverseOn)
               isBlinking = true;
           }
           else
           {
             s->lights[i].color = MainSignal::Light::Color::Red;
-            s->lights[i].state = MainSignal::Light::State::Off;
+            s->lights[i].state = MainSignal::State::Off;
           }
         }
 
@@ -855,11 +855,26 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
           s->maxSpeed = std::min(s->maxSpeed, 30.0);
         }
 
-        s->squareLightPowered = (m.squareLightOn == 1);
-
         // If just started blinking, sync with current blink phase
         if(isBlinking && !wasBlinking)
-          s->blinkStart = m_stateData.signalBlinkState;
+          s->setSignalBlinkStart(false, m_stateData.signalBlinkState);
+
+        s->setArrowLightOn(m.isArrowLightOn());
+
+        MainSignal::State startSignalState = s->getStartSignalState();
+        if(startSignalState == MainSignal::State::BlikOn ||
+            startSignalState == MainSignal::State::BlinkReverseOn)
+          wasBlinking = true;
+
+        startSignalState = MainSignal::State(m.getStartSignalState());
+        s->setStartSignalState(startSignalState);
+
+        if(startSignalState == MainSignal::State::BlikOn ||
+            startSignalState == MainSignal::State::BlinkReverseOn)
+          isBlinking = true;
+
+        if(isBlinking && !wasBlinking)
+          s->setSignalBlinkStart(true, m_stateData.signalBlinkState);
 
         break;
       }
@@ -1056,8 +1071,11 @@ void Simulator::onConnectionRemoved(const std::shared_ptr<SimulatorConnection>& 
     for(MainSignal::Light& l : s->lights)
     {
         l.color = MainSignal::Light::Color::Red;
-        l.state = MainSignal::Light::State::Off;
+        l.state = MainSignal::State::Off;
     }
+
+    s->setArrowLightOn(false);
+    s->setStartSignalState(MainSignal::State::Off);
   }
 
   // Turn off owned spawns
@@ -1886,7 +1904,7 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
 
                     signal->square = item.value("square", false);
                     if(signal->square)
-                      signal->squareLight = item.value("arrow_light", false);
+                      signal->hasSquareArrowLight = item.value("arrow_light", false);
 
                     size_t fixedLimit = item.value("fixed_limit", size_t(0));
                     switch (fixedLimit)
@@ -1901,6 +1919,8 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                       signal->fixedLimit = MainSignal::FixedLimit::NoLimit;
                       break;
                     }
+
+                    signal->hasStartSignal = item.value("start_light", false);
                 }
                 else if(type == "reverse_dir")
                 {

@@ -854,6 +854,8 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
   const qreal mastBaseLength = 3.0 * m_signalsScaleFactor;
   const qreal lightDiameter = 2.0 * m_signalsScaleFactor;
   const qreal triangleEdge = 1.9 * m_signalsScaleFactor;
+  const qreal startSignalWidth = 1.8 * m_signalsScaleFactor;
+  const qreal startSignalHeight = 0.8 * m_signalsScaleFactor;
 
   QFont triangleFont;
   triangleFont.setBold(true);
@@ -922,7 +924,7 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
         painter->setPen(signalLightPen);
 
         // Calculate current blink state, keep in range [0, 7]
-        int8_t blinkState = int8_t(m_stateData.signalBlinkState) - int8_t(signal->blinkStart);
+        int8_t blinkState = int8_t(m_stateData.signalBlinkState) - int8_t(signal->getSignalBlinkStart(false));
         if(blinkState >= 8)
           blinkState -= 8;
         else if(blinkState < 0)
@@ -943,19 +945,19 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
           bool on = false;
           switch (signal->lights.at(i).state)
           {
-          case Simulator::MainSignal::Light::State::Off:
+          case Simulator::MainSignal::State::Off:
             on = false;
             break;
 
-          case Simulator::MainSignal::Light::State::On:
+          case Simulator::MainSignal::State::On:
             on = true;
             break;
 
-          case Simulator::MainSignal::Light::State::BlikOn:
+          case Simulator::MainSignal::State::BlikOn:
             on = blinkState < 4;
             break;
 
-          case Simulator::MainSignal::Light::State::BlinkReverseOn:
+          case Simulator::MainSignal::State::BlinkReverseOn:
             on = blinkState >= 4;
             break;
           default:
@@ -1021,9 +1023,61 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
             painter->setBrush(Qt::NoBrush);
             painter->drawText(triangleRect, Qt::AlignCenter, QLatin1String("60"));
           }
+
+          // Go down to next element
+          lightRect.moveTop(lightRect.top() + triangleEdge);
         }
 
-        if(signal->squareLight)
+        if(signal->hasStartSignal)
+        {
+          // Start signal blink is independent from main light blink
+          blinkState = int8_t(m_stateData.signalBlinkState) - int8_t(signal->getSignalBlinkStart(true));
+          if(blinkState >= 8)
+            blinkState -= 8;
+          else if(blinkState < 0)
+            blinkState += 8;
+
+          QPointF ct(obj.lateralDiff, lightRect.top() + startSignalHeight * 1.2);
+          QRectF startSignalRect(0, 0, startSignalWidth, startSignalHeight);
+          startSignalRect.moveCenter(ct);
+
+          painter->setBrush(Qt::black);
+          painter->setPen(Qt::NoPen);
+          painter->drawRoundedRect(startSignalRect, startSignalHeight / 2.0, startSignalHeight / 2.0);
+
+          bool on = false;
+          switch (signal->getStartSignalState())
+          {
+          case Simulator::MainSignal::State::Off:
+            on = false;
+            break;
+
+          case Simulator::MainSignal::State::On:
+            on = true;
+            break;
+
+          case Simulator::MainSignal::State::BlikOn:
+            on = blinkState < 4;
+            break;
+
+          case Simulator::MainSignal::State::BlinkReverseOn:
+            on = blinkState >= 4;
+            break;
+          default:
+            break;
+          }
+
+          painter->setBrush(on ? Qt::white : Qt::darkGray);
+
+          QRectF startSignalLightRect(0, 0, startSignalHeight * 0.7, startSignalHeight * 0.7);
+          startSignalLightRect.moveCenter(QPointF(startSignalRect.left() + startSignalHeight / 2.0, ct.y()));
+          painter->drawEllipse(startSignalLightRect);
+
+          startSignalLightRect.moveCenter(QPointF(startSignalRect.right() - startSignalHeight / 2.0, ct.y()));
+          painter->drawEllipse(startSignalLightRect);
+        }
+
+        if(signal->hasSquareArrowLight)
         {
           const QPointF arrowCenter(obj.lateralDiff, - mastLength - lightDiameter / 2.0 - signalLightPen.widthF());
           lightRect.moveCenter(arrowCenter);
@@ -1032,7 +1086,7 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
           const float arrowDelta = lightDiameter * 0.3;
           const QPointF arrowDeltaPt(arrowDelta, -arrowDelta);
 
-          painter->setPen(signal->squareLightPowered ? signalLightArrowPenOn : signalLightArrowPenOff);
+          painter->setPen(signal->isArrowLightOn() ? signalLightArrowPenOn : signalLightArrowPenOff);
           painter->drawLine(arrowCenter + arrowDeltaPt,
                             arrowCenter - arrowDeltaPt * 0.7);
 

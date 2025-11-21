@@ -29,7 +29,9 @@
           "dir": false,
           "lat_delta": 2.5,
           "n_lights": 2,
-          "square": true
+          "square": true,
+          "start_light": true,
+          "arrow_light": true
         }
       ]
     }
