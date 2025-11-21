@@ -954,11 +954,12 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
             break;
 
           case Simulator::MainSignal::State::BlikOn:
-            on = blinkState < 4;
+            // Blink relay start off
+            on = blinkState >= 4;
             break;
 
           case Simulator::MainSignal::State::BlinkReverseOn:
-            on = blinkState >= 4;
+            on = blinkState < 4;
             break;
           default:
             break;
@@ -1057,11 +1058,12 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
             break;
 
           case Simulator::MainSignal::State::BlikOn:
-            on = blinkState < 4;
+            // Blink relay start off
+            on = blinkState >= 4;
             break;
 
           case Simulator::MainSignal::State::BlinkReverseOn:
-            on = blinkState >= 4;
+            on = blinkState < 4;
             break;
           default:
             break;
