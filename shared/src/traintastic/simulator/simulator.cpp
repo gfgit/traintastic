@@ -1078,6 +1078,8 @@ void Simulator::onConnectionRemoved(const std::shared_ptr<SimulatorConnection>& 
 
     s->setArrowLightOn(false);
     s->setAdvanceSignalState(MainSignal::State::Off);
+    s->directionIndicatorText = ' ';
+    s->rappelState = MainSignal::RappelState::Off;
   }
 
   // Turn off owned spawns

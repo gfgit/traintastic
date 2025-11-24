@@ -276,7 +276,7 @@ public:
     // Signal blink phase
     uint8_t blinkStart = 0;
 
-    char directionIndicatorText = '2';
+    char directionIndicatorText = ' ';
 
     bool square = false;
     bool hasSquareArrowLight = false;

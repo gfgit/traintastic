@@ -851,6 +851,8 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
   QPen signalLightArrowPenOn = signalLightArrowPenOff;
   signalLightArrowPenOn.setColor(Qt::white);
 
+  QPen signalIndicatorBorder(Qt::darkGray, 0.1 * m_signalsScaleFactor);
+
   const qreal mastBaseLength = 3.0 * m_signalsScaleFactor;
   const qreal lightDiameter = 2.0 * m_signalsScaleFactor;
   const qreal triangleEdge = 1.9 * m_signalsScaleFactor;
@@ -1105,14 +1107,18 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
           directionIndicatorRect.moveCenter(ct);
 
           painter->setBrush(Qt::black);
-          painter->setPen(signalLightArrowPenOff);
+          painter->setPen(signalIndicatorBorder);
           painter->drawRect(directionIndicatorRect);
 
-          painter->setFont(directionFont);
-          painter->setPen(Qt::white);
-          painter->setBrush(Qt::NoBrush);
-          painter->drawText(directionIndicatorRect, Qt::AlignCenter,
-                            QChar::fromLatin1(signal->directionIndicatorText));
+          QChar letter = QChar::fromLatin1(signal->directionIndicatorText);
+          if(letter.isLetterOrNumber() && letter != ' ')
+          {
+            painter->setFont(directionFont);
+            painter->setPen(Qt::white);
+            painter->setBrush(Qt::NoBrush);
+            painter->drawText(directionIndicatorRect, Qt::AlignCenter,
+                              QChar::fromLatin1(signal->directionIndicatorText));
+          }
 
           // Go down to next element
           lightRect.moveTop(directionIndicatorRect.bottom());
@@ -1148,7 +1154,7 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
 
           // Draw border on top
           painter->setBrush(Qt::NoBrush);
-          painter->setPen(signalLightArrowPenOff);
+          painter->setPen(signalIndicatorBorder);
           painter->drawRect(rappelRect);
         }
 
