@@ -28,10 +28,11 @@
           "pos": 10,
           "dir": false,
           "lat_delta": 2.5,
-          "n_lights": 2,
+          "n_lights": 3,
           "square": true,
-          "start_light": true,
-          "arrow_light": true
+          "advance_light": true,
+          "arrow_light": true,
+          "rappel": true
         }
       ]
     }

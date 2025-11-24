@@ -856,13 +856,16 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
   const qreal triangleEdge = 1.9 * m_signalsScaleFactor;
   const qreal advanceSignalWidth = 1.6 * m_signalsScaleFactor;
   const qreal advanceSignalHeight = 0.8 * m_signalsScaleFactor;
-  const qreal directionIndicatorWidth = 1.4 * m_signalsScaleFactor;
-  const qreal directionIndicatorHeight = 1.8 * m_signalsScaleFactor;
+  const qreal directionIndicatorWidth = 1.2 * m_signalsScaleFactor;
+  const qreal directionIndicatorHeight = 1.6 * m_signalsScaleFactor;
 
   QFont triangleFont;
   triangleFont.setBold(true);
   triangleFont.setPointSizeF(triangleEdge * 0.3);
-  painter->setFont(triangleFont);
+
+  QFont directionFont;
+  directionFont.setBold(true);
+  directionFont.setPointSizeF(directionIndicatorWidth * 0.9);
 
   const QTransform trasf = painter->transform();
 
@@ -913,7 +916,17 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
         Simulator::MainSignal *signal = signIt->second;
 
         // Align every signal as if it had 3 lights (std::max() if wrongly specified more than 3 lights)
-        const int mastLength = mastBaseLength + lightDiameter * std::max(signal->lights.size() - 1, size_t(3));
+        qreal mastLength = mastBaseLength + lightDiameter * std::max(signal->lights.size() - 1, size_t(3));
+        const size_t numElements = signal->hasAdvanceSignal + signal->hasDirectionIndicator + signal->hasRappel;
+
+        if(numElements > 2)
+        {
+          mastLength *= 1.3;
+        }
+        else if(numElements > 1)
+        {
+          mastLength *= 1.1;
+        }
 
         painter->setPen(signalMastPen);
         painter->drawLine(QLineF(obj.lateralDiff, 0,
@@ -1022,6 +1035,7 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
 
           if(signal->fixedLimit == Simulator::MainSignal::FixedLimit::Limit60)
           {
+            painter->setFont(triangleFont);
             painter->setPen(Qt::black);
             painter->setBrush(Qt::NoBrush);
             painter->drawText(triangleRect, Qt::AlignCenter, QLatin1String("60"));
@@ -1079,6 +1093,63 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
 
           startSignalLightRect.moveCenter(QPointF(startSignalRect.right() - advanceSignalHeight / 2.0, ct.y()));
           painter->drawEllipse(startSignalLightRect);
+
+          // Go down to next element
+          lightRect.moveTop(startSignalRect.bottom());
+        }
+
+        if(signal->hasDirectionIndicator)
+        {
+          QPointF ct(obj.lateralDiff, lightRect.top() + directionIndicatorHeight * 0.7);
+          QRectF directionIndicatorRect(0, 0, directionIndicatorWidth, directionIndicatorHeight);
+          directionIndicatorRect.moveCenter(ct);
+
+          painter->setBrush(Qt::black);
+          painter->setPen(signalLightArrowPenOff);
+          painter->drawRect(directionIndicatorRect);
+
+          painter->setFont(directionFont);
+          painter->setPen(Qt::white);
+          painter->setBrush(Qt::NoBrush);
+          painter->drawText(directionIndicatorRect, Qt::AlignCenter,
+                            QChar::fromLatin1(signal->directionIndicatorText));
+
+          // Go down to next element
+          lightRect.moveTop(directionIndicatorRect.bottom());
+        }
+
+        if(signal->hasRappel)
+        {
+          QPointF ct(obj.lateralDiff, lightRect.top() + directionIndicatorHeight * 0.7);
+          QRectF rappelRect(0, 0, directionIndicatorWidth, directionIndicatorHeight);
+          rappelRect.moveCenter(ct);
+
+          QRectF rappelRectAdj = rappelRect.adjusted(signalLightArrowPenOn.widthF(), signalLightArrowPenOn.widthF(),
+                                                     -signalLightArrowPenOn.widthF(), -signalLightArrowPenOn.widthF());
+
+          painter->fillRect(rappelRect, Qt::black);
+
+          if(signal->rappelState == Simulator::MainSignal::RappelState::OneLine_60)
+          {
+            QLineF line(rappelRectAdj.left(), ct.y(), rappelRectAdj.right(), ct.y());
+            painter->setPen(signalLightArrowPenOn);
+            painter->drawLine(line);
+          }
+          else if(signal->rappelState == Simulator::MainSignal::RappelState::TwoLines_100)
+          {
+            QLineF line1(rappelRectAdj.left(), rappelRectAdj.top() + rappelRectAdj.height() * 0.25,
+                         rappelRectAdj.right(), rappelRectAdj.top() + rappelRectAdj.height() * 0.25);
+            QLineF line2(rappelRectAdj.left(), rappelRectAdj.top() + rappelRectAdj.height() * 0.75,
+                         rappelRectAdj.right(), rappelRectAdj.top() + rappelRectAdj.height() * 0.75);
+            painter->setPen(signalLightArrowPenOn);
+            painter->drawLine(line1);
+            painter->drawLine(line2);
+          }
+
+          // Draw border on top
+          painter->setBrush(Qt::NoBrush);
+          painter->setPen(signalLightArrowPenOff);
+          painter->drawRect(rappelRect);
         }
 
         if(signal->hasSquareArrowLight)

@@ -255,6 +255,13 @@ public:
       BlinkReverseOn
     };
 
+    enum class RappelState
+    {
+      Off = 0,
+      OneLine_60,
+      TwoLines_100
+    };
+
     static constexpr uint8_t StateMask = uint8_t(State::BlinkReverseOn);
     static constexpr uint8_t ArrowLight = 0x04;
 
@@ -274,7 +281,8 @@ public:
     bool square = false;
     bool hasSquareArrowLight = false;
     bool hasAdvanceSignal = false;
-    bool hasDirectionIndicator = true;
+    bool hasDirectionIndicator = false;
+    bool hasRappel = false;
 
     inline State getAdvanceSignalState() const { return State(advanceSignalStateAndArrow & StateMask); }
     inline void setAdvanceSignalState(State s)
@@ -312,6 +320,8 @@ public:
       Limit30,
       Limit60
     } fixedLimit = FixedLimit::NoLimit;
+
+    RappelState rappelState = RappelState::Off;
 
     struct Light
     {

@@ -860,6 +860,8 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
           s->setSignalBlinkStart(false, m_stateData.signalBlinkState);
 
         s->setArrowLightOn(m.isArrowLightOn());
+        s->directionIndicatorText = m.directionIndication;
+        s->rappelState = Simulator::MainSignal::RappelState(m.rappelState);
 
         MainSignal::State advanceSignalState = s->getAdvanceSignalState();
         if(advanceSignalState == MainSignal::State::BlikOn ||
@@ -1921,6 +1923,11 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                     }
 
                     signal->hasAdvanceSignal = item.value("advance_light", false);
+                    signal->hasRappel = item.value("rappel", false);
+                    signal->hasDirectionIndicator = item.value("direction_ind", false);
+
+                    if(signal->hasRappel)
+                      signal->fixedLimit = MainSignal::FixedLimit::NoLimit;
                 }
                 else if(type == "reverse_dir")
                 {
