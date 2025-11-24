@@ -164,21 +164,21 @@ struct SignalSetState : Message
 
   LightState lights[3];
   float speed = 0.0;
-  uint8_t startSignalStateAndArrow = 0;
+  uint8_t advanceSignalStateAndArrow = 0;
 
-  inline State getStartSignalState() const { return State(startSignalStateAndArrow & StateMask); }
-  inline void setStartSignalState(State s)
+  inline State getAdvanceSignalState() const { return State(advanceSignalStateAndArrow & StateMask); }
+  inline void setAdvanceSignalState(State s)
   {
-    startSignalStateAndArrow = (startSignalStateAndArrow & ~StateMask) | uint8_t(s);
+    advanceSignalStateAndArrow = (advanceSignalStateAndArrow & ~StateMask) | uint8_t(s);
   }
 
-  inline bool isArrowLightOn() const { return (startSignalStateAndArrow & ArrowLight) == ArrowLight; }
+  inline bool isArrowLightOn() const { return (advanceSignalStateAndArrow & ArrowLight) == ArrowLight; }
   inline void setArrowLightOn(bool on)
   {
     if(on)
-      startSignalStateAndArrow |= ArrowLight;
+      advanceSignalStateAndArrow |= ArrowLight;
     else
-      startSignalStateAndArrow &= ~ArrowLight;
+      advanceSignalStateAndArrow &= ~ArrowLight;
   }
 
   SignalSetState(uint16_t ch, uint16_t addr)

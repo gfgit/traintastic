@@ -861,16 +861,16 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
 
         s->setArrowLightOn(m.isArrowLightOn());
 
-        MainSignal::State startSignalState = s->getStartSignalState();
-        if(startSignalState == MainSignal::State::BlikOn ||
-            startSignalState == MainSignal::State::BlinkReverseOn)
+        MainSignal::State advanceSignalState = s->getAdvanceSignalState();
+        if(advanceSignalState == MainSignal::State::BlikOn ||
+            advanceSignalState == MainSignal::State::BlinkReverseOn)
           wasBlinking = true;
 
-        startSignalState = MainSignal::State(m.getStartSignalState());
-        s->setStartSignalState(startSignalState);
+        advanceSignalState = MainSignal::State(m.getAdvanceSignalState());
+        s->setAdvanceSignalState(advanceSignalState);
 
-        if(startSignalState == MainSignal::State::BlikOn ||
-            startSignalState == MainSignal::State::BlinkReverseOn)
+        if(advanceSignalState == MainSignal::State::BlikOn ||
+            advanceSignalState == MainSignal::State::BlinkReverseOn)
           isBlinking = true;
 
         if(isBlinking && !wasBlinking)
@@ -1075,7 +1075,7 @@ void Simulator::onConnectionRemoved(const std::shared_ptr<SimulatorConnection>& 
     }
 
     s->setArrowLightOn(false);
-    s->setStartSignalState(MainSignal::State::Off);
+    s->setAdvanceSignalState(MainSignal::State::Off);
   }
 
   // Turn off owned spawns
@@ -1920,7 +1920,7 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                       break;
                     }
 
-                    signal->hasStartSignal = item.value("start_light", false);
+                    signal->hasAdvanceSignal = item.value("advance_light", false);
                 }
                 else if(type == "reverse_dir")
                 {

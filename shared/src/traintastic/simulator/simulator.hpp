@@ -262,30 +262,34 @@ public:
     uint16_t address = invalidAddress;
     std::string name;
     size_t ownerConnectionId = invalidIndex;
+
     double maxSpeed = 0;
+
+    uint8_t advanceSignalStateAndArrow = 0;
+    // Signal blink phase
+    uint8_t blinkStart = 0;
+
+    char directionIndicatorText = '2';
+
     bool square = false;
     bool hasSquareArrowLight = false;
-    bool hasStartSignal = false;
+    bool hasAdvanceSignal = false;
+    bool hasDirectionIndicator = true;
 
-    uint8_t startSignalStateAndArrow = 0;
-
-    inline State getStartSignalState() const { return State(startSignalStateAndArrow & StateMask); }
-    inline void setStartSignalState(State s)
+    inline State getAdvanceSignalState() const { return State(advanceSignalStateAndArrow & StateMask); }
+    inline void setAdvanceSignalState(State s)
     {
-      startSignalStateAndArrow = (startSignalStateAndArrow & ~StateMask) | uint8_t(s);
+      advanceSignalStateAndArrow = (advanceSignalStateAndArrow & ~StateMask) | uint8_t(s);
     }
 
-    inline bool isArrowLightOn() const { return (startSignalStateAndArrow & ArrowLight) == ArrowLight; }
+    inline bool isArrowLightOn() const { return (advanceSignalStateAndArrow & ArrowLight) == ArrowLight; }
     inline void setArrowLightOn(bool on)
     {
       if(on)
-        startSignalStateAndArrow |= ArrowLight;
+        advanceSignalStateAndArrow |= ArrowLight;
       else
-        startSignalStateAndArrow &= ~ArrowLight;
+        advanceSignalStateAndArrow &= ~ArrowLight;
     }
-
-    // Signal blink phase
-    uint8_t blinkStart = 0;
 
     inline uint8_t getSignalBlinkStart(bool startSignal) const
     {
@@ -297,9 +301,9 @@ public:
     inline void setSignalBlinkStart(bool startSignal, uint8_t state)
     {
       if(startSignal)
-        blinkStart = (startSignalStateAndArrow & 0x0F) | (state << 4);
+        blinkStart = (advanceSignalStateAndArrow & 0x0F) | (state << 4);
       else
-        blinkStart = (startSignalStateAndArrow & 0xF0) | state;
+        blinkStart = (advanceSignalStateAndArrow & 0xF0) | state;
     }
 
     enum class FixedLimit

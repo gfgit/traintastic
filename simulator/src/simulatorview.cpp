@@ -854,8 +854,10 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
   const qreal mastBaseLength = 3.0 * m_signalsScaleFactor;
   const qreal lightDiameter = 2.0 * m_signalsScaleFactor;
   const qreal triangleEdge = 1.9 * m_signalsScaleFactor;
-  const qreal startSignalWidth = 1.8 * m_signalsScaleFactor;
-  const qreal startSignalHeight = 0.8 * m_signalsScaleFactor;
+  const qreal advanceSignalWidth = 1.6 * m_signalsScaleFactor;
+  const qreal advanceSignalHeight = 0.8 * m_signalsScaleFactor;
+  const qreal directionIndicatorWidth = 1.4 * m_signalsScaleFactor;
+  const qreal directionIndicatorHeight = 1.8 * m_signalsScaleFactor;
 
   QFont triangleFont;
   triangleFont.setBold(true);
@@ -1029,7 +1031,7 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
           lightRect.moveTop(lightRect.top() + triangleEdge);
         }
 
-        if(signal->hasStartSignal)
+        if(signal->hasAdvanceSignal)
         {
           // Start signal blink is independent from main light blink
           blinkState = int8_t(m_stateData.signalBlinkState) - int8_t(signal->getSignalBlinkStart(true));
@@ -1038,16 +1040,16 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
           else if(blinkState < 0)
             blinkState += 8;
 
-          QPointF ct(obj.lateralDiff, lightRect.top() + startSignalHeight * 1.2);
-          QRectF startSignalRect(0, 0, startSignalWidth, startSignalHeight);
+          QPointF ct(obj.lateralDiff, lightRect.top() + advanceSignalHeight * 1.2);
+          QRectF startSignalRect(0, 0, advanceSignalWidth, advanceSignalHeight);
           startSignalRect.moveCenter(ct);
 
           painter->setBrush(Qt::black);
           painter->setPen(Qt::NoPen);
-          painter->drawRoundedRect(startSignalRect, startSignalHeight / 2.0, startSignalHeight / 2.0);
+          painter->drawRoundedRect(startSignalRect, advanceSignalHeight / 2.0, advanceSignalHeight / 2.0);
 
           bool on = false;
-          switch (signal->getStartSignalState())
+          switch (signal->getAdvanceSignalState())
           {
           case Simulator::MainSignal::State::Off:
             on = false;
@@ -1071,11 +1073,11 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
 
           painter->setBrush(on ? Qt::white : Qt::darkGray);
 
-          QRectF startSignalLightRect(0, 0, startSignalHeight * 0.7, startSignalHeight * 0.7);
-          startSignalLightRect.moveCenter(QPointF(startSignalRect.left() + startSignalHeight / 2.0, ct.y()));
+          QRectF startSignalLightRect(0, 0, advanceSignalHeight * 0.7, advanceSignalHeight * 0.7);
+          startSignalLightRect.moveCenter(QPointF(startSignalRect.left() + advanceSignalHeight / 2.0, ct.y()));
           painter->drawEllipse(startSignalLightRect);
 
-          startSignalLightRect.moveCenter(QPointF(startSignalRect.right() - startSignalHeight / 2.0, ct.y()));
+          startSignalLightRect.moveCenter(QPointF(startSignalRect.right() - advanceSignalHeight / 2.0, ct.y()));
           painter->drawEllipse(startSignalLightRect);
         }
 
