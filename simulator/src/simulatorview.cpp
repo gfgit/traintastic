@@ -926,6 +926,11 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
 
         Simulator::MainSignal *signal = signIt->second;
 
+        // Adjust later placment
+        qreal lateralDiff = obj.lateralDiff;
+        if(signal->zoomLateralDiff)
+          lateralDiff = obj.lateralDiff * (0.6 + 0.4 * m_signalsScaleFactor);
+
         // Align every signal as if it had 3 lights (std::max() if wrongly specified more than 3 lights)
         qreal mastLength = mastBaseLength + lightDiameter * std::max(signal->lights.size() - 1, size_t(3));
         const size_t numElements = signal->hasAdvanceSignal + signal->hasDirectionIndicator + signal->hasRappel;
@@ -945,20 +950,20 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
         else
           painter->setPen(signalMastPen);
 
-        painter->drawLine(QLineF(obj.lateralDiff, 0,
-                                 obj.lateralDiff, -mastLength));
+        painter->drawLine(QLineF(lateralDiff, 0,
+                                 lateralDiff, -mastLength));
 
         if(signal->isPureDistantSignal)
         {
           // Now draw dashes
           painter->setPen(signalMastPenWhite);
-          painter->drawLine(QLineF(obj.lateralDiff, - mastBaseLength * 0.7,
-                                   obj.lateralDiff, -mastLength));
+          painter->drawLine(QLineF(lateralDiff, - mastBaseLength * 0.7,
+                                   lateralDiff, -mastLength));
         }
 
         QRectF lightRect;
         lightRect.setSize(QSizeF(lightDiameter, lightDiameter));
-        lightRect.moveCenter(QPointF(obj.lateralDiff, - mastLength + lightDiameter / 2.0));
+        lightRect.moveCenter(QPointF(lateralDiff, - mastLength + lightDiameter / 2.0));
 
         painter->setPen(signalLightPen);
 
@@ -1043,9 +1048,9 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
         if(signal->fixedLimit != Simulator::MainSignal::FixedLimit::NoLimit)
         {
           const QPointF triangle[3] = {
-              {obj.lateralDiff - triangleEdge / 2.0, lightRect.top() + triangleEdge * 0.14},
-              {obj.lateralDiff + triangleEdge / 2.0, lightRect.top() + triangleEdge * 0.14},
-              {obj.lateralDiff, lightRect.top() + triangleEdge}
+              {lateralDiff - triangleEdge / 2.0, lightRect.top() + triangleEdge * 0.14},
+              {lateralDiff + triangleEdge / 2.0, lightRect.top() + triangleEdge * 0.14},
+              {lateralDiff, lightRect.top() + triangleEdge}
           };
 
           // 0.55 to align text a bit above triangle center to better use its larger half
@@ -1078,7 +1083,7 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
           else if(blinkState < 0)
             blinkState += 8;
 
-          QPointF ct(obj.lateralDiff, lightRect.top() + advanceSignalHeight * 1.2);
+          QPointF ct(lateralDiff, lightRect.top() + advanceSignalHeight * 1.2);
           QRectF startSignalRect(0, 0, advanceSignalWidth, advanceSignalHeight);
           startSignalRect.moveCenter(ct);
 
@@ -1124,7 +1129,7 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
 
         if(signal->hasDirectionIndicator)
         {
-          QPointF ct(obj.lateralDiff, lightRect.top() + directionIndicatorHeight * 0.7);
+          QPointF ct(lateralDiff, lightRect.top() + directionIndicatorHeight * 0.7);
           QRectF directionIndicatorRect(0, 0, directionIndicatorWidth, directionIndicatorHeight);
           directionIndicatorRect.moveCenter(ct);
 
@@ -1148,7 +1153,7 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
 
         if(signal->hasRappel)
         {
-          QPointF ct(obj.lateralDiff, lightRect.top() + directionIndicatorHeight * 0.7);
+          QPointF ct(lateralDiff, lightRect.top() + directionIndicatorHeight * 0.7);
           QRectF rappelRect(0, 0, directionIndicatorWidth, directionIndicatorHeight);
           rappelRect.moveCenter(ct);
 
@@ -1182,7 +1187,7 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
 
         if(signal->hasSquareArrowLight)
         {
-          const QPointF arrowCenter(obj.lateralDiff, - mastLength - lightDiameter / 2.0 - signalLightPen.widthF());
+          const QPointF arrowCenter(lateralDiff, - mastLength - lightDiameter / 2.0 - signalLightPen.widthF());
           lightRect.moveCenter(arrowCenter);
           painter->fillRect(lightRect, Qt::black);
 

@@ -285,6 +285,11 @@ public:
     bool hasRappel = false;
     bool isPureDistantSignal = false;
 
+    // Increase lateral diff with signal scale factor
+    // This prevents 2 parallel signals to overlap each other
+    // Set to false if signal is in-between 2 tracks as it would move it.
+    bool zoomLateralDiff = true;
+
     inline State getAdvanceSignalState() const { return State(advanceSignalStateAndArrow & StateMask); }
     inline void setAdvanceSignalState(State s)
     {

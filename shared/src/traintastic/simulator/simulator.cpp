@@ -1928,6 +1928,7 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                     signal->hasRappel = item.value("rappel", false);
                     signal->hasDirectionIndicator = item.value("direction_ind", false);
                     signal->isPureDistantSignal = item.value("pure_distant", false);
+                    signal->zoomLateralDiff = item.value("zoom_lat", true);
 
                     if(signal->hasRappel)
                       signal->fixedLimit = MainSignal::FixedLimit::NoLimit;
