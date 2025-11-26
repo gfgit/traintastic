@@ -1927,9 +1927,15 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                     signal->hasAdvanceSignal = item.value("advance_light", false);
                     signal->hasRappel = item.value("rappel", false);
                     signal->hasDirectionIndicator = item.value("direction_ind", false);
+                    signal->isPureDistantSignal = item.value("pure_distant", false);
 
                     if(signal->hasRappel)
                       signal->fixedLimit = MainSignal::FixedLimit::NoLimit;
+
+                    if(signal->hasRappel || signal->hasDirectionIndicator ||
+                        signal->hasAdvanceSignal || signal->fixedLimit != MainSignal::FixedLimit::NoLimit ||
+                        signal->lights.size() > 2)
+                      signal->isPureDistantSignal = false;
                 }
                 else if(type == "reverse_dir")
                 {

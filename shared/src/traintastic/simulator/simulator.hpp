@@ -283,6 +283,7 @@ public:
     bool hasAdvanceSignal = false;
     bool hasDirectionIndicator = false;
     bool hasRappel = false;
+    bool isPureDistantSignal = false;
 
     inline State getAdvanceSignalState() const { return State(advanceSignalStateAndArrow & StateMask); }
     inline void setAdvanceSignalState(State s)

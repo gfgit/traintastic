@@ -842,6 +842,15 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
   QPen signalMastPen(Qt::lightGray, 0.6 * m_signalsScaleFactor);
   signalMastPen.setCapStyle(Qt::FlatCap);
 
+  QPen signalMastPenBlack = signalMastPen;
+  signalMastPenBlack.setColor(Qt::black);
+
+  QPen signalMastPenWhite = signalMastPen;
+  signalMastPenWhite.setColor(Qt::white);
+  signalMastPenWhite.setStyle(Qt::DashLine);
+  const qreal dashLength = 0.5 * m_signalsScaleFactor / signalMastPenWhite.widthF();
+  signalMastPenWhite.setDashPattern({dashLength, dashLength});
+
   const QPen signalLightPen(Qt::lightGray, 0.2 * m_signalsScaleFactor);
   const QPen signalTrianglePen(Qt::black, 0.1 * m_signalsScaleFactor);
 
@@ -930,9 +939,22 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
           mastLength *= 1.1;
         }
 
-        painter->setPen(signalMastPen);
+        // Draw black mast with white dashes for pure distant signals
+        if(signal->isPureDistantSignal)
+          painter->setPen(signalMastPenBlack);
+        else
+          painter->setPen(signalMastPen);
+
         painter->drawLine(QLineF(obj.lateralDiff, 0,
                                  obj.lateralDiff, -mastLength));
+
+        if(signal->isPureDistantSignal)
+        {
+          // Now draw dashes
+          painter->setPen(signalMastPenWhite);
+          painter->drawLine(QLineF(obj.lateralDiff, - mastBaseLength * 0.7,
+                                   obj.lateralDiff, -mastLength));
+        }
 
         QRectF lightRect;
         lightRect.setSize(QSizeF(lightDiameter, lightDiameter));
