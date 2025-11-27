@@ -272,11 +272,11 @@ size_t getSegmentAt(const Simulator::Point &point, const Simulator::StaticData &
         if (angle < angleMin || angle > angleMax)
         {
           // Try again with + 2 * pi
-          const float angleBis = angle += 2 * pi;
+          const float angleBis = angle + 2 * pi;
           if (angleBis < angleMin || angleBis > angleMax)
           {
             // Try again with - 2 * pi
-            const float angleTer = angle -= 2 * pi;
+            const float angleTer = angle - 2 * pi;
             if (angleTer < angleMin || angleTer > angleMax)
             {
               continue;
@@ -290,11 +290,11 @@ size_t getSegmentAt(const Simulator::Point &point, const Simulator::StaticData &
         if (angle > angleMin && angle < angleMax)
         {
           // Try again with + 2 * pi
-          const float angleBis = angle += 2 * pi;
+          const float angleBis = angle + 2 * pi;
           if (angleBis > angleMin && angleBis < angleMax)
           {
             // Try again with - 2 * pi
-            const float angleTer = angle -= 2 * pi;
+            const float angleTer = angle - 2 * pi;
             if (angleTer > angleMin && angleTer < angleMax)
             {
               continue;
@@ -313,6 +313,156 @@ size_t getSegmentAt(const Simulator::Point &point, const Simulator::StaticData &
   }
 
   return bestIdx;
+}
+
+float getSegmentPosAt(size_t segmentIndex, const Simulator::Point &point, const Simulator::StaticData &data)
+{
+  const auto &segment = data.trackSegments.at(segmentIndex);
+
+  switch (segment.type)
+  {
+  case Simulator::TrackSegment::Type::Straight:
+  case Simulator::TrackSegment::Type::Turnout:
+  case Simulator::TrackSegment::Type::Turnout3Way:
+  {
+    float pos = 0.0;
+
+    QRectF br;
+    br.setTop(segment.points[0].y);
+    br.setLeft(segment.points[0].x);
+    br.setBottom(segment.points[1].y);
+    br.setRight(segment.points[1].x);
+    br = br.normalized();
+
+    if(br.width() >= br.height())
+    {
+      if(point.x <= br.left())
+        pos = 0.0;
+      else if(point.x >= br.right() || br.width() < 0.0001)
+        pos = 0.9999; // 1.0
+      else
+        pos = (point.x - br.left()) / br.width();
+
+      if(segment.points[0].x == br.right())
+        pos = 1 - pos;
+    }
+    else
+    {
+      if(point.y <= br.top())
+        pos = 0.0;
+      else if(point.y >= br.bottom() || br.height() < 0.0001)
+        pos = 0.9999; // 1.0
+      else
+        pos = (point.y - br.top()) / br.height();
+
+      if(segment.points[0].y == br.bottom())
+        pos = 1 - pos;
+    }
+
+    return pos * segment.straight.length;
+  }
+  case Simulator::TrackSegment::Type::Curve:
+  case Simulator::TrackSegment::Type::TurnoutCurved:
+  {
+    const Simulator::Point center = segment.curves[0].center;
+    const Simulator::Point diff = point - center;
+
+    // Y coordinate is swapped
+    float angle = std::atan2(-diff.y, diff.x);
+
+    float rotation = segment.rotation;
+    if (rotation < 0)
+      rotation += 2 * pi;
+
+    const float curveAngle = segment.curves[0].angle;
+    float angleMax = -rotation + pi / 2.0 * (curveAngle > 0 ? 1 : -1);
+    float angleMin = -rotation - curveAngle + pi / 2.0 * (curveAngle > 0 ? 1 : -1);
+
+    if (curveAngle < 0)
+      std::swap(angleMin, angleMax);
+
+    if (angleMin < 0)
+    {
+      angleMin += 2 * pi;
+      angleMax += 2 * pi;
+    }
+
+    if (angleMin < 0 && angle < 0)
+    {
+      angleMin += 2 * pi;
+      angleMax += 2 * pi;
+    }
+
+    if (angle < 0)
+    {
+      angle += 2 * pi;
+    }
+
+    // TODO: really ugly...
+    if (angleMin <= angleMax)
+    {
+      // min -> max
+      if (angle < angleMin || angle > angleMax)
+      {
+        // Try again with + 2 * pi
+        const float angleBis = angle + 2 * pi;
+        if (angleBis < angleMin || angleBis > angleMax)
+        {
+          // Try again with - 2 * pi
+          const float angleTer = angle - 2 * pi;
+          if (angleTer < angleMin || angleTer > angleMax)
+          {
+            return 0;
+          }
+
+          angle = angleTer;
+        }
+        else
+        {
+          angle = angleBis;
+        }
+      }
+
+      angle = angleMax - angle;
+    }
+    else
+    {
+      // 0 -> min, max -> 2 * pi
+      if (angle > angleMin && angle < angleMax)
+      {
+        // Try again with + 2 * pi
+        const float angleBis = angle + 2 * pi;
+        if (angleBis > angleMin && angleBis < angleMax)
+        {
+          // Try again with - 2 * pi
+          const float angleTer = angle - 2 * pi;
+          if (angleTer > angleMin && angleTer < angleMax)
+          {
+            return 0;
+
+            angle = angleTer;
+          }
+          else
+          {
+            angle = angleBis;
+          }
+        }
+
+        angle = angleMax - angle;
+      }
+    }
+
+    // Invert start reference
+    if(curveAngle < 0)
+      angle = -curveAngle - angle;
+
+    return std::clamp(angle * segment.curves[0].radius, 0.0f, segment.curves[0].length);
+  }
+  default:
+    break;
+  }
+
+  return 0.0f;
 }
 
 void drawStraight(const Simulator::TrackSegment& segment, QPainter *painter)
@@ -1635,7 +1785,7 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
   }
   else if(result == addTrain)
   {
-    showAddTrainDialog(idx);
+    showAddTrainDialog(idx, point);
   }
 }
 
@@ -1862,14 +2012,16 @@ nlohmann::json SimulatorView::copySegmentData(size_t segmentIdx) const
   return obj;
 }
 
-void SimulatorView::showAddTrainDialog(size_t segmentIndex)
+void SimulatorView::showAddTrainDialog(size_t segmentIndex, const Simulator::Point& point)
 {
-  QString segName;
-  if(segmentIndex != Simulator::invalidIndex &&
-     segmentIndex < m_simulator->staticData.trackSegments.size())
-    segName = QString::fromStdString(m_simulator->staticData.trackSegments.at(segmentIndex).m_id);
+  if(segmentIndex == Simulator::invalidIndex || segmentIndex >= m_simulator->staticData.trackSegments.size())
+    return;
 
-  QPointer<AddTrainDialog> dlg = new AddTrainDialog(segmentIndex, segName,
+  const auto& segment = m_simulator->staticData.trackSegments.at(segmentIndex);
+  const float startPos = getSegmentPosAt(segmentIndex, point, m_simulator->staticData);
+  const QString segName = QString::fromStdString(segment.m_id);
+
+  QPointer<AddTrainDialog> dlg = new AddTrainDialog(segmentIndex, startPos, segName,
                                                     mTrainsModel, this);
   dlg->exec();
   delete dlg;

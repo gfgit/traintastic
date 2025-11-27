@@ -186,7 +186,7 @@ private:
     segmentHoverTimer.stop();
   }
 
-  void showAddTrainDialog(size_t segmentIndex);
+  void showAddTrainDialog(size_t segmentIndex, const Simulator::Point &point);
 
 private slots:
   void tick();

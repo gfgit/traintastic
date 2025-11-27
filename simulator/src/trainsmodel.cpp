@@ -70,7 +70,7 @@ QVariant TrainsModel::data(const QModelIndex &idx, int role) const
     return QVariant();
 }
 
-bool TrainsModel::addTrain(const QString &name, Color c, size_t numWagons, size_t segmentIdx, QString *errOut)
+bool TrainsModel::addTrain(const QString &name, Color c, size_t numWagons, size_t segmentIdx, const float startPos, QString *errOut)
 {
     if(!mSimulator)
         return false;
@@ -95,14 +95,6 @@ bool TrainsModel::addTrain(const QString &name, Color c, size_t numWagons, size_
         return false;
     }
 
-    const auto& segment = mSimulator->staticData.trackSegments.at(segmentIdx);
-    if(segment.type != Simulator::TrackSegment::Type::Straight &&
-            segment.type != Simulator::TrackSegment::Type::Curve)
-    {
-        *errOut = tr("Segment is not straight or curve");
-        return false;
-    }
-
     std::string baseName = name.toStdString() + ".";
 
     std::vector<Simulator::Train::VehicleItem> vehicles;
@@ -115,7 +107,7 @@ bool TrainsModel::addTrain(const QString &name, Color c, size_t numWagons, size_
     }
 
     if(!mSimulator->addTrain(name.toStdString(), DecoderProtocol::DCCShort, 3,
-                             vehicles, segmentIdx))
+                             vehicles, segmentIdx, startPos))
     {
         for(const auto &item : vehicles)
         {

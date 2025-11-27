@@ -13,7 +13,7 @@ class AddTrainDialog : public QDialog
 {
     Q_OBJECT
 public:
-    AddTrainDialog(size_t segmentIndex, const QString &segName,
+    AddTrainDialog(size_t segmentIndex, const float startPos, const QString &segName,
                    TrainsModel *trainsModel,
                    QWidget *parent = nullptr);
 
@@ -27,6 +27,7 @@ private:
 
     TrainsModel *mTrainsModel = nullptr;
     size_t mSegmentIndex = 0;
+    float mStartPos = 0.0f;
 };
 
 #endif // ADDTRAINDIALOG_H

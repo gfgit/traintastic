@@ -32,7 +32,7 @@ public:
 
     QVariant data(const QModelIndex &idx, int role = Qt::DisplayRole) const override;
 
-    bool addTrain(const QString& name, Color c, size_t numWagons, size_t segmentIdx,
+    bool addTrain(const QString& name, Color c, size_t numWagons, size_t segmentIdx, const float startPos,
                   QString *errOut);
 
     bool removeTrain(const QString& name);

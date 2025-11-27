@@ -500,16 +500,16 @@ public:
   inline std::recursive_mutex& stateMutex() { return m_stateMutex; }
 
   static bool addTrain(const std::string_view &name,
-                DecoderProtocol proto, uint16_t addr,
-                const std::vector<Train::VehicleItem> &vehicles, size_t segmentIndex,
-                const StaticData &data, StateData &stateData);
+                       DecoderProtocol proto, uint16_t addr,
+                       const std::vector<Train::VehicleItem> &vehicles, size_t segmentIndex,
+                       const StaticData &data, StateData &stateData, const float startPos = -1.0);
 
   bool addTrain(const std::string_view& name, DecoderProtocol proto, uint16_t addr,
-                           const std::vector<Train::VehicleItem> &vehicles, size_t segmentIndex)
+                           const std::vector<Train::VehicleItem> &vehicles, size_t segmentIndex, const float startPos = -1.0)
   {
       std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
       return addTrain(name, proto, addr, vehicles,
-                      segmentIndex, staticData, m_stateData);
+                      segmentIndex, staticData, m_stateData, startPos);
   }
 
   bool removeTrain(const std::string_view& name, bool removeWagons);

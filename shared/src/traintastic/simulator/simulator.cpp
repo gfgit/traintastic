@@ -2703,7 +2703,7 @@ Simulator::StaticData Simulator::load(const nlohmann::json& world, StateData& st
 
 bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, uint16_t addr,
                          const std::vector<Train::VehicleItem> &vehicles, size_t segmentIndex,
-                         const StaticData& data, StateData &stateData)
+                         const StaticData& data, StateData &stateData, const float startPos)
 {
     if(name.empty() || stateData.trains.contains(name))
       return false;
@@ -2729,13 +2729,18 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
     if(empty)
       return false;
 
-    float segmentLength = 0.0;
+    float segmentLength = 0.0f;
+    float trainCenterPos = 0.0f;
 
     {
       const auto& segment = data.trackSegments[segmentIndex];
       if(isTurnoutUnknownState(segment, stateData))
         return false;
       segmentLength = getSegmentLength(segment, stateData);
+
+      trainCenterPos = startPos;
+      if(trainCenterPos < 0.0f || trainCenterPos >= segmentLength)
+        trainCenterPos = segmentLength / 2.0;
     }
 
     const float placingMargin = std::max(0.1, data.trainCouplingLength / 2.0);
@@ -2815,9 +2820,6 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
     const float totalAvaliableLength = segmentLength + extraLength[0] + extraLength[1];
     if(totalAvaliableLength < (train->length + 2 * placingMargin))
       return false;
-
-    // TODO: allow specify custom pos
-    float trainCenterPos = segmentLength / 2.0;
 
     float trainStartPos = trainCenterPos - train->length / 2.0;
     if(trainStartPos < 0.0 && (trainStartPos + extraLength[0]) <= 0.0)

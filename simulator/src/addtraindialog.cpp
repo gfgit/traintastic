@@ -12,10 +12,11 @@
 
 #include "trainsmodel.h"
 
-AddTrainDialog::AddTrainDialog(size_t segmentIndex, const QString& segName, TrainsModel *trainsModel, QWidget *parent)
+AddTrainDialog::AddTrainDialog(size_t segmentIndex, const float startPos, const QString& segName, TrainsModel *trainsModel, QWidget *parent)
     : QDialog{parent}
     , mTrainsModel(trainsModel)
     , mSegmentIndex(segmentIndex)
+    , mStartPos(startPos)
 {
     QFormLayout *lay = new QFormLayout(this);
 
@@ -55,7 +56,7 @@ void AddTrainDialog::done(int result)
         QString errStr;
         if(!mTrainsModel->addTrain(mTrainEdit->text(),
                                Color::Blue, mNumWagonsSpin->value(),
-                               mSegmentIndex, &errStr))
+                               mSegmentIndex, mStartPos, &errStr))
         {
             QMessageBox::warning(this, tr("Cannot add Train"),
                                  errStr);
