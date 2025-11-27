@@ -2712,85 +2712,227 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
     train->name = name;
     train->protocol = proto;
     train->address = addr;
+    train->vehicles.reserve(vehicles.size());
 
-    float lastDistance = 0;
-
+    bool empty = true;
     for(const auto& item : vehicles)
     {
       if(!item.vehicle || item.vehicle->activeTrain)
         continue;
 
-      const float distance = train->vehicles.empty() ? 0.0f : lastDistance - data.trainCouplingLength;
-      train->length += item.vehicle->length + (train->vehicles.empty() ? 0.0f : data.trainCouplingLength);
+      train->length += item.vehicle->length + (empty ? 0.0f : data.trainCouplingLength);
+      empty = false;
+
+      train->vehicles.push_back(item);
+    }
+
+    if(empty)
+      return false;
+
+    float segmentLength = 0.0;
+
+    {
+      const auto& segment = data.trackSegments[segmentIndex];
+      if(isTurnoutUnknownState(segment, stateData))
+        return false;
+      segmentLength = getSegmentLength(segment, stateData);
+    }
+
+    const float placingMargin = std::max(0.1, data.trainCouplingLength / 2.0);
+
+    float extraLength[2] = {0.0, 0.0};
+    for(int i = 0; i < 2; i++)
+    {
+      bool segmentInverted = (i == 1);
+      size_t curSegmentIndex = segmentIndex;
+
+      while(extraLength[i] < (train->length + placingMargin))
+      {
+        const auto& curSegment = data.trackSegments[curSegmentIndex];
+        const size_t nextSegmentIndex = getNextSegmentIndex(curSegment, segmentInverted, stateData);
+
+        if(nextSegmentIndex == invalidIndex)
+        {
+          break; // no next segment
+        }
+
+        const auto& nextSegment = data.trackSegments[nextSegmentIndex];
+        if(isTurnoutUnknownState(nextSegment, stateData))
+          break;
+
+        if(nextSegment.nextSegmentIndex[0] == curSegmentIndex)
+        {
+          // TODO: double slip switches
+          segmentInverted = true;
+        }
+        else
+        {
+          segmentInverted = false;
+
+          // Check turnout is in correct position
+          bool invalidTurnout = false;
+
+          switch (nextSegment.type)
+          {
+          case Simulator::TrackSegment::Type::Straight:
+          case Simulator::TrackSegment::Type::Curve:
+            break;
+          case Simulator::TrackSegment::Type::Turnout:
+          case Simulator::TrackSegment::Type::TurnoutCurved:
+          {
+            const auto state = stateData.turnouts.at(nextSegment.turnout.index).state;
+            if(state == Simulator::TurnoutState::State::Closed && nextSegment.nextSegmentIndex[1] != curSegmentIndex)
+              invalidTurnout = true;
+            else if(state == Simulator::TurnoutState::State::Thrown && nextSegment.nextSegmentIndex[2] != curSegmentIndex)
+              invalidTurnout = true;
+            break;
+          }
+          case Simulator::TrackSegment::Type::Turnout3Way:
+          {
+            const auto state = stateData.turnouts.at(nextSegment.turnout.index).state;
+            if(state == Simulator::TurnoutState::State::Closed && nextSegment.nextSegmentIndex[1] != curSegmentIndex)
+              invalidTurnout = true;
+            else if(state == Simulator::TurnoutState::State::ThrownLeft && nextSegment.nextSegmentIndex[2] != curSegmentIndex)
+              invalidTurnout = true;
+            else if(state == Simulator::TurnoutState::State::ThrownRight && nextSegment.nextSegmentIndex[3] != curSegmentIndex)
+              invalidTurnout = true;
+            break;
+          }
+          default:
+            assert(false);
+            break;
+          }
+
+          if(invalidTurnout)
+            break;
+        }
+
+        extraLength[i] += getSegmentLength(nextSegment, stateData);
+        curSegmentIndex = nextSegmentIndex;
+      }
+    }
+
+    const float totalAvaliableLength = segmentLength + extraLength[0] + extraLength[1];
+    if(totalAvaliableLength < (train->length + 2 * placingMargin))
+      return false;
+
+    // TODO: allow specify custom pos
+    float trainCenterPos = segmentLength / 2.0;
+
+    float trainStartPos = trainCenterPos - train->length / 2.0;
+    if(trainStartPos < 0.0 && (trainStartPos + extraLength[0]) <= 0.0)
+    {
+      trainStartPos = -extraLength[0] + placingMargin;
+      trainCenterPos = trainStartPos + train->length / 2.0;
+    }
+
+    float trainEndPos = trainStartPos + train->length;
+    if(trainEndPos >= segmentLength && (trainEndPos - segmentLength) > extraLength[1])
+    {
+      trainEndPos = segmentLength + extraLength[1] - placingMargin;
+      trainCenterPos = trainEndPos - train->length / 2.0;
+      trainStartPos = trainEndPos - train->length;
+    }
+
+    // Find start segment
+    bool segmentInverted = false;
+    size_t curSegmentIndex = segmentIndex;
+    float curPos = trainStartPos;
+    float curSegmentLenght = segmentLength;
+
+    while(curPos < 0)
+    {
+      const auto& curSegment = data.trackSegments[curSegmentIndex];
+      const size_t nextSegmentIndex = getNextSegmentIndex(curSegment, segmentInverted, stateData);
+
+      assert(nextSegmentIndex != invalidIndex);
+
+      const auto& nextSegment = data.trackSegments[nextSegmentIndex];
+      segmentInverted = (nextSegment.nextSegmentIndex[0] == curSegmentIndex);
+
+      curSegmentLenght = getSegmentLength(nextSegment, stateData);
+      curPos += curSegmentLenght;
+      curSegmentIndex = nextSegmentIndex;
+    }
+
+    auto advancePos = [&segmentInverted, &curSegmentIndex, &curPos, &curSegmentLenght, &data, &stateData](float delta)
+    {
+      curPos += delta;
+      if(curPos < curSegmentLenght)
+        return; // Still inside current segment
+
+      while(curPos >= curSegmentLenght)
+      {
+        // Go next segment (opposite direction, so !segmentInverted)
+        const auto& curSegment = data.trackSegments[curSegmentIndex];
+        curPos -= curSegmentLenght;
+
+        const size_t nextSegmentIndex = getNextSegmentIndex(curSegment, !segmentInverted, stateData);
+        assert(nextSegmentIndex != invalidIndex);
+
+        const auto& nextSegment = data.trackSegments[nextSegmentIndex];
+        segmentInverted = (nextSegment.nextSegmentIndex[0] != curSegmentIndex);
+
+        curSegmentLenght = getSegmentLength(nextSegment, stateData);
+        curSegmentIndex = nextSegmentIndex;
+      }
+    };
+
+    // Place wagons in segments
+    bool first = true;
+    for(auto& item : train->vehicles | std::views::reverse)
+    {
+      if(first)
+        first = false;
+      else
+        advancePos(data.trainCouplingLength);
+
+      float pos = curPos;
+      if(segmentInverted)
+        pos = curSegmentLenght - pos;
 
       auto& vehicleState = item.vehicle->state;
-      vehicleState.front.segmentIndex = segmentIndex;
-      vehicleState.front.distance = distance;
-      vehicleState.rear.segmentIndex = segmentIndex;
-      vehicleState.rear.distance = distance - item.vehicle->length;
+      vehicleState.rear.segmentIndex = curSegmentIndex;
+      vehicleState.rear.distance = pos;
+      vehicleState.rear.segmentDirectionInverted = segmentInverted;
 
-      lastDistance = vehicleState.rear.distance;
+      const auto& rearSegment = data.trackSegments[curSegmentIndex];
+      if(rearSegment.sensor.index != invalidIndex)
+      {
+        auto& sensor = stateData.sensors[rearSegment.sensor.index];
+        sensor.occupied += 1;
+      }
+
+      advancePos(item.vehicle->length);
+      pos = curPos;
+      if(segmentInverted)
+        pos = curSegmentLenght - pos;
+
+      vehicleState.front.segmentIndex = curSegmentIndex;
+      vehicleState.front.distance = pos;
+      vehicleState.front.segmentDirectionInverted = segmentInverted;
+
+      const auto& frontSegment = data.trackSegments[curSegmentIndex];
+      if(frontSegment.sensor.index != invalidIndex)
+      {
+        auto& sensor = stateData.sensors[frontSegment.sensor.index];
+        sensor.occupied += 1;
+      }
+
       if(item.reversed)
       {
         std::swap(vehicleState.front, vehicleState.rear);
       }
 
       item.vehicle->activeTrain = train.get();
-      train->vehicles.push_back(item);
     }
 
-    if(!train->vehicles.empty())
-    {
-      // center train in segment and mark it occupied:
-      const auto& segment = data.trackSegments[segmentIndex];
+    if(train->speedMax < 0.0001)
+      train->speedMax = defaultSpeedTickRate * data.worldScale;
 
-      const float segmentLength = getSegmentLength(segment, stateData);
-      if(train->length >= segmentLength)
-      {
-        // Reset vehicle segment because we did not add them yet
-        for(const auto& item : train->vehicles)
-        {
-          auto& vehicleState = item.vehicle->state;
-          vehicleState.front.segmentIndex = invalidIndex;
-          vehicleState.front.distance = 0.0f;
-          vehicleState.rear.segmentIndex = invalidIndex;
-          vehicleState.rear.distance = 0.0f;
-        }
+    stateData.trains.insert({train->name, train.release()});
 
-        return false;
-      }
-
-      if(segment.sensor.index != invalidIndex)
-      {
-        auto& sensor = stateData.sensors[segment.sensor.index];
-        sensor.occupied += train->vehicles.size() * 2;
-      }
-
-      const float move = segmentLength - (segmentLength - train->length) / 2;
-      for(const auto& vehicleItem : train->vehicles)
-      {
-        auto* vehicle = vehicleItem.vehicle;
-        if(vehicleItem.reversed)
-        {
-          vehicle->state.front.distance -= move;
-          vehicle->state.rear.distance -= move;
-        }
-        else
-        {
-          vehicle->state.front.distance += move;
-          vehicle->state.rear.distance += move;
-        }
-      }
-
-      if(train->speedMax < 0.0001)
-        train->speedMax = defaultSpeedTickRate * data.worldScale;
-
-      stateData.trains.insert({train->name, train.release()});
-
-      return true;
-    }
-
-    return false;
+    return true;
 }
 
 bool Simulator::removeTrain(const std::string_view &name, bool removeWagons)

@@ -1,0 +1,62 @@
+{
+  "trackplan": [
+    {
+      "id": "dritto1",
+      "type": "straight",
+      "x": 100,
+      "y": 100,
+      "length": 50,
+      "sensor_address": 1
+    },
+    {
+      "id": "dritto2",
+      "type": "straight",
+      "length": 20,
+      "sensor_address": 2
+    },
+    {
+      "id": "scambio3",
+      "type": "turnout",
+      "length": 22,
+      "side": 1,
+      "angle": 8,
+      "radius": 170,
+      "sensor_address": 3
+    },
+    {
+      "id": "dritto4",
+      "type": "straight",
+      "length": 200,
+      "sensor_address": 4
+    },
+    {
+      "id": "dritto_neg1",
+      "from_id": "dritto1",
+      "type": "straight",
+      "length": 10,
+      "sensor_address": 11
+    },
+    {
+      "id": "dritto_neg2",
+      "type": "straight",
+      "length": 10,
+      "sensor_address": 12
+    },
+    {
+      "id": "scambio_neg3",
+      "type": "turnout",
+      "length": 22,
+      "side": 1,
+      "angle": 8,
+      "radius": 170,
+      "sensor_address": 13
+    },
+    {
+      "id": "dritto_neg4",
+      "type": "straight",
+      "length": 100,
+      "sensor_address": 14
+    }
+  ],
+  "trains": []
+}
