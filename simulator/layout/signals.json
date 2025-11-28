@@ -19,7 +19,6 @@
           "n_lights": 3,
           "square": false
         },
-
         {
           "name": "Vigo.LL",
           "type": "main_signal",
@@ -33,6 +32,16 @@
           "advance_light": true,
           "arrow_light": true,
           "rappel": true
+        },
+        {
+          "name": "Marmotta1",
+          "type": "aux_signal",
+          "sub_type": "light_dwarf_signal",
+          "channel": 4,
+          "address": 10,
+          "pos": 30,
+          "dir": false,
+          "lat_delta": 2.5
         }
       ]
     }

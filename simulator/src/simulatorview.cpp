@@ -26,9 +26,9 @@
 #include <cmath>
 
 #include <QPainter>
-#include <QGuiApplication>
-
+#include <QPainterPath>
 #include <QFont>
+
 #include <QToolTip>
 #include <QGuiApplication>
 
@@ -1018,6 +1018,9 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
   QPen signalLightArrowPenOn = signalLightArrowPenOff;
   signalLightArrowPenOn.setColor(Qt::white);
 
+  QPen dwarfBorderPen(Qt::darkGray, 0.1 * m_signalsScaleFactor);
+  dwarfBorderPen.setJoinStyle(Qt::RoundJoin);
+
   QPen signalIndicatorBorder(Qt::darkGray, 0.1 * m_signalsScaleFactor);
 
   const qreal mastBaseLength = 3.0 * m_signalsScaleFactor;
@@ -1366,6 +1369,75 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
 
           painter->setBrush(Qt::darkGray);
           painter->drawConvexPolygon(triangle, 3);
+        }
+
+        break;
+      }
+      case Object::Type::AuxSignal:
+      {
+        auto signIt = m_stateData.auxSignals.find(obj.signalName);
+        if(signIt == m_stateData.auxSignals.end())
+          continue;
+
+        // Draw with Y along mast
+        painter->rotate(90.0);
+
+        Simulator::AuxSignal *signal = signIt->second;
+
+        // Adjust later placment
+        qreal lateralDiff = obj.lateralDiff;
+        if(signal->zoomLateralDiff)
+          lateralDiff = obj.lateralDiff * (0.6 + 0.4 * m_signalsScaleFactor);
+
+        painter->translate(lateralDiff, 0.0f);
+
+        switch (signal->subType)
+        {
+        case Simulator::AuxSignal::SubType::LightDwarfSignal:
+        {
+          const qreal LightDwarfWidth = 1.5f;
+          const qreal LightDwarfHeight = 2.0f;
+          const qreal LightDwarfLightSz = 0.5f;
+
+          // Background
+          QPainterPath path;
+          path.moveTo(0.0f, 0.0f);
+          path.lineTo(-LightDwarfWidth / 2.0, 0.0);
+          path.lineTo(-LightDwarfWidth / 2.0, -LightDwarfHeight);
+          path.lineTo(0.0f, -LightDwarfHeight);
+          path.lineTo(LightDwarfWidth * 0.3, -LightDwarfHeight * 0.8);
+          path.lineTo(LightDwarfWidth / 2.0, -LightDwarfHeight * 0.55);
+          path.lineTo(LightDwarfWidth / 2.0, 0.0);
+          path.closeSubpath();
+
+          painter->setPen(dwarfBorderPen);
+          painter->setBrush(Qt::black);
+          painter->drawPath(path);
+
+          // Lights
+          QRectF lightRect(0, 0, LightDwarfLightSz, LightDwarfLightSz);
+          painter->setPen(Qt::NoPen);
+
+          // L1
+          lightRect.moveCenter(QPointF(- LightDwarfWidth / 2.0 + LightDwarfLightSz * 0.8, - LightDwarfLightSz * 1.5));
+          painter->setBrush(signal->isLightOn(0) ? Qt::yellow : Qt::darkGray);
+          painter->drawEllipse(lightRect);
+
+          // L2
+          lightRect.moveCenter(QPointF(+ LightDwarfWidth / 2.0 - LightDwarfLightSz * 0.8, - LightDwarfLightSz * 1.5));
+          painter->setBrush(signal->isLightOn(1) ? Qt::yellow : Qt::darkGray);
+          painter->drawEllipse(lightRect);
+
+          // L3
+          lightRect.moveCenter(QPointF(- LightDwarfWidth / 2.0 + LightDwarfLightSz * 0.8, - LightDwarfHeight + LightDwarfLightSz * 0.9));
+          painter->setBrush(signal->isLightOn(2) ? Qt::yellow : Qt::darkGray);
+          painter->drawEllipse(lightRect);
+
+          break;
+        }
+        default:
+          assert(false);
+          break;
         }
 
         break;

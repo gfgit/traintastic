@@ -373,6 +373,15 @@ Simulator::~Simulator()
     }
 
     {
+      auto it = m_stateData.auxSignals.begin();
+      while(it != m_stateData.auxSignals.end())
+      {
+        delete it->second;
+        it = m_stateData.auxSignals.erase(it);
+      }
+    }
+
+    {
       auto it = m_stateData.trains.begin();
       while(it != m_stateData.trains.end())
       {
@@ -882,18 +891,49 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       }
       break;
     }
+    case OpCode::AuxSignalSetState:
+    {
+      const auto& m = static_cast<const AuxSignalSetState&>(message);
+      std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+      for(auto it : m_stateData.auxSignals)
+      {
+        AuxSignal *s = it.second;
+        if(s->ownerConnectionId != fromConnId || s->address != m.address || s->channel != m.channel)
+          continue;
+
+        s->mLights = m.lights;
+        break;
+      }
+      break;
+    }
     case OpCode::OwnSignal:
     {
       const auto& m = static_cast<const OwnSignal&>(message);
       std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-      for(auto it : m_stateData.mainSignals)
-      {
-        MainSignal *s = it.second;
-        if(s->ownerConnectionId != invalidIndex || s->address != m.address || s->channel != m.channel)
-          continue;
 
-        s->ownerConnectionId = fromConnId;
-        break;
+      if(m.isMain)
+      {
+        for(auto it : m_stateData.mainSignals)
+        {
+          MainSignal *s = it.second;
+          if(s->ownerConnectionId != invalidIndex || s->address != m.address || s->channel != m.channel)
+            continue;
+
+          s->ownerConnectionId = fromConnId;
+          break;
+        }
+      }
+      else
+      {
+        for(auto it : m_stateData.auxSignals)
+        {
+          AuxSignal *s = it.second;
+          if(s->ownerConnectionId != invalidIndex || s->address != m.address || s->channel != m.channel)
+            continue;
+
+          s->ownerConnectionId = fromConnId;
+          break;
+        }
       }
       break;
     }
@@ -1080,6 +1120,16 @@ void Simulator::onConnectionRemoved(const std::shared_ptr<SimulatorConnection>& 
     s->setAdvanceSignalState(MainSignal::State::Off);
     s->directionIndicatorText = ' ';
     s->rappelState = MainSignal::RappelState::Off;
+  }
+
+  for(auto it : m_stateData.auxSignals)
+  {
+    AuxSignal *s = it.second;
+    if(s->ownerConnectionId != connId)
+      continue;
+
+    s->ownerConnectionId = invalidIndex;
+    s->mLights = 0; // Turn lights off
   }
 
   // Turn off owned spawns
@@ -1939,6 +1989,45 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                         signal->hasAdvanceSignal || signal->fixedLimit != MainSignal::FixedLimit::NoLimit ||
                         signal->lights.size() > 2)
                       signal->isPureDistantSignal = false;
+                }
+                else if(type == "aux_signal")
+                {
+                  trackObj.type = TrackSegment::Object::Type::AuxSignal;
+                  trackObj.allowedDirection = trackObj.dirForward ?
+                                                  TrackSegment::Object::AllowedDirections::Forward :
+                                                  TrackSegment::Object::AllowedDirections::Backwards;
+                  trackObj.lateralDiff = -1.7; // Default on left side
+
+                  const std::string_view signalName = item.value<std::string_view>("name", {});
+                  const uint16_t signalAddress = item.value("address", invalidAddress);
+                  const uint16_t signalChannel = item.value("channel", defaultChannel);
+                  if(signalName.empty() || signalAddress == invalidAddress)
+                    continue;
+
+                  AuxSignal::SubType subType = AuxSignal::SubType::LightDwarfSignal;
+                  const std::string_view subTypeName = item.value<std::string_view>("sub_type", {});
+                  if(subTypeName == "light_dwarf_signal")
+                    subType = AuxSignal::SubType::LightDwarfSignal;
+                  else
+                    continue;
+
+                  AuxSignal *signal = nullptr;
+                  auto signIt = stateData.auxSignals.find(signalName);
+                  if(signIt == stateData.auxSignals.end())
+                  {
+                    signal = new AuxSignal;
+                    signal->name = signalName;
+                    signal->address = signalAddress;
+                    signal->channel = signalChannel;
+                    stateData.auxSignals.insert({signal->name, signal});
+                  }
+                  else
+                    signal = signIt->second;
+
+                  trackObj.signalName = signal->name;
+
+                  signal->subType = subType;
+                  signal->zoomLateralDiff = item.value("zoom_lat", true);
                 }
                 else if(type == "reverse_dir")
                 {

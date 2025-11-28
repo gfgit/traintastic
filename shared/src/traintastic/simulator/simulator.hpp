@@ -128,7 +128,8 @@ public:
             MainSignal = 1,
             ReverseDirection = 2,
             RemoveTrain = 3,
-            SpawnTrain = 4
+            SpawnTrain = 4,
+            AuxSignal = 5
         };
 
         Point pos;
@@ -344,6 +345,42 @@ public:
     std::vector<Light> lights;
   };
 
+  struct AuxSignal
+  {
+    enum class SubType
+    {
+      LightDwarfSignal = 0
+    };
+
+    uint16_t channel = defaultChannel;
+    uint16_t address = invalidAddress;
+    std::string name;
+    size_t ownerConnectionId = invalidIndex;
+
+    uint8_t mLights = 0;
+
+    // Increase lateral diff with signal scale factor
+    // This prevents 2 parallel signals to overlap each other
+    // Set to false if signal is in-between 2 tracks as it would move it.
+    bool zoomLateralDiff = true;
+    SubType subType = SubType::LightDwarfSignal;
+
+    inline void setLightOn(uint8_t n, bool on)
+    {
+      assert(n >= 0 && n < 8);
+      if(on)
+        mLights |= (1u << n);
+      else
+        mLights &= ~(1u << n);
+    }
+
+    inline bool isLightOn(uint8_t n)
+    {
+      assert(n >= 0 && n < 8);
+      return mLights & (1u << n);
+    }
+  };
+
   struct Spawn
   {
     uint16_t address = invalidAddress;
@@ -449,6 +486,7 @@ public:
     std::map<std::string, Train *, std::less<>> trains; // Avoid rehashing
     std::unordered_map<std::string, Vehicle *, StringHash, StringEqual> vehicles;
     std::unordered_map<std::string, MainSignal *, StringHash, StringEqual> mainSignals;
+    std::unordered_map<std::string, AuxSignal *, StringHash, StringEqual> auxSignals;
     std::unordered_map<size_t, Spawn *> spawns;
   };
 
