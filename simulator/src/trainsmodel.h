@@ -39,6 +39,9 @@ public:
 
     void setSimulator(Simulator *sim);
 
+signals:
+    void setCurrentTrain(size_t trainIdx);
+
 private:
     Simulator *mSimulator = nullptr;
 

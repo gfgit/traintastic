@@ -512,6 +512,8 @@ SimulatorView::SimulatorView(QWidget* parent)
   setMouseTracking(true);
 
   mTrainsModel = new TrainsModel(this);
+  connect(mTrainsModel, &TrainsModel::setCurrentTrain,
+          this, &SimulatorView::doSetCurrentTrainIndex);
 
   // Dark gray background
   QPalette p = palette();
@@ -2217,5 +2219,15 @@ void SimulatorView::userAskRemoveTrain(size_t trainIdx)
       m_simulator->removeTrain(train->name, true);
 
     m_trainToBeRemovedIdx = Simulator::invalidIndex;
+  }
+}
+
+void SimulatorView::doSetCurrentTrainIndex(size_t trainIndex)
+{
+  std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
+  Simulator::Train *train = m_simulator->getTrainAt(trainIndex);
+  if(train)
+  {
+    m_trainIndex = trainIndex;
   }
 }

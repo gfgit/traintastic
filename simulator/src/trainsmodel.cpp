@@ -106,8 +106,9 @@ bool TrainsModel::addTrain(const QString &name, Color c, size_t numWagons, size_
         vehicles.push_back(item);
     }
 
+    size_t trainIdx = 0;
     if(!mSimulator->addTrain(name.toStdString(), DecoderProtocol::DCCShort, 3,
-                             vehicles, segmentIdx, startPos))
+                             vehicles, segmentIdx, trainIdx, startPos))
     {
         for(const auto &item : vehicles)
         {
@@ -121,6 +122,9 @@ bool TrainsModel::addTrain(const QString &name, Color c, size_t numWagons, size_
     beginResetModel();
     mTrains.insert(name, Train{name, c, 0.0});
     endResetModel();
+
+    emit setCurrentTrain(trainIdx);
+
     return true;
 }
 

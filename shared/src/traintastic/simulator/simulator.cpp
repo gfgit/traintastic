@@ -1047,8 +1047,9 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
               vehicles.push_back(item);
             }
 
+            size_t unusedTrainIdx = 0;
             if(addTrain(baseName + std::to_string(count), DecoderProtocol::DCCLong, 3,
-                         vehicles, s->segmentIndex))
+                         vehicles, s->segmentIndex, unusedTrainIdx))
             {
               // DONE!
               Train *train = m_stateData.trains.at(trainName);

@@ -193,6 +193,7 @@ private slots:
   void tick();
   void trainAddedRemoved(bool add, size_t trainIdx);
   void userAskRemoveTrain(size_t trainIdx);
+  void doSetCurrentTrainIndex(size_t trainIndex);
 };
 
 #endif

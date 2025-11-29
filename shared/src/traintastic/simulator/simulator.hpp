@@ -544,17 +544,16 @@ public:
                        const StaticData &data, StateData &stateData, size_t &idxOut, const float startPos = -1.0);
 
   bool addTrain(const std::string_view& name, DecoderProtocol proto, uint16_t addr,
-                const std::vector<Train::VehicleItem> &vehicles, size_t segmentIndex, const float startPos = -1.0)
+                const std::vector<Train::VehicleItem> &vehicles, size_t segmentIndex, size_t &idxOut, const float startPos = -1.0)
   {
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-    size_t trainIdx = 0;
     bool success = addTrain(name, proto, addr, vehicles,
-                            segmentIndex, staticData, m_stateData, trainIdx, startPos);
+                            segmentIndex, staticData, m_stateData, idxOut, startPos);
 
     if(!success)
       return false;
 
-    onTrainAddedRemoved(true, trainIdx);
+    onTrainAddedRemoved(true, idxOut);
     return true;
   }
 
