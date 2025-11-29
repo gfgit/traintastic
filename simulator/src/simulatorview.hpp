@@ -160,6 +160,7 @@ private:
   QPoint m_rightMousePos;
 
   size_t m_trainIndex = 0;
+  size_t m_trainToBeRemovedIdx = Simulator::invalidIndex;
 
   // Turnout blink
   QBasicTimer turnoutBlinkTimer;
@@ -190,6 +191,8 @@ private:
 
 private slots:
   void tick();
+  void trainAddedRemoved(bool add, size_t trainIdx);
+  void userAskRemoveTrain(size_t trainIdx);
 };
 
 #endif

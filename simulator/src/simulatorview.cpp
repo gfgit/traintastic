@@ -46,6 +46,8 @@
 
 #include <QPointer>
 
+#include <QMessageBox>
+
 namespace
 {
 
@@ -564,8 +566,14 @@ void SimulatorView::setSimulator(std::shared_ptr<Simulator> value,
     m_simulatorConnections.emplace_back(m_simulator->onTick.connect(
                                           [this]()
     {
-      QMetaObject::invokeMethod(this, "tick", Qt::QueuedConnection);
+      QMetaObject::invokeMethod(this, &SimulatorView::tick, Qt::QueuedConnection);
     }));
+    m_simulatorConnections.emplace_back(m_simulator->onTrainAddedRemoved.connect(
+        [this](bool add, size_t trainIdx)
+        {
+          // NOTE: invoked in simulator working thread
+          trainAddedRemoved(add, trainIdx);
+        }));
 
     m_simulator->enableServer(localOnly);
 
@@ -1560,7 +1568,39 @@ void SimulatorView::keyPressEvent(QKeyEvent* e)
       Simulator::Train *train = m_simulator->getTrainAt(trainIndex);
       if(train)
       {
-        m_trainIndex = e->key() - Qt::Key_1;
+        m_trainIndex = trainIndex;
+      }
+      break;
+    }
+    case Qt::Key_W:
+    case Qt::Key_E:
+    {
+      std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
+
+      const size_t trainCount = m_simulator->stateData().trains.size();
+      size_t trainIndex = m_trainIndex;
+
+      if(trainCount == 0 || (e->key() == Qt::Key_W && trainIndex == 0) || trainIndex == Simulator::invalidIndex)
+      {
+        m_trainIndex = 0;
+        return;
+      }
+
+
+      if(e->key() == Qt::Key_W)
+        trainIndex--;
+      else
+        trainIndex++;
+
+      trainIndex = std::min(trainIndex, trainCount - 1);
+      Simulator::Train *train = m_simulator->getTrainAt(trainIndex);
+      if(train)
+      {
+        m_trainIndex = trainIndex;
+      }
+      else
+      {
+        m_trainIndex = 0;
       }
       break;
     }
@@ -1608,6 +1648,11 @@ void SimulatorView::keyPressEvent(QKeyEvent* e)
     }
     case Qt::Key_Escape:
       m_simulator->stopAllTrains();
+      break;
+
+    case Qt::Key_Delete:
+    case Qt::Key_Backspace:
+      userAskRemoveTrain(m_trainIndex);
       break;
 
     case Qt::Key_A:
@@ -2043,4 +2088,62 @@ void SimulatorView::tick()
   }
 
   update();
+}
+
+void SimulatorView::trainAddedRemoved(bool add, size_t trainIdx)
+{
+  std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
+
+  // Avoid to shift current controlled train when list is updated
+  // TODO: entirely remove this trainIndex thing!!!
+  if(add)
+  {
+    if(m_trainIndex >= trainIdx)
+      m_trainIndex++;
+
+    if(m_trainToBeRemovedIdx != Simulator::invalidIndex && m_trainToBeRemovedIdx >= trainIdx)
+      m_trainToBeRemovedIdx++;
+  }
+  else
+  {
+    if(m_trainIndex == trainIdx)
+      m_trainIndex = 0;
+    else if(m_trainIndex > trainIdx)
+      m_trainIndex--;
+
+    if(m_trainToBeRemovedIdx != Simulator::invalidIndex && m_trainToBeRemovedIdx == trainIdx)
+      m_trainToBeRemovedIdx = Simulator::invalidIndex;
+    else if(m_trainToBeRemovedIdx != Simulator::invalidIndex && m_trainToBeRemovedIdx > trainIdx)
+      m_trainToBeRemovedIdx--;
+  }
+
+
+
+}
+
+void SimulatorView::userAskRemoveTrain(size_t trainIdx)
+{
+  {
+    assert(m_trainToBeRemovedIdx == Simulator::invalidIndex);
+
+    std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
+    Simulator::Train *train = m_simulator->getTrainAt(trainIdx);
+    if(!train)
+      return;
+
+    m_trainToBeRemovedIdx = trainIdx;
+  }
+
+  const int ret = QMessageBox::question(this, tr("Remove Train?"), tr("Remove Current Train?"));
+  if(ret != QMessageBox::Yes && m_trainToBeRemovedIdx != Simulator::invalidAddress)
+    return;
+
+  {
+    std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
+    Simulator::Train *train = m_simulator->getTrainAt(m_trainToBeRemovedIdx);
+    if(train)
+      m_simulator->removeTrain(train->name, true);
+
+    m_trainToBeRemovedIdx = Simulator::invalidIndex;
+  }
 }

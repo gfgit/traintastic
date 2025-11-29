@@ -1346,7 +1346,9 @@ void Simulator::updateTrainPositions()
     if(trainRemoved)
     {
       destroyTrain(it->second, true);
+      const int trainIdx = std::distance(m_stateData.trains.begin(), it);
       it = m_stateData.trains.erase(it);
+      onTrainAddedRemoved(false, trainIdx);
       continue;
     }
 
@@ -2595,12 +2597,13 @@ Simulator::StaticData Simulator::load(const nlohmann::json& world, StateData& st
         vehicles.push_back(item);
       }
 
+      size_t unused1 = 0;
       addTrain(name,
                stringToEnum<DecoderProtocol>(object.value<std::string_view>("protocol", {})).value_or(DecoderProtocol::None),
                object.value("address", 3),
                vehicles,
                segmentIndex,
-               data, stateData);
+               data, stateData, unused1);
     }
   }
 
@@ -2703,7 +2706,7 @@ Simulator::StaticData Simulator::load(const nlohmann::json& world, StateData& st
 
 bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, uint16_t addr,
                          const std::vector<Train::VehicleItem> &vehicles, size_t segmentIndex,
-                         const StaticData& data, StateData &stateData, const float startPos)
+                         const StaticData& data, StateData &stateData, size_t &idxOut, const float startPos)
 {
     if(name.empty() || stateData.trains.contains(name))
       return false;
@@ -2932,7 +2935,8 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
     if(train->speedMax < 0.0001)
       train->speedMax = defaultSpeedTickRate * data.worldScale;
 
-    stateData.trains.insert({train->name, train.release()});
+    auto pair = stateData.trains.insert({train->name, train.release()});
+    idxOut = std::distance(stateData.trains.begin(), pair.first);
 
     return true;
 }
@@ -2947,7 +2951,9 @@ bool Simulator::removeTrain(const std::string_view &name, bool removeWagons)
 
     Train *train = it->second;
     destroyTrain(train, removeWagons);
-    m_stateData.trains.erase(it);
+    const int trainIdx = std::distance(m_stateData.trains.begin(), it);
+    it = m_stateData.trains.erase(it);
+    onTrainAddedRemoved(false, trainIdx);
     return true;
 }
 

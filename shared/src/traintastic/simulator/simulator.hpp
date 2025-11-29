@@ -446,7 +446,7 @@ public:
     uint8_t signalBlinkState = 0; // Goes from 0 to 7
     std::vector<SensorState> sensors;
     std::vector<TurnoutState> turnouts;
-    std::unordered_map<std::string, Train *, StringHash, StringEqual> trains;
+    std::map<std::string, Train *, std::less<>> trains; // Avoid rehashing
     std::unordered_map<std::string, Vehicle *, StringHash, StringEqual> vehicles;
     std::unordered_map<std::string, MainSignal *, StringHash, StringEqual> mainSignals;
     std::unordered_map<size_t, Spawn *> spawns;
@@ -458,6 +458,7 @@ private:
 public:
   const StaticData staticData;
   boost::signals2::signal<void()> onTick;
+  boost::signals2::signal<void(bool add, size_t idx)> onTrainAddedRemoved;
 
   explicit Simulator(const nlohmann::json& world);
   ~Simulator();
@@ -502,14 +503,21 @@ public:
   static bool addTrain(const std::string_view &name,
                        DecoderProtocol proto, uint16_t addr,
                        const std::vector<Train::VehicleItem> &vehicles, size_t segmentIndex,
-                       const StaticData &data, StateData &stateData, const float startPos = -1.0);
+                       const StaticData &data, StateData &stateData, size_t &idxOut, const float startPos = -1.0);
 
   bool addTrain(const std::string_view& name, DecoderProtocol proto, uint16_t addr,
-                           const std::vector<Train::VehicleItem> &vehicles, size_t segmentIndex, const float startPos = -1.0)
+                const std::vector<Train::VehicleItem> &vehicles, size_t segmentIndex, const float startPos = -1.0)
   {
-      std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-      return addTrain(name, proto, addr, vehicles,
-                      segmentIndex, staticData, m_stateData, startPos);
+    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+    size_t trainIdx = 0;
+    bool success = addTrain(name, proto, addr, vehicles,
+                            segmentIndex, staticData, m_stateData, trainIdx, startPos);
+
+    if(!success)
+      return false;
+
+    onTrainAddedRemoved(true, trainIdx);
+    return true;
   }
 
   bool removeTrain(const std::string_view& name, bool removeWagons);
