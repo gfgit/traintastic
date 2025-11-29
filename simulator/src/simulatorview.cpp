@@ -1397,9 +1397,9 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
         {
         case Simulator::AuxSignal::SubType::LightDwarfSignal:
         {
-          const qreal LightDwarfWidth = 1.5f;
-          const qreal LightDwarfHeight = 2.0f;
-          const qreal LightDwarfLightSz = 0.5f;
+          const qreal LightDwarfWidth = 1.5f * m_signalsScaleFactor;
+          const qreal LightDwarfHeight = 2.0f * m_signalsScaleFactor;
+          const qreal LightDwarfLightSz = 0.5f * m_signalsScaleFactor;
 
           // Background
           QPainterPath path;
