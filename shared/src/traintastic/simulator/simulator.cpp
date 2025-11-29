@@ -2815,8 +2815,6 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
 
       train->length += item.vehicle->length + (empty ? 0.0f : data.trainCouplingLength);
       empty = false;
-
-      train->vehicles.push_back(item);
     }
 
     if(empty)
@@ -2972,6 +2970,15 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
         curSegmentIndex = nextSegmentIndex;
       }
     };
+
+    // Add wagons to train only when sure train will be added
+    for(const auto& item : vehicles)
+    {
+      if(!item.vehicle || item.vehicle->activeTrain)
+        continue;
+
+      train->vehicles.push_back(item);
+    }
 
     // Place wagons in segments
     bool first = true;
