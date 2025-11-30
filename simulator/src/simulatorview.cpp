@@ -517,7 +517,7 @@ SimulatorView::SimulatorView(QWidget* parent)
 
   // Dark gray background
   QPalette p = palette();
-  p.setColor(QPalette::Window, QColor(25, 25, 25));
+  p.setColor(QPalette::Window, QColor(70, 70, 70));
   setPalette(p);
   setAutoFillBackground(true);
 }
@@ -765,7 +765,7 @@ void SimulatorView::drawTracks(QPainter *painter)
 {
   assert(m_simulator);
 
-  QPen trackPen(QColor(204, 204, 204), 1.435);
+  QPen trackPen(QColor(159, 255, 159), 1.435);
   trackPen.setCapStyle(Qt::FlatCap);
 
   if(m_thinTracks)
@@ -778,7 +778,7 @@ void SimulatorView::drawTracks(QPainter *painter)
   trackPenOccupied.setColor(QColor(255, 0, 0));
 
   QPen trackPenGreen = trackPen;
-  trackPenGreen.setColor(QColor(0, 255, 0));
+  trackPenGreen.setColor(QColor(20, 144, 0));
 
   QPen trackPenPurple = trackPen;
   trackPenPurple.setColor(QColor(128, 0, 255));
