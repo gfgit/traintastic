@@ -93,10 +93,14 @@ public:
   float signalsScaleFactor() const;
   void setSignalsScaleFactor(float newSignalsScaleFactor);
 
+  float trainSpeedFactor() const;
+  void setTrainSpeedFactor(float val);
+
 signals:
   void tickActiveChanged(float value);
   void powerOnChanged(bool value);
   void signalScaleChanged(float value);
+  void trainSpeedFactorChanged(float value);
 
 protected:
   void paintEvent(QPaintEvent *e) override;
@@ -140,6 +144,7 @@ private:
   struct
   {
     bool powerOn = false;
+    float trainSpeedFactor = 1.0f;
   } m_stateDataPrevious;
   std::vector<boost::signals2::connection> m_simulatorConnections;
   Turnouts m_turnouts;

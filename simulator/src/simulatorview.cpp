@@ -1925,6 +1925,19 @@ void SimulatorView::setSignalsScaleFactor(float newSignalsScaleFactor)
   update();
 }
 
+float SimulatorView::trainSpeedFactor() const
+{
+  return m_stateData.trainSpeedFactor;
+}
+
+void SimulatorView::setTrainSpeedFactor(float val)
+{
+  if(!m_simulator)
+    return;
+
+  m_simulator->setTrainSpeedFactor(val);
+}
+
 bool SimulatorView::thinTracks() const
 {
   return m_thinTracks;
@@ -2152,6 +2165,7 @@ void SimulatorView::showAddTrainDialog(size_t segmentIndex, const Simulator::Poi
 void SimulatorView::tick()
 {
   m_stateDataPrevious.powerOn = m_stateData.powerOn;
+  m_stateDataPrevious.trainSpeedFactor = m_stateData.trainSpeedFactor;
   m_stateData = m_simulator->stateData();
 
   if(m_trainIndex >= m_stateData.trains.size())
@@ -2162,6 +2176,11 @@ void SimulatorView::tick()
   if(m_stateDataPrevious.powerOn != m_stateData.powerOn)
   {
     emit powerOnChanged(m_stateData.powerOn);
+  }
+
+  if(m_stateDataPrevious.trainSpeedFactor != m_stateData.trainSpeedFactor)
+  {
+    emit trainSpeedFactorChanged(m_stateData.trainSpeedFactor);
   }
 
   update();

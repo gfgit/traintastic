@@ -1326,7 +1326,7 @@ void Simulator::updateTrainPositions()
             updateVehiclePosition(item.vehicle->state.front, speed, false, train_, trainRemoved, outRemaining);
     };
 
-    const float speed = m_stateData.powerOn ? trainState.speed : 0.0f;
+    const float speed = m_stateData.powerOn ? trainState.speed * m_stateData.trainSpeedFactor : 0.0f;
 
     bool wasStopped = false;
     bool trainRemoved = false;
@@ -3368,4 +3368,10 @@ bool Simulator::checkNextSignal(Train *train)
   }
 
   return true;
+}
+
+void Simulator::setTrainSpeedFactor(float val)
+{
+  std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+  m_stateData.trainSpeedFactor = val;
 }

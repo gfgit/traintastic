@@ -60,6 +60,7 @@ private:
   QLabel* m_tickActive;
   QMenu *imagesMenu;
   QSpinBox *mSignalZoomSpin;
+  QSpinBox *mTrainSpeedFactorSpin;
 
   std::vector<float> m_tickActiveFilter;
 

@@ -480,7 +480,10 @@ public:
   {
     float tickActive = 0.0f;
     float tickLoad = 0.0f;
+    float trainSpeedFactor = 1.0f;
+
     bool powerOn = false;
+
     uint8_t signalBlinkState = 0; // Goes from 0 to 7
     std::vector<SensorState> sensors;
     std::vector<TurnoutState> turnouts;
@@ -526,6 +529,8 @@ public:
   void applyTrainSpeedDelta(Train *train, float delta);
   void setTrainMode(Train *train, TrainState::Mode mode);
   void stopAllTrains();
+
+  void setTrainSpeedFactor(float val);
 
   bool trainExists(const std::string_view &name) const;
   bool segmentOccupied(size_t segmentIdx) const;

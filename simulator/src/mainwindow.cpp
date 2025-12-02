@@ -166,9 +166,10 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
     auto* statusBar = new QStatusBar(this);
     statusBar->addPermanentWidget(m_tickActive);
 
+    // Signals Zoom
     mSignalZoomSpin = new QSpinBox;
     mSignalZoomSpin->setRange(100, 4000);
-    mSignalZoomSpin->setValue(m_view->signalsScaleFactor() * 100);
+    mSignalZoomSpin->setValue(m_view->signalsScaleFactor() * 100.0f);
     mSignalZoomSpin->setSuffix(QLatin1StringView("%"));
     mSignalZoomSpin->setToolTip(tr("Signals scale factor"));
     statusBar->addPermanentWidget(mSignalZoomSpin);
@@ -182,6 +183,25 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
             mSignalZoomSpin, [this](float val)
             {
               mSignalZoomSpin->setValue(val * 100.0f);
+            });
+
+    // Train speed factor
+    mTrainSpeedFactorSpin = new QSpinBox;
+    mTrainSpeedFactorSpin->setRange(100, 700);
+    mTrainSpeedFactorSpin->setValue(m_view->trainSpeedFactor() * 100.0f);
+    mTrainSpeedFactorSpin->setSuffix(QLatin1StringView("%"));
+    mTrainSpeedFactorSpin->setToolTip(tr("Train speed scale factor"));
+    statusBar->addPermanentWidget(mTrainSpeedFactorSpin);
+    connect(mTrainSpeedFactorSpin, &QSpinBox::editingFinished,
+            this, [this]()
+            {
+              m_view->setTrainSpeedFactor(mTrainSpeedFactorSpin->value() / 100.0f);
+            });
+
+    connect(m_view, &SimulatorView::trainSpeedFactorChanged,
+            mTrainSpeedFactorSpin, [this](float val)
+            {
+              mTrainSpeedFactorSpin->setValue(val * 100.0f);
             });
 
 
