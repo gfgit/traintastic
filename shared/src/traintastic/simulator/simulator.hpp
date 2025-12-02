@@ -350,7 +350,8 @@ public:
   {
     enum class SubType
     {
-      LightDwarfSignal = 0
+      LightDwarfSignal = 0,
+      RotatingDwarfSignal
     };
 
     uint16_t channel = defaultChannel;
@@ -359,6 +360,7 @@ public:
     size_t ownerConnectionId = invalidIndex;
 
     uint8_t mLights = 0;
+    uint8_t mPosition = 0;
 
     // Increase lateral diff with signal scale factor
     // This prevents 2 parallel signals to overlap each other

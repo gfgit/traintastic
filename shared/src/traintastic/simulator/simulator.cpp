@@ -902,6 +902,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
           continue;
 
         s->mLights = m.lights;
+        s->mPosition = m.position;
         break;
       }
       break;
@@ -1131,6 +1132,7 @@ void Simulator::onConnectionRemoved(const std::shared_ptr<SimulatorConnection>& 
 
     s->ownerConnectionId = invalidIndex;
     s->mLights = 0; // Turn lights off
+    s->mPosition = 0.0f; // Go back to stop position
   }
 
   // Turn off owned spawns
@@ -2009,6 +2011,8 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                   const std::string_view subTypeName = item.value<std::string_view>("sub_type", {});
                   if(subTypeName == "light_dwarf_signal")
                     subType = AuxSignal::SubType::LightDwarfSignal;
+                  else if(subTypeName == "rot_dwarf_signal")
+                    subType = Simulator::AuxSignal::SubType::RotatingDwarfSignal;
                   else
                     continue;
 

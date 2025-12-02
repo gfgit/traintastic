@@ -1025,6 +1025,11 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
   QPen dwarfBorderPen(Qt::darkGray, 0.1 * m_signalsScaleFactor);
   dwarfBorderPen.setJoinStyle(Qt::RoundJoin);
 
+  QPen dwarfBorderPenBlack = dwarfBorderPen;
+  dwarfBorderPenBlack.setColor(Qt::black);
+
+  QPen dwarfDiagPenBlack(Qt::black, 0.2 * m_signalsScaleFactor);
+
   QPen signalIndicatorBorder(Qt::darkGray, 0.1 * m_signalsScaleFactor);
 
   const qreal mastBaseLength = 3.0 * m_signalsScaleFactor;
@@ -1436,6 +1441,137 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
           lightRect.moveCenter(QPointF(- LightDwarfWidth / 2.0 + LightDwarfLightSz * 0.8, - LightDwarfHeight + LightDwarfLightSz * 0.9));
           painter->setBrush(signal->isLightOn(2) ? Qt::yellow : Qt::darkGray);
           painter->drawEllipse(lightRect);
+
+          break;
+        }
+        case Simulator::AuxSignal::SubType::RotatingDwarfSignal:
+        {
+          const QSizeF RotDwarBaseSz(1.8 * m_signalsScaleFactor, 0.8 * m_signalsScaleFactor);
+          const QSizeF RotDwarMastSz(0.3 * m_signalsScaleFactor, 0.3 * m_signalsScaleFactor);
+          const QSizeF RotDwarfSz(1.4 * m_signalsScaleFactor, 1.8 * m_signalsScaleFactor);
+          const QSizeF RotDwarInnerSz(1.0 * m_signalsScaleFactor, 1.4 * m_signalsScaleFactor);
+          const qreal RotDwarfLightSz = 0.6f * m_signalsScaleFactor;
+
+          // Draw base
+          QRectF baseRect(QPointF(), RotDwarBaseSz);
+          baseRect.moveBottom(0.0f);
+          baseRect.moveLeft(-baseRect.width() / 2.0);
+
+          painter->fillRect(baseRect, Qt::black);
+
+          QRectF mastRect(QPointF(), RotDwarMastSz);
+          mastRect.moveLeft(-mastRect.width() / 2.0);
+          mastRect.moveBottom(baseRect.top());
+          painter->fillRect(mastRect, Qt::black);
+
+          QRectF rotRect(QPointF(), RotDwarfSz);
+          rotRect.moveLeft(-rotRect.width() / 2.0);
+          rotRect.moveBottom(mastRect.top());
+
+          QRectF rotInnerRect(QPointF(), RotDwarInnerSz);
+          rotInnerRect.moveCenter(rotRect.center());
+
+          QRectF rotLightRect(0, 0, RotDwarfLightSz, RotDwarfLightSz);
+          rotLightRect.moveCenter(rotRect.center());
+
+          // Now draw signal
+          painter->setPen(dwarfBorderPenBlack);
+          painter->setBrush(Qt::white);
+          painter->drawRect(rotRect);
+
+          if(signal->mPosition == 0)
+          {
+            // Draw diagonal black lines with clipping
+            painter->save();
+            painter->setClipRect(rotRect);
+            painter->setPen(dwarfDiagPenBlack);
+
+            QPointF start = rotRect.bottomLeft();
+            QPointF end = rotRect.bottomRight();
+            start.ry() += rotRect.width(); // 45 degrees diagonal
+            const qreal step = dwarfDiagPenBlack.widthF() * 2.5;
+
+            for(int i = 0; i < 9; i++)
+            {
+              painter->drawLine(start, end);
+              start.ry() -= step;
+              end.ry() -= step;
+            }
+            painter->restore();
+
+            painter->setBrush(signal->isLightOn(0) ? Qt::darkMagenta : Qt::black);
+            painter->drawEllipse(rotLightRect);
+          }
+          else if(signal->mPosition == 255)
+          {
+            painter->setBrush(Qt::NoBrush);
+            painter->drawRect(rotInnerRect);
+
+            painter->setBrush(signal->isLightOn(0) ? Qt::yellow : Qt::darkGray);
+            painter->drawEllipse(rotLightRect);
+          }
+          else
+          {
+            double offset = 0.0;
+            if(signal->mPosition < 80)
+              offset = RotDwarfSz.width() * 0.25;
+            else if(signal->mPosition <= 175)
+              offset = RotDwarfSz.width() * 0.5;
+            else
+              offset = RotDwarfSz.width() * 0.75;
+
+            // Draw half and half with clipping
+            painter->save();
+            painter->setClipRect(rotRect);
+
+            // Translate rect after using original for clipping
+            rotRect.moveLeft(-RotDwarfSz.width() * 1.5 + offset);
+            rotInnerRect.moveCenter(rotRect.center());
+            rotLightRect.moveCenter(rotRect.center());
+
+            painter->setBrush(Qt::white);
+            painter->drawRect(rotRect);
+
+            painter->setBrush(Qt::NoBrush);
+            painter->drawRect(rotInnerRect);
+
+            painter->setBrush(Qt::darkGray);
+            painter->drawEllipse(rotLightRect);
+
+            painter->restore();
+
+            rotRect.moveLeft(-RotDwarfSz.width() * 0.5 + offset);
+            rotLightRect.moveCenter(rotRect.center());
+
+            // Draw diagonal black lines with HALF clipping
+            QRectF halfClipRect = rotRect;
+            halfClipRect.setRight(RotDwarfSz.width() / 2.0);
+
+            painter->save();
+            painter->setClipRect(halfClipRect);
+
+            painter->setBrush(Qt::white);
+            painter->drawRect(rotRect);
+
+            painter->setPen(dwarfDiagPenBlack);
+
+            QPointF start = rotRect.bottomLeft();
+            QPointF end = rotRect.bottomRight();
+            start.ry() += rotRect.width(); // 45 degrees diagonal
+            const qreal step = dwarfDiagPenBlack.widthF() * 2.5;
+
+            for(int i = 0; i < 9; i++)
+            {
+              painter->drawLine(start, end);
+              start.ry() -= step;
+              end.ry() -= step;
+            }
+
+            painter->setBrush(Qt::black);
+            painter->drawEllipse(rotLightRect);
+
+            painter->restore();
+          }
 
           break;
         }
