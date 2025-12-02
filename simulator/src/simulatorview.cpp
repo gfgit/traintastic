@@ -581,6 +581,8 @@ void SimulatorView::setSimulator(std::shared_ptr<Simulator> value,
 
     m_simulator->start(discoverable);
 
+    setSignalsScaleFactor(m_simulator->staticData.defaultSignalScale);
+
     for(const auto &imgRef : m_simulator->staticData.images)
     {
       Image item;
@@ -1919,6 +1921,7 @@ void SimulatorView::setSignalsScaleFactor(float newSignalsScaleFactor)
     return;
 
   m_signalsScaleFactor = newSignalsScaleFactor;
+  emit signalScaleChanged(m_signalsScaleFactor);
   update();
 }
 

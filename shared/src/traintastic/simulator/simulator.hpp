@@ -214,6 +214,7 @@ public:
     float trainWidth = 10.0f;
     float trainCouplingLength = 4.0f;
     float worldScale = 1.0f;
+    float defaultSignalScale = 1.0f;
   };
 
   struct SensorState

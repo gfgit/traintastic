@@ -2601,6 +2601,7 @@ Simulator::StaticData Simulator::load(const nlohmann::json& world, StateData& st
 
   data.trainWidth = world.value("train_width", data.trainWidth);
   data.trainCouplingLength = world.value("train_coupling_length", data.trainCouplingLength);
+  data.defaultSignalScale = world.value("default_signal_scale", data.defaultSignalScale);
 
   loadTrackplan(world, data, stateData);
 

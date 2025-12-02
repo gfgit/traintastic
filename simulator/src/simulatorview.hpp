@@ -96,6 +96,7 @@ public:
 signals:
   void tickActiveChanged(float value);
   void powerOnChanged(bool value);
+  void signalScaleChanged(float value);
 
 protected:
   void paintEvent(QPaintEvent *e) override;

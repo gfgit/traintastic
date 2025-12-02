@@ -174,9 +174,15 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
     statusBar->addPermanentWidget(mSignalZoomSpin);
     connect(mSignalZoomSpin, &QSpinBox::editingFinished,
             this, [this]()
-    {
-      m_view->setSignalsScaleFactor(mSignalZoomSpin->value() / 100.0f);
-    });
+            {
+              m_view->setSignalsScaleFactor(mSignalZoomSpin->value() / 100.0f);
+            });
+
+    connect(m_view, &SimulatorView::signalScaleChanged,
+            mSignalZoomSpin, [this](float val)
+            {
+              mSignalZoomSpin->setValue(val * 100.0f);
+            });
 
 
     setStatusBar(statusBar);
