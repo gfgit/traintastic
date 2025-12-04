@@ -60,7 +60,21 @@
     {
       "type": "straight",
       "length": 300,
-      "sensor_address": 6
+      "sensor_address": 6,
+      "objects": [
+        {
+          "type": "axle_counter",
+          "pos": 20,
+          "sensor_address": 200,
+          "dir": true
+        },
+        {
+          "type": "axle_counter",
+          "pos": -20,
+          "sensor_address": 201,
+          "dir": false
+        }
+      ]
     },
     {
       "type": "straight",

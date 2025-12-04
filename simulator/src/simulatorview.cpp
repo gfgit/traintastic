@@ -999,6 +999,8 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
 
   QColor positionSensorActive = Qt::red;
   QColor positionSensorInactive = Qt::darkGreen;
+  QColor axleCountSensorColor = Qt::cyan;
+  QColor axleCountSensorDecrease = Qt::darkYellow;
 
   // Make signals more visible at low zoom levels by scaling
   QPen signalMastPen(Qt::lightGray, 0.6 * m_signalsScaleFactor);
@@ -1075,9 +1077,30 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
       {
       case Object::Type::PositionSensor:
       {
-        QColor color = positionSensorInactive;
-        if(m_stateData.sensors[obj.sensorIndex].value)
-          color = positionSensorActive;
+        QColor color;
+        const auto &sensorState = m_stateData.sensors[obj.sensorIndex];
+
+        switch(m_simulator->staticData.sensors[obj.sensorIndex].type)
+        {
+        case Simulator::Sensor::Type::PositionSensor:
+        {
+          color = positionSensorInactive;
+          if(sensorState.value)
+            color = positionSensorActive;
+          break;
+        }
+        case Simulator::Sensor::Type::AxleCounter:
+        {
+          color = axleCountSensorColor;
+          if(sensorState.curTime > 0)
+            color = positionSensorActive;
+          else if(sensorState.curTime < 0)
+            color = axleCountSensorDecrease;
+          break;
+        }
+        default:
+          break;
+        }
 
         QRectF r;
         r.setSize(QSizeF(4, 2));

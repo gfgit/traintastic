@@ -160,6 +160,13 @@ public:
   {
     uint16_t channel = defaultChannel;
     uint16_t address = invalidAddress;
+
+    enum class Type
+    {
+      TrackCircuit = 0,
+      PositionSensor,
+      AxleCounter
+    } type = Type::TrackCircuit;
   };
 
   struct Misc
@@ -219,10 +226,14 @@ public:
 
   struct SensorState
   {
-    size_t occupied = 0;
+    union {
+      uint32_t occupied = 0;
+      int32_t axleCount;
+    };
+
+    int8_t maxTime = 0;
+    int8_t curTime = 0;
     bool value = false;
-    size_t maxTime = 0;
-    size_t curTime = 0;
   };
 
   struct Train;

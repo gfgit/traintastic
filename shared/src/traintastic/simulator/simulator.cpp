@@ -947,7 +947,9 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       for(size_t i = 0; i < count; ++i)
       {
         const auto& sensor = staticData.sensors[i];
-        if(m.channel != invalidAddress && m.channel != sensor.channel)
+
+        // Axle counter sensor send diffs so there is no point in querying them
+        if((m.channel != invalidAddress && m.channel != sensor.channel) || sensor.type == Sensor::Type::AxleCounter)
           continue;
 
         auto& sensorState = m_stateData.sensors[i];
@@ -956,7 +958,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
         {
           if(connection->connectionId() != fromConnId)
             continue;
-          connection->send(SimulatorProtocol::SensorChanged(sensor.channel, sensor.address, sensorState.value));
+          connection->send(SimulatorProtocol::SensorChanged(sensor.channel, sensor.address, 0, sensorState.value));
           break;
         }
       }
@@ -1473,9 +1475,28 @@ bool Simulator::updateVehiclePosition(VehicleState::Face& face,
 
     if(obj.type == Object::Type::PositionSensor)
     {
-        SensorState& sensor = m_stateData.sensors[obj.sensorIndex];
-        sensor.curTime = sensor.maxTime;
+      SensorState& sensor = m_stateData.sensors[obj.sensorIndex];
+      switch(staticData.sensors.at(obj.sensorIndex).type)
+      {
+      case Sensor::Type::PositionSensor:
+      {
+        // Trigger sensor and start delay count
         sensor.occupied = 1;
+        sensor.curTime = sensor.maxTime;
+        break;
+      }
+      case Sensor::Type::AxleCounter:
+      {
+        if(dirFwd_ == obj.dirForward)
+          sensor.axleCount++;
+        else
+          sensor.axleCount--;
+        sensor.curTime = sensor.axleCount > 0 ? sensor.maxTime : -sensor.maxTime;
+        break;
+      }
+      default:
+        break;
+      }
     }
     else if (isFirst && obj.type == Object::Type::MainSignal && train.state.mode != TrainState::Mode::Manual)
     {
@@ -1708,24 +1729,54 @@ void Simulator::updateSensors()
   {
     const auto& sensor = staticData.sensors[i];
     auto& sensorState = m_stateData.sensors[i];
-    bool sensorValue = m_stateData.powerOn && (sensorState.occupied != 0);
+    int32_t axleCount = 0;
+    bool sensorValue = sensorState.value;
 
-    if(sensorValue && sensorState.curTime > 0)
+    switch(sensor.type)
     {
-        // Delay going down
+    case Sensor::Type::TrackCircuit:
+    {
+      sensorValue = m_stateData.powerOn && (sensorState.occupied != 0);
+      break;
+    }
+    case Sensor::Type::PositionSensor:
+    {
+      sensorValue = m_stateData.powerOn && (sensorState.occupied != 0);
+      if(sensorValue && sensorState.curTime > 0)
+      {
+        // Decrease delay count
         sensorState.curTime--;
 
         if(sensorState.curTime == 0)
         {
-            sensorState.occupied = 0;
-            sensorValue = false;
+          // When delay reaches zero go back to idle
+          sensorState.occupied = 0;
+          sensorValue = false;
         }
+      }
+      break;
+    }
+    case Sensor::Type::AxleCounter:
+    {
+      // Decrease delay count for visual effect
+      if(sensorState.curTime > 0)
+        sensorState.curTime--;
+      else if(sensorState.curTime < 0)
+        sensorState.curTime++;
+
+      // Reset counter and send diff
+      axleCount = sensorState.axleCount;
+      sensorState.axleCount = 0;
+      break;
+    }
+    default:
+      assert(false);
     }
 
-    if(sensorState.value != sensorValue)
+    if(sensorState.value != sensorValue || axleCount != 0)
     {
       sensorState.value = sensorValue;
-      send(SimulatorProtocol::SensorChanged(sensor.channel, sensor.address, sensorState.value));
+      send(SimulatorProtocol::SensorChanged(sensor.channel, sensor.address, axleCount, sensorState.value));
     }
   }
 }
@@ -1895,7 +1946,7 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                 trackObj.dirForward = item.value("dir", true);
 
                 const std::string_view type = item.value<std::string_view>("type", {});
-                if(type == "sensor")
+                if(type == "sensor" || type == "axle_counter")
                 {
                     trackObj.type = TrackSegment::Object::Type::PositionSensor;
                     trackObj.allowedDirection = TrackSegment::Object::AllowedDirections::Both;
@@ -1917,11 +1968,32 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                         if(trackObj.sensorIndex == invalidIndex) // new sensor
                         {
                             trackObj.sensorIndex = data.sensors.size();
-                            data.sensors.emplace_back(Sensor{sensorChannel, sensorAddress});
-                            stateData.sensors.emplace_back(SensorState{0, false});
+                            data.sensors.emplace_back(Sensor{sensorChannel, sensorAddress, Sensor::Type::PositionSensor});
+                            if(type == "axle_counter")
+                              data.sensors.at(trackObj.sensorIndex).type = Sensor::Type::AxleCounter;
+                            stateData.sensors.emplace_back(SensorState{{0}, 0, 0, false});
                         }
 
-                        stateData.sensors[trackObj.sensorIndex].maxTime = 90; // 3 seconds
+                        switch(data.sensors.at(trackObj.sensorIndex).type)
+                        {
+                        case Sensor::Type::PositionSensor:
+                        {
+                          // Make it stay triggered a bit
+                          stateData.sensors[trackObj.sensorIndex].maxTime = 90; // 3 seconds
+                          stateData.sensors[trackObj.sensorIndex].occupied = 0;
+                          break;
+                        }
+                        case Sensor::Type::AxleCounter:
+                        {
+                          // This is just for visual effect
+                          stateData.sensors[trackObj.sensorIndex].maxTime = 30; // 1 second
+                          stateData.sensors[trackObj.sensorIndex].axleCount = 0;
+                          break;
+                        }
+                        default:
+                          assert(false);
+                        }
+
                     }
 
                     if(trackObj.sensorIndex == invalidIndex) // invalid sensor
@@ -2500,8 +2572,8 @@ void Simulator::loadTrackplan(const nlohmann::json& world, StaticData &data, Sta
                 if(segment.sensor.index == invalidIndex) // new sensor
                 {
                     segment.sensor.index = data.sensors.size();
-                    data.sensors.emplace_back(Sensor{sensorChannel, sensorAddress});
-                    stateData.sensors.emplace_back(SensorState{0, false});
+                    data.sensors.emplace_back(Sensor{sensorChannel, sensorAddress, Sensor::Type::TrackCircuit});
+                    stateData.sensors.emplace_back(SensorState{{0}, 0, 0, false});
                 }
             }
 
