@@ -1535,13 +1535,7 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
           }
           else
           {
-            double offset = 0.0;
-            if(signal->mPosition < 80)
-              offset = RotDwarfSz.width() * 0.25;
-            else if(signal->mPosition <= 175)
-              offset = RotDwarfSz.width() * 0.5;
-            else
-              offset = RotDwarfSz.width() * 0.75;
+            const double offset = RotDwarfSz.width() * double(signal->mPosition) / 255.0;
 
             // Draw half and half with clipping
             painter->save();
