@@ -1024,14 +1024,6 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
   QPen signalLightArrowPenOn = signalLightArrowPenOff;
   signalLightArrowPenOn.setColor(Qt::white);
 
-  QPen dwarfBorderPen(Qt::darkGray, 0.1 * m_signalsScaleFactor);
-  dwarfBorderPen.setJoinStyle(Qt::RoundJoin);
-
-  QPen dwarfBorderPenBlack = dwarfBorderPen;
-  dwarfBorderPenBlack.setColor(Qt::black);
-
-  QPen dwarfDiagPenBlack(Qt::black, 0.2 * m_signalsScaleFactor);
-
   QPen signalIndicatorBorder(Qt::darkGray, 0.1 * m_signalsScaleFactor);
 
   const qreal mastBaseLength = 3.0 * m_signalsScaleFactor;
@@ -1050,10 +1042,24 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
   directionFont.setBold(true);
   directionFont.setPointSizeF(directionIndicatorWidth * 0.9);
 
-  const QTransform trasf = painter->transform();
+  // Zoom dwarf signals a bit less
+  const qreal LightDwarfFactor = 0.4 + 0.6 * m_signalsScaleFactor;
+
+  // Zoom dwarf signals even less because they are quite big
+  const qreal RotatingDwarfFactor = 0.6 + 0.4 * m_signalsScaleFactor;
+
+  QPen lightDwarfBorderPen(Qt::darkGray, 0.1 * LightDwarfFactor);
+  lightDwarfBorderPen.setJoinStyle(Qt::RoundJoin);
+
+  QPen rotDwarfBorderPenBlack(Qt::darkGray, 0.1 * RotatingDwarfFactor);;
+  rotDwarfBorderPenBlack.setColor(Qt::black);
+
+  QPen dwarfDiagPenBlack(Qt::black, 0.2 * RotatingDwarfFactor);
 
   QPen trackPen(QColor(204, 204, 204), 1);
   trackPen.setCapStyle(Qt::RoundCap);
+
+  const QTransform trasf = painter->transform();
 
   QPen borderPen(Qt::red, 1);
   const float trainWidth = m_simulator->staticData.trainWidth;
@@ -1427,9 +1433,9 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
         {
         case Simulator::AuxSignal::SubType::LightDwarfSignal:
         {
-          const qreal LightDwarfWidth = 1.5f * m_signalsScaleFactor;
-          const qreal LightDwarfHeight = 2.0f * m_signalsScaleFactor;
-          const qreal LightDwarfLightSz = 0.5f * m_signalsScaleFactor;
+          const qreal LightDwarfWidth = 1.5f * LightDwarfFactor;
+          const qreal LightDwarfHeight = 2.0f * LightDwarfFactor;
+          const qreal LightDwarfLightSz = 0.5f * LightDwarfFactor;
 
           // Background
           QPainterPath path;
@@ -1442,7 +1448,7 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
           path.lineTo(LightDwarfWidth / 2.0, 0.0);
           path.closeSubpath();
 
-          painter->setPen(dwarfBorderPen);
+          painter->setPen(lightDwarfBorderPen);
           painter->setBrush(Qt::black);
           painter->drawPath(path);
 
@@ -1469,11 +1475,11 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
         }
         case Simulator::AuxSignal::SubType::RotatingDwarfSignal:
         {
-          const QSizeF RotDwarBaseSz(1.8 * m_signalsScaleFactor, 0.8 * m_signalsScaleFactor);
-          const QSizeF RotDwarMastSz(0.3 * m_signalsScaleFactor, 0.3 * m_signalsScaleFactor);
-          const QSizeF RotDwarfSz(1.4 * m_signalsScaleFactor, 1.8 * m_signalsScaleFactor);
-          const QSizeF RotDwarInnerSz(1.0 * m_signalsScaleFactor, 1.4 * m_signalsScaleFactor);
-          const qreal RotDwarfLightSz = 0.6f * m_signalsScaleFactor;
+          const QSizeF RotDwarBaseSz(1.8 * RotatingDwarfFactor, 0.8 * RotatingDwarfFactor);
+          const QSizeF RotDwarMastSz(0.3 * RotatingDwarfFactor, 0.3 * RotatingDwarfFactor);
+          const QSizeF RotDwarfSz(1.4 * RotatingDwarfFactor, 1.8 * RotatingDwarfFactor);
+          const QSizeF RotDwarInnerSz(1.0 * RotatingDwarfFactor, 1.4 * RotatingDwarfFactor);
+          const qreal RotDwarfLightSz = 0.6f * RotatingDwarfFactor;
 
           // Draw base
           QRectF baseRect(QPointF(), RotDwarBaseSz);
@@ -1498,7 +1504,7 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
           rotLightRect.moveCenter(rotRect.center());
 
           // Now draw signal
-          painter->setPen(dwarfBorderPenBlack);
+          painter->setPen(rotDwarfBorderPenBlack);
           painter->setBrush(Qt::white);
           painter->drawRect(rotRect);
 
