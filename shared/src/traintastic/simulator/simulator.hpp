@@ -133,7 +133,7 @@ public:
         };
 
         Point pos;
-        float rotation;
+        float rotation = 0.0f;
         float position = 0.0f;
         float lateralDiff = 3.0f;
 
