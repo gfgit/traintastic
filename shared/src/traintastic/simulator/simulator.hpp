@@ -150,6 +150,7 @@ public:
     Point origin;
     float rotation = 0.0f;
     float ratio = 0.0f;
+    float opacity = 1.0f;
   };
 
   struct StaticData

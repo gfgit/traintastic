@@ -46,6 +46,10 @@ public:
   void setSimulator(std::shared_ptr<Simulator> value,
                     bool localOnly, bool discoverable);
 
+  void loadExtraImages(const nlohmann::json &world,
+                       const QString &imagesFile,
+                       QStringList &namesOut);
+
   bool showTrackOccupancy() const
   {
     return m_showTrackOccupancy;
@@ -77,6 +81,8 @@ public:
   inline float getZoomLevel() const { return m_zoomLevel; }
 
   void setZoomLevel(float zoomLevel);
+
+  void setImageVisible(int idx, bool val);
 
   nlohmann::json copySegmentData(size_t segmentIdx) const;
 
@@ -119,9 +125,11 @@ private:
   {
     QImage img;
     Simulator::ImageRef ref;
+    bool visible = true;
   };
 
   std::vector<Image> m_images;
+  std::vector<Image> m_extraImages;
 
   struct
   {

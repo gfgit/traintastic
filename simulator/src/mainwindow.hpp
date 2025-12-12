@@ -36,6 +36,8 @@ public:
   void load(const QString& filename);
   void setFullScreen(bool value);
 
+  void loadExtraImages(const QString &filename);
+
   inline void setOptions(bool localOnly, bool discoverable)
   {
     mLocalOnly = localOnly;
@@ -55,6 +57,8 @@ private:
   QByteArray m_beforeFullScreenGeometry;
   QAction* m_power;
   QLabel* m_tickActive;
+  QMenu *imagesMenu;
+
   std::vector<float> m_tickActiveFilter;
 
   bool mLocalOnly = false;
