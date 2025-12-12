@@ -46,6 +46,10 @@ protected:
   void keyPressEvent(QKeyEvent *ev) final;
 
 private:
+  void toggleFullScreen();
+  void showAbout();
+
+private:
   SimulatorView* m_view;
   QAction* m_actFullScreen;
   QByteArray m_beforeFullScreenGeometry;
@@ -55,9 +59,6 @@ private:
 
   bool mLocalOnly = false;
   bool mDiscoverable = false;
-
-  void toggleFullScreen();
-  void showAbout();
 };
 
 #endif

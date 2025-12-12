@@ -377,4 +377,16 @@ constexpr Simulator::Point operator/(const Simulator::Point divided, const int d
   return {divided.x / divisor, divided.y / divisor};
 }
 
+namespace
+{
+
+constexpr auto pi = std::numbers::pi_v<float>;
+
+constexpr float deg2rad(float degrees)
+{
+  return degrees * static_cast<float>(std::numbers::pi / 180);
+}
+
+}
+
 #endif
