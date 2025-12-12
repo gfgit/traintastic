@@ -28,6 +28,7 @@
 #include <traintastic/simulator/simulator.hpp>
 
 #include <QBasicTimer>
+#include <QImage>
 
 class SimulatorView
   : public QOpenGLWidget
@@ -107,6 +108,15 @@ private:
 
   std::shared_ptr<Simulator> m_simulator;
   Simulator::StateData m_stateData;
+
+  struct Image
+  {
+    QImage img;
+    Simulator::ImageRef ref;
+  };
+
+  std::vector<Image> m_images;
+
   struct
   {
     bool powerOn = false;
