@@ -31,6 +31,9 @@
 #include <QToolTip>
 #include <QGuiApplication>
 
+#include <QMenu>
+#include <QClipboard>
+
 namespace
 {
 
@@ -339,6 +342,8 @@ SimulatorView::SimulatorView(QWidget* parent)
 
   // 800 ms turnout blink
   turnoutBlinkTimer.start(std::chrono::milliseconds(800), Qt::PreciseTimer, this);
+
+  setContextMenuPolicy(Qt::DefaultContextMenu);
 
   setMouseTracking(true);
 }
@@ -904,6 +909,26 @@ void SimulatorView::timerEvent(QTimerEvent *e)
   QOpenGLWidget::timerEvent(e);
 }
 
+void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
+{
+  if(e->modifiers() != Qt::ControlModifier)
+    return; // Use control to distinguish from right click pan
+
+  const Simulator::Point point = mapToSim(e->pos());
+  const size_t idx = getSegmentAt(point, m_simulator->staticData);
+  if(idx == Simulator::invalidIndex)
+    return;
+
+  QMenu *m = new QMenu(this);
+  QAction *copySegData = m->addAction(tr("Copy segment data"));
+  QAction *result = m->exec(e->globalPos());
+  if(result == copySegData)
+  {
+    const auto obj = copySegmentData(idx);
+    QGuiApplication::clipboard()->setText(QString::fromStdString(obj.dump(2)));
+  }
+}
+
 void SimulatorView::mouseLeftClick(const Simulator::Point &point, bool shiftPressed)
 {
   for(const auto& turnout : m_turnouts)
@@ -1076,6 +1101,22 @@ void SimulatorView::setZoomLevel(float value)
 {
   m_zoomLevel = std::clamp(value, zoomLevelMin, zoomLevelMax);
   updateProjection();
+}
+
+nlohmann::json SimulatorView::copySegmentData(size_t segmentIdx) const
+{
+    if(segmentIdx == Simulator::invalidIndex)
+        return {};
+
+    const auto& segment = m_simulator->staticData.trackSegments[segmentIdx];
+
+    nlohmann::json obj;
+    obj["id"] = segment.m_id;
+    obj["x"] = segment.origin().x;
+    obj["y"] = segment.origin().y;
+    obj["rotation"] = qRadiansToDegrees(segment.rotation);
+
+    return obj;
 }
 
 void SimulatorView::updateProjection()

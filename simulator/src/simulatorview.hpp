@@ -78,6 +78,8 @@ public:
 
   void setZoomLevel(float zoomLevel);
 
+  nlohmann::json copySegmentData(size_t segmentIdx) const;
+
 signals:
   void tickActiveChanged(float value);
   void powerOnChanged(bool value);
@@ -95,6 +97,7 @@ protected:
   void mouseReleaseEvent(QMouseEvent* event) override;
   void wheelEvent(QWheelEvent* event) override;
   void timerEvent(QTimerEvent *e) override;
+  void contextMenuEvent(QContextMenuEvent *e) override;
 
 private:
   struct Turnout
