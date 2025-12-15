@@ -617,6 +617,9 @@ void SimulatorView::drawTracks(QPainter *painter)
     trackPenCyan.setWidthF(0.5);
     trackPenCyan.setCosmetic(false);
 
+    QPen trackPenYellow = trackPenCyan;
+    trackPenYellow.setColor(Qt::darkYellow);
+
     const QTransform trasf = painter->transform();
 
     size_t idx = 0;
@@ -682,8 +685,6 @@ void SimulatorView::drawTracks(QPainter *painter)
     }
 
     // Redraw on top turnout current state
-    painter->setPen(trackPenCyan);
-
     for(const auto& segment : m_simulator->staticData.trackSegments)
     {
         if(segment.type == Simulator::TrackSegment::Type::Straight ||
@@ -695,6 +696,17 @@ void SimulatorView::drawTracks(QPainter *painter)
 
         assert(segment.turnout.index < m_stateData.turnouts.size());
         const auto state = m_stateData.turnouts[segment.turnout.index].state;
+
+        if(m_showTrackOccupancy && segment.hasSensor() && m_stateData.sensors[segment.sensor.index].value)
+        {
+            // Cyan contrast on red
+            painter->setPen(trackPenCyan);
+        }
+        else
+        {
+            // Dark yellow contrast on white
+            painter->setPen(trackPenYellow);
+        }
 
         if(segment.type == Simulator::TrackSegment::Type::Turnout)
         {
@@ -804,34 +816,79 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
 {
     assert(m_simulator);
 
-    const QPen trackPen(QColor(255, 255, 0), 3);
-    const QPen trackPenOccupied(QColor(255, 0, 0), 3);
+    QColor positionSensorActive = Qt::red;
+    QColor positionSensorInactive = Qt::darkGreen;
+
+    const QPen signalMastPen(Qt::lightGray, 0.6);
+    const QPen signalLightPen(Qt::lightGray, 0.2);
 
     const QTransform trasf = painter->transform();
 
 
     for(const auto& segment : m_simulator->staticData.trackSegments)
     {
-        for(const auto& obj : segment.objects)
+        using Object = Simulator::TrackSegment::Object;
+
+        for(const Object& obj : segment.objects)
         {
             painter->translate(obj.pos.x, obj.pos.y);
-            painter->rotate(qRadiansToDegrees(obj.rotation));
 
-            if(m_stateData.sensors[obj.sensorIndex].value)
+            float objRot = obj.rotation;
+            if(!obj.dirForward)
+                objRot += pi;
+
+            const qreal deg = qRadiansToDegrees(objRot);
+            painter->rotate(deg);
+
+            switch (obj.type)
             {
-                // Red if active
-                painter->setPen(trackPenOccupied);
+            case Object::Type::PositionSensor:
+            {
+                QColor color = positionSensorInactive;
+                if(m_stateData.sensors[obj.sensorIndex].value)
+                    color = positionSensorActive;
+
+                QRectF r;
+                r.setSize(QSizeF(4, 2));
+                r.moveCenter(QPointF(0, obj.lateralDiff));
+                painter->fillRect(r, color);
+                break;
             }
-            else
+            case Object::Type::MainSignal:
             {
-                // Yellow inactive
-                painter->setPen(trackPen);
+                const qreal mustBaseLength = 3.0;
+                const qreal lightDiameter = 2.0;
+
+                auto signIt = m_stateData.mainSignals.find(obj.signalName);
+                if(signIt == m_stateData.mainSignals.end())
+                    continue;
+
+                Simulator::MainSignal *signal = signIt->second;
+                const int mastLength = mustBaseLength + lightDiameter * (signal->lights.size() - 1);
+
+                painter->setPen(signalMastPen);
+                painter->drawLine(QLineF(0, obj.lateralDiff,
+                                         mastLength, obj.lateralDiff));
+
+                QRectF lightRect;
+                lightRect.setSize(QSizeF(lightDiameter, lightDiameter));
+                lightRect.moveCenter(QPointF(mustBaseLength + lightDiameter / 2.0, obj.lateralDiff));
+
+                painter->setPen(signalLightPen);
+                for(size_t i = 0; i < signal->lights.size(); i++)
+                {
+                    painter->setBrush(Qt::red);
+                    painter->drawEllipse(lightRect);
+
+                    lightRect.moveLeft(lightRect.left() + lightDiameter);
+                }
+
+                break;
+            }
+            default:
+                break;
             }
 
-            painter->drawLine(0,
-                              obj.lateralDiff,
-                              obj.dirForward ? 5 : -5,
-                              obj.lateralDiff);
 
             painter->setTransform(trasf);
         }

@@ -115,14 +115,29 @@ public:
 
     struct Object
     {
+        enum class AllowedDirections
+        {
+            Both = 0,
+            Forward = 1,
+            Backwards = 2
+        };
+
+        enum class Type
+        {
+            PositionSensor = 0,
+            MainSignal = 1
+        };
+
         Point pos;
         float rotation;
         float position = 0.0f;
-        float lateralDiff = 0.0f;
+        float lateralDiff = 3.0f;
 
         size_t sensorIndex = invalidIndex;
-        int8_t onlyDir = 0;
+        AllowedDirections allowedDirection = AllowedDirections::Both;
         bool dirForward = true;
+        Type type = Type::PositionSensor;
+        std::string_view signalName;
     };
     std::vector<Object> objects;
 
@@ -222,6 +237,33 @@ public:
     uint8_t coils = 0;
   };
 
+  struct MainSignal
+  {
+    std::string name;
+    size_t ownerConnectionId = invalidIndex;
+    double maxSpeed = 0;
+
+    struct Light
+    {
+        enum class Color
+        {
+            Red = 0,
+            Yellow,
+            Green
+        } color = Color::Red;
+
+        enum class State
+        {
+            Off = 0,
+            On,
+            BlikOn,
+            BlinkReverseOn
+        } state = State::Off;
+    };
+
+    std::vector<Light> lights;
+  };
+
   struct TrainState
   {
     float speed = 0.0f;
@@ -290,6 +332,7 @@ public:
     std::vector<TurnoutState> turnouts;
     std::unordered_map<std::string, Train *, StringHash, StringEqual> trains;
     std::unordered_map<std::string, Vehicle *, StringHash, StringEqual> vehicles;
+    std::unordered_map<std::string, MainSignal *, StringHash, StringEqual> mainSignals;
   };
 
 private:

@@ -375,6 +375,15 @@ Simulator::~Simulator()
         it = m_stateData.vehicles.erase(it);
       }
     }
+
+    {
+        auto it = m_stateData.mainSignals.begin();
+        while(it != m_stateData.mainSignals.end())
+        {
+            delete it->second;
+            it = m_stateData.mainSignals.erase(it);
+        }
+    }
   }
 }
 
@@ -1015,6 +1024,8 @@ inline bool isTurnoutUnknownState(const Simulator::TrackSegment& segment,
 
 bool Simulator::updateVehiclePosition(VehicleState::Face& face, const float speed, float &outRemaining)
 {
+  using Object = Simulator::TrackSegment::Object;
+
   outRemaining = 0.0f;
 
   float distance = face.distance + (face.segmentDirectionInverted ? -speed : speed);
@@ -1037,12 +1048,15 @@ bool Simulator::updateVehiclePosition(VehicleState::Face& face, const float spee
             if(obj.position > distance)
                 break;
 
-            if(obj.onlyDir != 1 && obj.onlyDir != 0)
-                continue;
+            if(obj.type == Object::Type::PositionSensor)
+            {
+                if(obj.allowedDirection == Object::AllowedDirections::Backwards)
+                    continue; // Only forward or both
 
-            SensorState& sensor = m_stateData.sensors[obj.sensorIndex];
-            sensor.curTime = sensor.maxTime;
-            sensor.occupied = 1;
+                SensorState& sensor = m_stateData.sensors[obj.sensorIndex];
+                sensor.curTime = sensor.maxTime;
+                sensor.occupied = 1;
+            }
         }
     }
     else
@@ -1055,12 +1069,15 @@ bool Simulator::updateVehiclePosition(VehicleState::Face& face, const float spee
             if(obj.position < distance)
                 break;
 
-            if(obj.onlyDir != 2 && obj.onlyDir != 0)
-                continue;
+            if(obj.type == Object::Type::PositionSensor)
+            {
+                if(obj.allowedDirection == Object::AllowedDirections::Forward)
+                    continue; // Only backwards or both
 
-            SensorState& sensor = m_stateData.sensors[obj.sensorIndex];
-            sensor.curTime = sensor.maxTime;
-            sensor.occupied = 1;
+                SensorState& sensor = m_stateData.sensors[obj.sensorIndex];
+                sensor.curTime = sensor.maxTime;
+                sensor.occupied = 1;
+            }
         }
     }
 
@@ -1375,35 +1392,96 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                     trackObj.pos.y = curve.center.y - curve.radius * std::cos(angle);
                 }
 
+                while(trackObj.rotation > 2 * pi)
+                    trackObj.rotation -= 2 * pi;
+
+                while(trackObj.rotation < 0)
+                    trackObj.rotation += 2 * pi;
+
                 trackObj.dirForward = item.value("dir", true);
-                trackObj.lateralDiff = item.value("lat_delta", 3.0f);
-                trackObj.onlyDir = item.value("only_dir", 0);
 
-                if(const uint16_t sensorAddress = item.value("sensor_address", invalidAddress); sensorAddress != invalidAddress)
+                std::string_view type = item.value<std::string_view>("type", {});
+                if(type == "sensor")
                 {
-                    const uint16_t sensorChannel = item.value("sensor_channel", defaultChannel);
+                    trackObj.type = TrackSegment::Object::Type::PositionSensor;
+                    trackObj.allowedDirection = TrackSegment::Object::AllowedDirections::Both;
+                    trackObj.lateralDiff = 2.0;
 
-                    for(size_t i = 0; i < data.sensors.size(); ++i)
+                    if(const uint16_t sensorAddress = item.value("sensor_address", invalidAddress); sensorAddress != invalidAddress)
                     {
-                        if(data.sensors[i].channel == sensorChannel && data.sensors[i].address == sensorAddress)
+                        const uint16_t sensorChannel = item.value("sensor_channel", defaultChannel);
+
+                        for(size_t i = 0; i < data.sensors.size(); ++i)
                         {
-                            trackObj.sensorIndex = i;
-                            break;
+                            if(data.sensors[i].channel == sensorChannel && data.sensors[i].address == sensorAddress)
+                            {
+                                trackObj.sensorIndex = i;
+                                break;
+                            }
                         }
+
+                        if(trackObj.sensorIndex == invalidIndex) // new sensor
+                        {
+                            trackObj.sensorIndex = data.sensors.size();
+                            data.sensors.emplace_back(Sensor{sensorChannel, sensorAddress});
+                            stateData.sensors.emplace_back(SensorState{0, false});
+                        }
+
+                        stateData.sensors[trackObj.sensorIndex].maxTime = 90; // 3 seconds
                     }
 
-                    if(trackObj.sensorIndex == invalidIndex) // new sensor
+                    if(trackObj.sensorIndex == invalidIndex) // invalid sensor
+                        continue;
+                }
+                else if(type == "main_signal")
+                {
+                    trackObj.type = TrackSegment::Object::Type::MainSignal;
+                    trackObj.allowedDirection = trackObj.dirForward ?
+                                                    TrackSegment::Object::AllowedDirections::Forward :
+                                                    TrackSegment::Object::AllowedDirections::Backwards;
+                    trackObj.lateralDiff = -1.7; // Default on left side
+
+                    std::string_view signalName = item.value<std::string_view>("name", {});
+                    if(signalName.empty())
+                        continue;
+
+                    MainSignal *signal = nullptr;
+                    auto signIt = stateData.mainSignals.find(signalName);
+                    if(signIt == stateData.mainSignals.end())
                     {
-                        trackObj.sensorIndex = data.sensors.size();
-                        data.sensors.emplace_back(Sensor{sensorChannel, sensorAddress});
-                        stateData.sensors.emplace_back(SensorState{0, false});
+                        signal = new MainSignal;
+                        signal->name = signalName;
+                        signal->lights.push_back({});
+                        stateData.mainSignals.insert({signal->name, signal});
                     }
+                    else
+                        signal = signIt->second;
 
-                    stateData.sensors[trackObj.sensorIndex].maxTime = 90; // 3 seconds
+                    trackObj.signalName = signal->name;
+
+                    size_t nLights = item.value("n_lights", std::max(size_t(1), signal->lights.size()));
+                    nLights = std::clamp(size_t(1), size_t(3), nLights);
+                    signal->lights.resize(nLights);
+
+                    // TODO
+                    signal->lights[0].state = MainSignal::Light::State::On;
+                    signal->maxSpeed = 30;
+                }
+                else
+                {
+                    // Unknown object type
+                    continue;
                 }
 
-                if(trackObj.sensorIndex == invalidIndex) // new sensor
-                    continue;
+                std::string_view allowedDir = item.value<std::string_view>("allowed_dir", {});
+                if(allowedDir == "both")
+                    trackObj.allowedDirection = TrackSegment::Object::AllowedDirections::Both;
+                if(allowedDir == "forward")
+                    trackObj.allowedDirection = TrackSegment::Object::AllowedDirections::Forward;
+                if(allowedDir == "backwards")
+                    trackObj.allowedDirection = TrackSegment::Object::AllowedDirections::Backwards;
+
+                trackObj.lateralDiff = item.value("lat_delta", trackObj.lateralDiff);
 
                 segment.objects.push_back(trackObj);
             }
