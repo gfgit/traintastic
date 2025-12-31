@@ -1332,6 +1332,21 @@ void Simulator::updateTrainPositions()
     Train* train = it->second;
     auto& trainState = train->state;
 
+    if(train->state.isOnStationStop && train->state.mode != TrainState::Mode::Manual)
+    {
+      bool stoppedAndCannotContinue = train->state.speed == 0.0;
+      if(stoppedAndCannotContinue)
+        stoppedAndCannotContinue = (train->state.nextSignal.signal && train->state.nextSignal.signal->maxSpeed == 0.0);
+
+      // Train cannot proceed forward, lets see if we can reverse
+      if(stoppedAndCannotContinue &&
+         train->state.prevSignal.signal && train->state.prevSignal.signal->maxSpeed > 0.0)
+      {
+        // Prev signal detected and set to proceed, reverse train
+        setTrainDirection(train, !train->state.reverse);
+      }
+    }
+
     if(train->address != invalidAddress && trainState.speedOrDirectionChanged)
     {
         send(SimulatorProtocol::LocomotiveSpeedDirection(train->address,
@@ -1560,7 +1575,7 @@ bool Simulator::updateVehiclePosition(VehicleState::Face& face,
       }
 
       // SemiAutomatic train should not depart if already stopped
-      if(train.state.mode == TrainState::Mode::SemiAutomatic && train.state.speed == 0)
+      if(train.state.mode == TrainState::Mode::SemiAutomatic && train.state.speed == 0.0)
         return true;
 
       // Apply signal speed on next tick
@@ -3474,7 +3489,7 @@ bool Simulator::checkNextSignal(Train *train)
     {
       setTrainSpeed(train, targetSpeed);
 
-      if(train->state.speed == 0)
+      if(train->state.speed == 0.0)
         return false; // Stop
     }
   }
