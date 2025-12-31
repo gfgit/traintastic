@@ -1683,6 +1683,18 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
         painter->drawConvexPolygon(triangle, 3);
         break;
       }
+      case Object::Type::StationStopPoint:
+      {
+        if(!m_stateData.powerOn)
+        {
+          // Hide during simulation
+          QRectF r;
+          r.setSize(QSizeF(4, 2));
+          r.moveCenter(QPointF(0, obj.lateralDiff));
+          painter->fillRect(r, Qt::darkGreen);
+        }
+        break;
+      }
       default:
         break;
       }
@@ -1705,6 +1717,9 @@ void SimulatorView::drawTrains(QPainter *painter)
 
   QPen activeTrainPen(Qt::white, 1);
   activeTrainPen.setCosmetic(true);
+
+  QPen stationStopTrainPen(Qt::black, 1);
+  stationStopTrainPen.setCosmetic(true);
 
   painter->setPen(Qt::NoPen);
 
@@ -1729,9 +1744,17 @@ void SimulatorView::drawTrains(QPainter *painter)
     else
       painter->setPen(Qt::NoPen);
 
-    QRectF veichleRect(-length / 2, -trainWidth / 2,
+    QRectF vehicleRect(-length / 2, -trainWidth / 2,
                        length, trainWidth);
-    painter->drawRect(veichleRect);
+    painter->drawRect(vehicleRect);
+
+    if(activeTrain && activeTrain->state.isOnStationStop)
+    {
+      QRectF adjVehicleRect = vehicleRect.adjusted(1, 1, -1, -1);
+      painter->setPen(stationStopTrainPen);
+      painter->setBrush(Qt::NoBrush);
+      painter->drawRect(adjVehicleRect);
+    }
 
     painter->setTransform(trasf);
   }

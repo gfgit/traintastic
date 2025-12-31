@@ -345,6 +345,27 @@ std::optional<T> stringToEnum(std::string_view value)
 
 }
 
+void clearTrainSignalCache(Simulator::StateData &data, Simulator::Train *train, bool next)
+{
+  Simulator::TrainState::SignalCache &cache = next ? train->state.nextSignal : train->state.prevSignal;
+
+  cache.signal = nullptr;
+  cache.segmentIdx = Simulator::invalidIndex;
+  cache.distance = 0.0;
+  cache.posInSegment = 0.0;
+  cache.dirty = false;
+
+  for(size_t idx : cache.turnouts)
+  {
+    std::erase_if(data.turnouts[idx].watchingTrains,
+                  [train](Simulator::Train *t) -> bool
+    {
+      return t == train;
+    });
+  }
+  cache.turnouts.clear();
+}
+
 Simulator::Simulator(const nlohmann::json& world)
   : staticData(load(world, m_stateData))
   , m_tickTimer{m_ioContext}
@@ -551,7 +572,8 @@ void Simulator::setTrainDirection(Train *train, bool reverse)
   {
     train->state.reverse = reverse;
     train->state.speedOrDirectionChanged = true;
-    train->state.nextSignalDirty = true;
+    train->state.nextSignal.dirty = true;
+    train->state.prevSignal.dirty = true;
   }
 }
 
@@ -574,7 +596,14 @@ void Simulator::setTrainMode(Train *train, TrainState::Mode mode)
   if(train->state.mode != mode)
   {
     train->state.mode = mode;
-    train->state.nextSignalDirty = true;
+    train->state.nextSignal.dirty = true;
+    train->state.prevSignal.dirty = true;
+
+    if(train->state.mode == TrainState::Mode::Manual)
+    {
+      train->state.isOnStationStop = false;
+      clearTrainSignalCache(m_stateData, train, false);
+    }
   }
 }
 
@@ -653,7 +682,10 @@ void Simulator::setTurnoutState(size_t segmentIndex, TurnoutState::State state)
       turnout.state = state;
 
       for(Train *train : turnout.watchingTrains)
-        train->state.nextSignalDirty = true;
+      {
+        train->state.nextSignal.dirty = true;
+        train->state.prevSignal.dirty = true;
+      }
     }
   }
 }
@@ -1312,7 +1344,10 @@ void Simulator::updateTrainPositions()
       trainState.speedOrDirectionChanged = false;
     }
 
-    updateTrainNextSignal(train);
+    updateTrainNextSignal(train, true);
+    if(train->state.isOnStationStop)
+      updateTrainNextSignal(train, false);
+
     checkNextSignal(train);
 
     auto updateHelper = [this](Simulator::Train::VehicleItem& item, float speed,
@@ -1407,8 +1442,14 @@ void Simulator::updateTrainPositions()
       continue;
     }
 
-    if(!wasStopped && train->state.nextSignal)
-      train->state.nextSignalDistance -= totalTravelled;
+    if(!wasStopped)
+    {
+      if(train->state.nextSignal.signal)
+        train->state.nextSignal.distance -= totalTravelled;
+
+      if(train->state.prevSignal.signal)
+        train->state.prevSignal.distance += totalTravelled;
+    }
 
     // Go to next train
     it++;
@@ -1504,6 +1545,10 @@ bool Simulator::updateVehiclePosition(VehicleState::Face& face,
       if(it == m_stateData.mainSignals.end())
         return true;
 
+      // Reset station stop state for each passed main signal
+      train.state.isOnStationStop = false;
+      clearTrainSignalCache(m_stateData, &train, false);
+
       MainSignal *signal = it->second;
       const float tickSpeed = signal->maxSpeed * SpeedKmHtoTick;
       if(signal->maxSpeed == 0.0f)
@@ -1514,13 +1559,14 @@ bool Simulator::updateVehiclePosition(VehicleState::Face& face,
         return false;
       }
 
+      // SemiAutomatic train should not depart if already stopped
       if(train.state.mode == TrainState::Mode::SemiAutomatic && train.state.speed == 0)
         return true;
 
       // Apply signal speed on next tick
       // TODO: train max speed
       setTrainSpeed(&train, tickSpeed);
-      train.state.nextSignalDirty = true;
+      train.state.nextSignal.dirty = true;
     }
     else if (isFirst && obj.type == Object::Type::ReverseDirection && train.state.mode != TrainState::Mode::Manual)
     {
@@ -1534,6 +1580,11 @@ bool Simulator::updateVehiclePosition(VehicleState::Face& face,
       trainRemoved_ = true;
       stop = true;
       return false;
+    }
+    else if(isFirst && obj.type == Object::Type::StationStopPoint)
+    {
+      if(train.state.mode != TrainState::Mode::Manual)
+        train.state.isOnStationStop = true;
     }
 
     return true;
@@ -1595,8 +1646,8 @@ bool Simulator::updateVehiclePosition(VehicleState::Face& face,
       }
 
       // If no signal was found rescan on segment change
-      if(!train_.state.nextSignal)
-        train_.state.nextSignalDirty = true;
+      if(!train_.state.nextSignal.signal)
+        train_.state.nextSignal.dirty = true;
 
       auto& nextSegment = staticData.trackSegments[nextSegmentIndex];
 
@@ -1643,8 +1694,8 @@ bool Simulator::updateVehiclePosition(VehicleState::Face& face,
       }
 
       // If no signal was found rescan on segment change
-      if(!train_.state.nextSignal)
-        train_.state.nextSignalDirty = true;
+      if(!train_.state.nextSignal.signal)
+        train_.state.nextSignal.dirty = true;
 
       const auto& nextSegment = staticData.trackSegments[nextSegmentIndex];
 
@@ -2143,6 +2194,12 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
 
                   spawn->state = Spawn::State::Inactive;
                   trackObj.sensorIndex = spawn->address;
+                }
+                else if(type == "station_stop_point")
+                {
+                  trackObj.type = TrackSegment::Object::Type::StationStopPoint;
+                  trackObj.allowedDirection = TrackSegment::Object::AllowedDirections::Both;
+                  trackObj.lateralDiff = 0; // Default on center
                 }
                 else
                 {
@@ -3191,38 +3248,32 @@ bool Simulator::removeVehicle(Vehicle *vehicle)
     return true;
 }
 
-void Simulator::updateTrainNextSignal(Train *train)
+void Simulator::updateTrainNextSignal(Train *train, bool next)
 {
-  if(!train->state.nextSignalDirty && train->state.mode != TrainState::Mode::Manual)
+  Simulator::TrainState::SignalCache &cache = next ? train->state.nextSignal : train->state.prevSignal;
+
+  if(!cache.dirty && train->state.mode != TrainState::Mode::Manual)
     return;
 
   // De-register
-  train->state.nextSignal = nullptr;
-  for(size_t idx : train->state.nextTurnouts)
-  {
-    std::erase_if(m_stateData.turnouts[idx].watchingTrains,
-                  [train](Train *t) -> bool
-    {
-      return t == train;
-    });
-  }
-  train->state.nextTurnouts.clear();
-
-  train->state.nextSignalDirty = false;
-  train->state.nextSignalSegmentIdx = invalidIndex;
+  clearTrainSignalCache(m_stateData, train, next);
 
   if(train->state.mode == TrainState::Mode::Manual)
     return;
   if(train->state.mode == TrainState::Mode::SemiAutomatic && train->state.speed == 0.0f)
     return;
 
-  const Train::VehicleItem& firstItem = train->state.reverse ? train->vehicles.back() : train->vehicles.front();
-  const VehicleState::Face& face = (firstItem.reversed == train->state.reverse) ? firstItem.vehicle->state.front : firstItem.vehicle->state.rear;
+  if(!train->state.isOnStationStop && !next)
+    return; // Only look at previous signal if inside a station stop
+
+  bool trainReverse = (train->state.reverse == next);
+  const Train::VehicleItem& firstItem = trainReverse ? train->vehicles.back() : train->vehicles.front();
+  const VehicleState::Face& face = (firstItem.reversed == trainReverse) ? firstItem.vehicle->state.front : firstItem.vehicle->state.rear;
 
   float totalDistance = 0.0f;
   float signalPositionInSegment = 0.0f;
 
-  auto helper = [&totalDistance, &signalPositionInSegment, train, this](bool dirFwd, size_t segmentId, float startPos) -> MainSignal *
+  auto helper = [&cache, &totalDistance, &signalPositionInSegment, train, this](bool dirFwd, size_t segmentId, float startPos) -> MainSignal *
   {
     const auto &curSegment = staticData.trackSegments[segmentId];
 
@@ -3232,7 +3283,7 @@ void Simulator::updateTrainNextSignal(Train *train)
     case TrackSegment::Type::TurnoutCurved:
     case TrackSegment::Type::Turnout3Way:
     {
-      train->state.nextTurnouts.push_back(curSegment.turnout.index);
+      cache.turnouts.push_back(curSegment.turnout.index);
       m_stateData.turnouts[curSegment.turnout.index].watchingTrains.push_back(train);
       break;
     }
@@ -3293,17 +3344,17 @@ void Simulator::updateTrainNextSignal(Train *train)
   };
 
   size_t segmentIndex = face.segmentIndex;
-  bool dirFwd = face.segmentDirectionInverted == train->state.reverse;
+  bool dirFwd = face.segmentDirectionInverted == trainReverse;
   float startPos = face.distance;
 
   while(totalDistance < 800)
   {
     if(MainSignal *s = helper(dirFwd, segmentIndex, startPos))
     {
-      train->state.nextSignal = s;
-      train->state.nextSignalSegmentIdx = segmentIndex;
-      train->state.nextSignalDistance = totalDistance;
-      train->state.nextSignalPosInSegment = signalPositionInSegment;
+      cache.signal = s;
+      cache.segmentIdx = segmentIndex;
+      cache.distance = totalDistance;
+      cache.posInSegment = signalPositionInSegment;
       return;
     }
 
@@ -3312,7 +3363,7 @@ void Simulator::updateTrainNextSignal(Train *train)
     const auto nextSegmentIndex = getNextSegmentIndex(curSegment, dirFwd, m_stateData);
     if(nextSegmentIndex == invalidIndex)
     {
-      return; // no next segment
+      break; // no next segment
     }
 
     auto& nextSegment = staticData.trackSegments[nextSegmentIndex];
@@ -3323,22 +3374,15 @@ void Simulator::updateTrainNextSignal(Train *train)
     if(!dirFwd)
       startPos = getSegmentLength(nextSegment, m_stateData);
   }
+
+  // No signal found
+  clearTrainSignalCache(m_stateData, train, next);
 }
 
 void Simulator::destroyTrain(Train *train, bool removeWagons)
 {
-  train->state.nextSignal = nullptr;
-  train->state.nextSignalSegmentIdx = invalidIndex;
-
-  for(size_t idx : train->state.nextTurnouts)
-  {
-    std::erase_if(m_stateData.turnouts[idx].watchingTrains,
-                  [train](Train *t) -> bool
-    {
-      return t == train;
-    });
-  }
-  train->state.nextTurnouts.clear();
+  clearTrainSignalCache(m_stateData, train, true);
+  clearTrainSignalCache(m_stateData, train, false);
 
   for(const auto &item : train->vehicles)
   {
@@ -3358,7 +3402,7 @@ bool Simulator::checkNextSignal(Train *train)
   if(train->state.mode == TrainState::Mode::SemiAutomatic && train->state.speed == 0.0f)
     return true;
 
-  if(!train->state.nextSignal)
+  if(!train->state.nextSignal.signal)
   {
     if(train->state.mode == TrainState::Mode::Automatic && train->state.speed < 30 * SpeedKmHtoTick)
     {
@@ -3370,7 +3414,7 @@ bool Simulator::checkNextSignal(Train *train)
   const Train::VehicleItem& firstItem = train->state.reverse ? train->vehicles.back() : train->vehicles.front();
   const VehicleState::Face& face = (firstItem.reversed == train->state.reverse) ? firstItem.vehicle->state.front : firstItem.vehicle->state.rear;
 
-  if(!train->state.nextSignal)
+  if(!train->state.nextSignal.signal)
   {
     const float length = getSegmentLength(staticData.trackSegments[face.segmentIndex], m_stateData);
     if(length >= 100)
@@ -3380,7 +3424,7 @@ bool Simulator::checkNextSignal(Train *train)
       const bool dirFwd = face.segmentDirectionInverted == train->state.reverse;
       if((dirFwd && (length - face.distance) < 600) || (!dirFwd && face.distance < 600))
       {
-        train->state.nextSignalDirty = true;
+        train->state.nextSignal.dirty = true;
       }
     }
     return true;
@@ -3388,9 +3432,9 @@ bool Simulator::checkNextSignal(Train *train)
 
 
 
-  const float totalDistance = train->state.nextSignalDistance;
+  const float totalDistance = train->state.nextSignal.distance;
 
-  if(totalDistance <= 650 && train->state.speed >= train->state.nextSignal->maxSpeed * SpeedKmHtoTick)
+  if(totalDistance <= 650 && train->state.speed >= train->state.nextSignal.signal->maxSpeed * SpeedKmHtoTick)
   {
     // Decrease speed
     float targetSpeed = train->speedMax;
@@ -3420,7 +3464,7 @@ bool Simulator::checkNextSignal(Train *train)
     {
       if(totalDistance < entry.first)
       {
-        targetSpeed = (train->state.nextSignal->maxSpeed + entry.second) * SpeedKmHtoTick;
+        targetSpeed = (train->state.nextSignal.signal->maxSpeed + entry.second) * SpeedKmHtoTick;
         break;
       }
     }
@@ -3435,7 +3479,7 @@ bool Simulator::checkNextSignal(Train *train)
     }
   }
 
-  const bool underSignalSpeed = train->state.speed < train->state.nextSignal->maxSpeed * SpeedKmHtoTick;
+  const bool underSignalSpeed = train->state.speed < train->state.nextSignal.signal->maxSpeed * SpeedKmHtoTick;
   if(train->state.speed < 30 * SpeedKmHtoTick && (totalDistance > 30 || underSignalSpeed))
   {
     // Get near at 30 km/h to next signal if stopped or currently at less than 30 km/h

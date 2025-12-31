@@ -129,7 +129,8 @@ public:
             ReverseDirection = 2,
             RemoveTrain = 3,
             SpawnTrain = 4,
-            AuxSignal = 5
+            AuxSignal = 5,
+            StationStopPoint = 6
         };
 
         Point pos;
@@ -429,12 +430,19 @@ public:
     };
 
     Mode mode = Mode::SemiAutomatic;
-    MainSignal *nextSignal = nullptr;
-    size_t nextSignalSegmentIdx = invalidIndex;
-    float nextSignalDistance = 0.0f;
-    float nextSignalPosInSegment = 0.0f;
-    std::vector<size_t> nextTurnouts;
-    bool nextSignalDirty = false;
+
+    struct SignalCache
+    {
+      MainSignal *signal = nullptr;
+      std::vector<size_t> turnouts;
+      size_t segmentIdx = invalidIndex;
+      float distance = 0.0f;
+      float posInSegment = 0.0f;
+      bool dirty = false;
+    };
+
+    SignalCache nextSignal, prevSignal;
+    bool isOnStationStop = false;
   };
 
   struct Train;
@@ -644,7 +652,7 @@ private:
                                StaticData &data, StateData &stateData,
                                TrackSegment &segment);
 
-  void updateTrainNextSignal(Train *train);
+  void updateTrainNextSignal(Train *train, bool next);
   bool checkNextSignal(Train *train);
 };
 
