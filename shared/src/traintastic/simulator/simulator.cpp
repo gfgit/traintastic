@@ -571,20 +571,40 @@ void Simulator::setTrainDirection(Train *train, bool reverse)
   if(train->state.reverse != reverse)
   {
     train->state.reverse = reverse;
+    setTrainSpeed(train, 0.0, true); // Stop train when changing direction
     train->state.speedOrDirectionChanged = true;
     train->state.nextSignal.dirty = true;
     train->state.prevSignal.dirty = true;
   }
 }
 
-void Simulator::setTrainSpeed(Train *train, float speed)
+void Simulator::setTrainSpeed(Train *train, float speed, bool immediate)
 {
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
   speed = std::clamp(speed, 0.0f, train->speedMax);
-  if(train->state.speed != speed)
+  if(immediate && train->state.speed != speed)
   {
     train->state.speed = speed;
+    train->state.targetSpeed = speed; // Also adjust target if immediate
+    train->state.waitToStart_ms = 0.0;
+    train->state.speedOrDirectionChanged = true;
+  }
+  else if(!immediate && train->state.targetSpeed != speed)
+  {
+    const float oldTargetSpeed = train->state.targetSpeed;
+    train->state.targetSpeed = speed;
+    if(train->state.targetSpeed > 0.0 && train->state.waitToStart_ms == 0 &&
+       (train->state.speed == 0.0 || oldTargetSpeed == 0.0))
+    {
+      // When train was stopped or about to stop and signal becomes clear, add a bit of delay
+      train->state.waitToStart_ms = TrainState::SecondsWaitFromStandstill * 1000.0;
+    }
+    else if(train->state.targetSpeed < train->state.speed)
+    {
+      train->state.waitToStart_ms = 0.0;
+    }
+
     train->state.speedOrDirectionChanged = true;
   }
 }
@@ -621,7 +641,7 @@ void Simulator::stopAllTrains()
   for(auto& it : m_stateData.trains)
   {
     auto *train = it.second;
-    setTrainSpeed(train, 0.0f);
+    setTrainSpeed(train, 0.0f, true);
     setTrainMode(train, TrainState::Mode::Manual);
   }
 }
@@ -1327,6 +1347,12 @@ void Simulator::updateTrainPositions()
     return;
   }
 
+  constexpr float AccelerationUnitConversion = 1.0 / (1000.0 * 1000.0) * tickRate.count() * tickRate.count(); // m/s^2 to m/tick^2
+  const float AccelerationConversionFactor = m_stateData.trainSpeedFactor * AccelerationUnitConversion;
+
+  // Reduce a bit higher trainSpeedFactor so train does not depart instantly
+  const float TickWaitFactor = 1.0 + (m_stateData.trainSpeedFactor - 1.0) / 3.0;
+
   for(auto it = m_stateData.trains.begin(); it != m_stateData.trains.end(); )
   {
     Train* train = it->second;
@@ -1411,7 +1437,7 @@ void Simulator::updateTrainPositions()
             if(trainRemoved)
               break;
 
-            setTrainSpeed(train, 0.0f);
+            setTrainSpeed(train, 0.0f, true);
             if(isFirst)
               wasStopped = true;
 
@@ -1431,7 +1457,7 @@ void Simulator::updateTrainPositions()
             if(trainRemoved)
               break;
 
-            setTrainSpeed(train, 0.0f);
+            setTrainSpeed(train, 0.0f, true);
             if(isFirst)
               wasStopped = true;
 
@@ -1464,6 +1490,32 @@ void Simulator::updateTrainPositions()
 
       if(train->state.prevSignal.signal)
         train->state.prevSignal.distance += totalTravelled;
+
+      if(train->state.waitToStart_ms > 0.0)
+      {
+        train->state.waitToStart_ms -= TickWaitFactor * tickRate.count();
+        if(train->state.waitToStart_ms < 0.0)
+          train->state.waitToStart_ms = 0.0;
+      }
+
+      if(train->state.waitToStart_ms == 0.0)
+      {
+        // Accelerate
+        if(train->state.targetSpeed > train->state.speed)
+        {
+          const float newSpeed = std::clamp(train->state.speed + TrainState::AccelerationRate_ms2 * AccelerationConversionFactor,
+                                            0.0f, train->state.targetSpeed);
+          train->state.speed = newSpeed;
+          train->state.speedOrDirectionChanged = true;
+        }
+        else if(train->state.targetSpeed < train->state.speed)
+        {
+          const float newSpeed = std::clamp(train->state.speed - TrainState::DecelerationRate_ms2 * AccelerationConversionFactor,
+                                            train->state.targetSpeed, train->speedMax);
+          train->state.speed = newSpeed;
+          train->state.speedOrDirectionChanged = true;
+        }
+      }
     }
 
     // Go to next train
@@ -3487,7 +3539,9 @@ bool Simulator::checkNextSignal(Train *train)
     targetSpeed = std::min(targetSpeed, train->speedMax);
     if(targetSpeed < train->state.speed)
     {
-      setTrainSpeed(train, targetSpeed);
+      // TODO: adjust deceleration so that it doest not SPAD
+      // Then we can remove immediate = true
+      setTrainSpeed(train, targetSpeed, true);
 
       if(train->state.speed == 0.0)
         return false; // Stop

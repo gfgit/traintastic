@@ -419,8 +419,15 @@ public:
   struct TrainState
   {
     float speed = 0.0f;
+    float targetSpeed = 0.0f;
+    float waitToStart_ms = 0;
     bool reverse = false;
     bool speedOrDirectionChanged = false;
+
+    // TODO: make adjustable
+    static constexpr int SecondsWaitFromStandstill = 8;
+    static constexpr float AccelerationRate_ms2 = 0.6;
+    static constexpr float DecelerationRate_ms2 = 0.75;
 
     enum class Mode
     {
@@ -546,7 +553,7 @@ public:
 
   bool isTrainDirectionInverted(Train *train);
   void setTrainDirection(Train *train, bool reverse);
-  void setTrainSpeed(Train *train, float speed);
+  void setTrainSpeed(Train *train, float speed, bool immediate = false);
   void applyTrainSpeedDelta(Train *train, float delta);
   void setTrainMode(Train *train, TrainState::Mode mode);
   void stopAllTrains();
@@ -600,6 +607,7 @@ public:
   }
 
 private:
+  friend struct TrainState;
   constexpr static auto tickRate = std::chrono::milliseconds(1000 / 30);
   constexpr static auto handShakeRate = std::chrono::milliseconds(1000);
   constexpr static auto signalBlinkRate = std::chrono::milliseconds(275);

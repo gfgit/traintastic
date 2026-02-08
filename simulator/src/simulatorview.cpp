@@ -1900,7 +1900,7 @@ void SimulatorView::keyPressEvent(QKeyEvent* e)
       if(train)
       {
         m_simulator->setTrainMode(train, Simulator::TrainState::Mode::Manual);
-        m_simulator->setTrainSpeed(train, 0.0f);
+        m_simulator->setTrainSpeed(train, 0.0f, true);
       }
       break;
     }
