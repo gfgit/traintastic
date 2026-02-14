@@ -1498,7 +1498,9 @@ void Simulator::updateTrainPositions()
       if(train->state.waitToStart_ms > 0.0)
       {
         train->state.waitToStart_ms -= TickWaitFactor * tickRate.count();
-        if(train->state.waitToStart_ms < 0.0)
+
+        // Prevent going negative, also ignore wait if in Manual mode
+        if(train->state.waitToStart_ms < 0.0 || train->state.mode == TrainState::Mode::Manual)
           train->state.waitToStart_ms = 0.0;
       }
 
