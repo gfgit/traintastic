@@ -1110,6 +1110,10 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
               Train *train = m_stateData.trains.at(trainName);
               setTrainDirection(train, !s->forward);
               setTrainMode(train, TrainState::Mode::Automatic);
+
+              // Give some default speed
+              train->state.speed = std::clamp(s->defaultSpeedKmH * SpeedKmHtoTick, 0.0f, train->speedMax);
+              train->state.targetSpeed = std::clamp(train->speedMax * 0.8f, train->state.speed, train->speedMax);
               s->state = Spawn::State::WaitingReset;
             }
             else
@@ -2257,6 +2261,7 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                   spawn->segmentIndex = data.trackSegments.size(); // TODO: HACK still has to be inserted
                   spawn->maxWagons = item.value("max_wagons", spawn->maxWagons);
                   spawn->wagonLength = item.value("wagons_length", spawn->wagonLength);
+                  spawn->defaultSpeedKmH = item.value("speed", spawn->defaultSpeedKmH);
                   stateData.spawns.insert({spawn->address, spawn});
 
                   spawn->state = Spawn::State::Inactive;
@@ -3471,7 +3476,7 @@ bool Simulator::checkNextSignal(Train *train)
 
   if(!train->state.nextSignal.signal)
   {
-    if(train->state.mode == TrainState::Mode::Automatic && train->state.speed < 30 * SpeedKmHtoTick)
+    if(train->state.mode == TrainState::Mode::Automatic && train->state.targetSpeed < 30 * SpeedKmHtoTick)
     {
       // Start at 30 km/h until next signal is found
       setTrainSpeed(train, 30 * SpeedKmHtoTick);
@@ -3549,7 +3554,7 @@ bool Simulator::checkNextSignal(Train *train)
   }
 
   const bool underSignalSpeed = train->state.speed < train->state.nextSignal.signal->maxSpeed * SpeedKmHtoTick;
-  if(train->state.speed < 30 * SpeedKmHtoTick && (totalDistance > 30 || underSignalSpeed))
+  if(train->state.targetSpeed < 30 * SpeedKmHtoTick && (totalDistance > 30 || underSignalSpeed))
   {
     // Get near at 30 km/h to next signal if stopped or currently at less than 30 km/h
     // If stopped at less than 30 meters from signal, remain stopped

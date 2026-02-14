@@ -404,6 +404,7 @@ public:
 
     size_t maxWagons = 20;
     float wagonLength = 20.0f;
+    float defaultSpeedKmH = 0.0f;
     bool forward = true;
 
     enum class State
