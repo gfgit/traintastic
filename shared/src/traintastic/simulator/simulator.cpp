@@ -32,7 +32,7 @@
 static std::mt19937 rng = std::mt19937(std::random_device{}());
 
 template <typename T>
-static inline bool vec_contains(const std::vector<T>& vec, const T& item)
+inline bool vec_contains(const std::vector<T>& vec, const T& item)
 {
   return std::find(vec.begin(), vec.end(), item) != vec.end();
 }
@@ -363,7 +363,7 @@ void clearTrainSignalCache(Simulator::StateData &data, Simulator::Train *train, 
   cache.posInSegment = 0.0;
   cache.dirty = false;
 
-  for(size_t idx : cache.turnouts)
+  for(const size_t idx : cache.turnouts)
   {
     std::erase_if(data.turnouts[idx].watchingTrains,
                   [train](Simulator::Train *t) -> bool
@@ -467,7 +467,7 @@ void Simulator::start(bool discoverable)
       if(m_serverEnabled)
       {
         boost::system::error_code ec;
-        boost::asio::ip::tcp::endpoint endpoint(m_serverLocalHostOnly ? boost::asio::ip::address_v4::loopback() : boost::asio::ip::address_v4::any(), m_serverPort);
+        const boost::asio::ip::tcp::endpoint endpoint(m_serverLocalHostOnly ? boost::asio::ip::address_v4::loopback() : boost::asio::ip::address_v4::any(), m_serverPort);
 
         m_acceptor.open(endpoint.protocol(), ec);
 
@@ -1081,7 +1081,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
           static const size_t maxTrains = 10000;
           while(count < maxTrains)
           {
-            std::string candidate = baseName + std::to_string(count);
+            const std::string candidate = baseName + std::to_string(count);
             if(!m_stateData.trains.contains(candidate))
               break;
 
@@ -1092,8 +1092,8 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
           {
             // Spawn a train
 
-            std::string trainName = baseName + std::to_string(count);
-            std::string vehicleBaseName = trainName + ".";
+            const std::string trainName = baseName + std::to_string(count);
+            const std::string vehicleBaseName = trainName + ".";
 
             std::uniform_int_distribution<size_t> dist(1, s->maxWagons);
             size_t numWagons = dist(rng);
@@ -1734,7 +1734,7 @@ bool Simulator::updateVehiclePosition(VehicleState::Face& face,
       if(!train_.state.nextSignal.signal)
         train_.state.nextSignal.dirty = true;
 
-      auto& nextSegment = staticData.trackSegments[nextSegmentIndex];
+      const auto& nextSegment = staticData.trackSegments[nextSegmentIndex];
 
       if(isTurnoutUnknownState(nextSegment, m_stateData))
       {
@@ -1825,7 +1825,7 @@ bool Simulator::updateVehiclePosition(VehicleState::Face& face,
 
   // Calculate position:
   {
-    auto& segment = staticData.trackSegments[face.segmentIndex];
+    const auto& segment = staticData.trackSegments[face.segmentIndex];
     size_t curveIndex = invalidIndex;
 
     if(isStraight(segment))
@@ -2181,7 +2181,7 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                     if(signal->square)
                       signal->hasSquareArrowLight = item.value("arrow_light", false);
 
-                    size_t fixedLimit = item.value("fixed_limit", size_t(0));
+                    const size_t fixedLimit = item.value("fixed_limit", size_t(0));
                     switch (fixedLimit)
                     {
                     case 30:
@@ -2274,7 +2274,7 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                                                   TrackSegment::Object::AllowedDirections::Backwards;
                   trackObj.lateralDiff = 0; // Default on center
 
-                  size_t spawnAddress = item.value("address", invalidAddress);
+                  const size_t spawnAddress = item.value("address", invalidAddress);
                   if(spawnAddress == invalidAddress || stateData.spawns.contains(spawnAddress))
                     continue;
 
@@ -2301,7 +2301,7 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                     continue;
                 }
 
-                std::string_view allowedDir = item.value<std::string_view>("allowed_dir", {});
+                const std::string_view allowedDir = item.value<std::string_view>("allowed_dir", {});
                 if(allowedDir == "both")
                     trackObj.allowedDirection = TrackSegment::Object::AllowedDirections::Both;
                 if(allowedDir == "forward")
@@ -2841,7 +2841,7 @@ Simulator::StaticData Simulator::load(const nlohmann::json& world, StateData& st
         continue;
       }
 
-      std::string_view name = object.value<std::string_view>("name", {});
+      const std::string_view name = object.value<std::string_view>("name", {});
       if(name.empty() || stateData.vehicles.contains(name))
         continue;
 
@@ -2862,7 +2862,7 @@ Simulator::StaticData Simulator::load(const nlohmann::json& world, StateData& st
         continue;
       }
 
-      std::string_view name = object.value<std::string_view>("name", {});
+      const std::string_view name = object.value<std::string_view>("name", {});
       if(name.empty() || stateData.trains.contains(name))
         continue;
 
@@ -3360,7 +3360,7 @@ void Simulator::updateTrainNextSignal(Train *train, bool next)
   if(!train->state.isOnStationStop && !next)
     return; // Only look at previous signal if inside a station stop
 
-  bool trainReverse = (train->state.reverse == next);
+  const bool trainReverse = (train->state.reverse == next);
   const Train::VehicleItem& firstItem = trainReverse ? train->vehicles.back() : train->vehicles.front();
   const VehicleState::Face& face = (firstItem.reversed == trainReverse) ? firstItem.vehicle->state.front : firstItem.vehicle->state.rear;
 
@@ -3460,7 +3460,7 @@ void Simulator::updateTrainNextSignal(Train *train, bool next)
       break; // no next segment
     }
 
-    auto& nextSegment = staticData.trackSegments[nextSegmentIndex];
+    const auto& nextSegment = staticData.trackSegments[nextSegmentIndex];
     dirFwd = nextSegment.nextSegmentIndex[0] == segmentIndex;
     segmentIndex = nextSegmentIndex;
 
