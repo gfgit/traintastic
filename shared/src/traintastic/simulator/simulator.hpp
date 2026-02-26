@@ -613,6 +613,7 @@ private:
   constexpr static auto tickRate = std::chrono::milliseconds(1000 / 30);
   constexpr static auto handShakeRate = std::chrono::milliseconds(1000);
   constexpr static auto signalBlinkRate = std::chrono::milliseconds(275);
+  constexpr static auto syncSensorRate = std::chrono::milliseconds(70);
 
   constexpr static float defaultSpeedKmH = 200;
   constexpr static float SpeedKmHtoTick = tickRate.count() / 3600.0;
@@ -627,6 +628,7 @@ private:
   boost::asio::ip::udp::endpoint m_remoteEndpoint;
 
   boost::asio::steady_timer m_signalBlinkStateTimer;
+  boost::asio::steady_timer m_syncSensorStateTimer;
 
   std::thread m_thread;
   mutable std::recursive_mutex m_stateMutex;
@@ -645,6 +647,7 @@ private:
   void tick();
   void handShake();
   void blinkSignals();
+  void syncSensorState();
 
   void updateTrainPositions();
   bool updateVehiclePosition(VehicleState::Face& face,

@@ -381,6 +381,7 @@ Simulator::Simulator(const nlohmann::json& world)
   , m_acceptor{m_ioContext}
   , m_socketUDP{m_ioContext}
   , m_signalBlinkStateTimer{m_ioContext}
+  , m_syncSensorStateTimer{m_ioContext}
 {
 
 }
@@ -494,9 +495,12 @@ void Simulator::start(bool discoverable)
 
         accept();
       }
+
       tick();
       handShake();
-      blinkSignals();
+      //blinkSignals();
+      syncSensorState();
+
       m_ioContext.run();
     });
 }
@@ -521,6 +525,7 @@ void Simulator::stop()
   m_tickTimer.cancel();
   m_handShakeTimer.cancel();
   m_signalBlinkStateTimer.cancel();
+  m_syncSensorStateTimer.cancel();
   if(m_thread.joinable())
   {
     m_thread.join();
@@ -1021,7 +1026,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
           if((m.channel != invalidAddress && m.channel != sensor.channel) || sensor.type == Sensor::Type::AxleCounter)
             continue;
 
-          auto& sensorState = m_stateData.sensors[i];
+          const auto& sensorState = m_stateData.sensors[i];
           connection->send(SimulatorProtocol::SensorChanged(sensor.channel, sensor.address, 0, sensorState.value));
         }
         break;
@@ -1353,6 +1358,52 @@ void Simulator::blinkSignals()
     m_stateData.signalBlinkState++;
     if(m_stateData.signalBlinkState >= 8)
       m_stateData.signalBlinkState = 0;
+  }
+}
+
+void Simulator::syncSensorState()
+{
+  m_syncSensorStateTimer.expires_after(syncSensorRate);
+  m_syncSensorStateTimer.async_wait(
+      [this](std::error_code ec)
+      {
+        if(!ec)
+        {
+          syncSensorState();
+        }
+      });
+
+  std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+  for(const auto& connection : m_connections)
+  {
+    size_t idx = connection->m_lastSyncedSensorIdx;
+    idx++;
+    while(idx < m_stateData.sensors.size())
+    {
+      const auto& sensor = staticData.sensors[idx];
+
+      // Axle counter sensor send diffs so there is no point in querying them
+      if(sensor.type == Sensor::Type::AxleCounter)
+      {
+        idx++;
+        continue;
+      }
+
+      if(!connection->subscribedChannels.empty() &&
+          !vec_contains(connection->subscribedChannels, sensor.channel))
+      {
+        idx++;
+        continue;
+      }
+
+      connection->m_lastSyncedSensorIdx = idx;
+      const auto& sensorState = m_stateData.sensors[idx];
+      connection->send(SimulatorProtocol::SensorChanged(sensor.channel, sensor.address, 0, sensorState.value));
+      break;
+    }
+
+    if(idx >= m_stateData.sensors.size())
+      connection->m_lastSyncedSensorIdx = 0;
   }
 }
 

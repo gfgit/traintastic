@@ -45,6 +45,7 @@ private:
 
 public:
   std::vector<uint16_t> subscribedChannels;
+  size_t m_lastSyncedSensorIdx = 0;
 
 private:
   bool m_handShakeResponseReceived = true;
