@@ -25,9 +25,17 @@
 #include <bit>
 #include <format>
 #include <random>
+#include <algorithm>
+#include <chrono>
 #include "protocol.hpp"
 
 static std::mt19937 rng = std::mt19937(std::random_device{}());
+
+template <typename T>
+static inline bool vec_contains(const std::vector<T>& vec, const T& item)
+{
+  return std::find(vec.begin(), vec.end(), item) != vec.end();
+}
 
 void Simulator::updateView(Simulator::StaticData::View& view, Simulator::Point point)
 {
@@ -995,24 +1003,28 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       const auto& m = static_cast<const RequestChannel&>(message);
       std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-      const size_t count = staticData.sensors.size();
-      for(size_t i = 0; i < count; ++i)
+      for(const std::shared_ptr<SimulatorConnection>& connection : m_connections)
       {
-        const auto& sensor = staticData.sensors[i];
-
-        // Axle counter sensor send diffs so there is no point in querying them
-        if((m.channel != invalidAddress && m.channel != sensor.channel) || sensor.type == Sensor::Type::AxleCounter)
+        if(connection->connectionId() != fromConnId)
           continue;
 
-        auto& sensorState = m_stateData.sensors[i];
+        // Subscribe client to this channel
+        if(!vec_contains(connection->subscribedChannels, m.channel))
+          connection->subscribedChannels.push_back(m.channel);
 
-        for(const auto& connection : m_connections)
+        const size_t count = staticData.sensors.size();
+        for(size_t i = 0; i < count; ++i)
         {
-          if(connection->connectionId() != fromConnId)
+          const auto& sensor = staticData.sensors[i];
+
+          // Axle counter sensor send diffs so there is no point in querying them
+          if((m.channel != invalidAddress && m.channel != sensor.channel) || sensor.type == Sensor::Type::AxleCounter)
             continue;
+
+          auto& sensorState = m_stateData.sensors[i];
           connection->send(SimulatorProtocol::SensorChanged(sensor.channel, sensor.address, 0, sensorState.value));
-          break;
         }
+        break;
       }
       break;
     }
@@ -1900,7 +1912,15 @@ void Simulator::updateSensors()
     if(sensorState.value != sensorValue || axleCount != 0)
     {
       sensorState.value = sensorValue;
-      send(SimulatorProtocol::SensorChanged(sensor.channel, sensor.address, axleCount, sensorState.value));
+
+      for(const auto& connection : m_connections)
+      {
+        // Only send to subscribed clients or clients with no subscriptions
+        if(!connection->subscribedChannels.empty() &&
+            !vec_contains(connection->subscribedChannels, sensor.channel))
+          continue;
+        connection->send(SimulatorProtocol::SensorChanged(sensor.channel, sensor.address, axleCount, sensorState.value));
+      }
     }
   }
 }

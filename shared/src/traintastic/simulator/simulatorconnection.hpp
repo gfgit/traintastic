@@ -42,6 +42,11 @@ private:
   std::array<std::byte, 1024> m_writeBuffer;
   size_t m_writeBufferOffset = 0;
   size_t m_connectionId = 0;
+
+public:
+  std::vector<uint16_t> subscribedChannels;
+
+private:
   bool m_handShakeResponseReceived = true;
 
   void read();
