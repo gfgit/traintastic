@@ -613,7 +613,7 @@ private:
   constexpr static auto tickRate = std::chrono::milliseconds(1000 / 30);
   constexpr static auto handShakeRate = std::chrono::milliseconds(1000);
   constexpr static auto signalBlinkRate = std::chrono::milliseconds(275);
-  constexpr static auto syncSensorRate = std::chrono::milliseconds(70);
+  constexpr static auto syncSensorRate = std::chrono::milliseconds(150);
 
   constexpr static float defaultSpeedKmH = 200;
   constexpr static float SpeedKmHtoTick = tickRate.count() / 3600.0;
