@@ -265,7 +265,7 @@ void RailVehicle::setDecoder(const std::shared_ptr<Decoder> &newDecoder)
 
   //Connect to new decoder
   decoderConnection = decoder->decoderChanged.connect(
-    [this](Decoder& self, DecoderChangeFlags flags, uint32_t /*functionNumber*/)
+    [this](Decoder& self, DecoderChangeFlags flags, uint32_t functionNumber)
     {
       if(!activeTrain)
         return;
@@ -285,6 +285,9 @@ void RailVehicle::setDecoder(const std::shared_ptr<Decoder> &newDecoder)
       {
         activeTrain->emergencyStop.setValue(self.emergencyStop);
       }
+
+      // TODO: pass also when no active train???
+      onDecoderChanged(self, flags, functionNumber);
     });
 }
 
@@ -292,4 +295,9 @@ void RailVehicle::setEmergencyStop(bool value)
 {
   if(decoder)
     decoder->emergencyStop = value;
+}
+
+void RailVehicle::onDecoderChanged(Decoder &/*decoderRef*/, DecoderChangeFlags /*flags*/, uint32_t /*functionNumber*/)
+{
+
 }

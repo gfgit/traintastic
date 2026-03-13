@@ -2420,6 +2420,14 @@
         "definition": "Board properties"
     },
     {
+        "term": "qtapp:export_speed_curve",
+        "definition": "Export speed curve"
+    },
+    {
+        "term": "qtapp:export_speed_curve_failed",
+        "definition": "Export speed curve failed"
+    },
+    {
         "term": "qtapp:export_world_failed",
         "definition": "Export world failed"
     },
@@ -2428,8 +2436,20 @@
         "definition": "Grid"
     },
     {
+        "term": "qtapp:import_speed_curve",
+        "definition": "Import speed curve"
+    },
+    {
+        "term": "qtapp:import_speed_curve_failed",
+        "definition": "Import speed curve failed"
+    },
+    {
         "term": "qtapp:import_world_failed",
         "definition": "Import world failed"
+    },
+    {
+        "term": "qtapp:invalid_speed_curve",
+        "definition": "Invalid speed curve"
     },
     {
         "term": "qtapp:next",
@@ -2454,6 +2474,10 @@
     {
         "term": "qtapp:toggle_smoke",
         "definition": "Toggle smoke"
+    },
+    {
+        "term": "qtapp:traintastic_json_speed_curve",
+        "definition": "Traintastic Speed Curve JSON"
     },
     {
         "term": "qtapp:traintastic_world",
