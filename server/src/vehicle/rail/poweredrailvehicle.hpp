@@ -23,9 +23,14 @@
 #ifndef TRAINTASTIC_SERVER_VEHICLE_RAIL_POWEREDRAILVEHICLE_HPP
 #define TRAINTASTIC_SERVER_VEHICLE_RAIL_POWEREDRAILVEHICLE_HPP
 
+#include <memory>
 #include "railvehicle.hpp"
 #include <traintastic/enum/direction.hpp>
 #include "../../core/powerproperty.hpp"
+#include "../../core/method.hpp"
+#include "../../core/objectproperty.hpp"
+
+class VehicleSpeedCurve;
 
 class PoweredRailVehicle : public RailVehicle
 {
@@ -39,17 +44,23 @@ class PoweredRailVehicle : public RailVehicle
 
     void decoderChanged(const std::shared_ptr<Decoder>& newDecoder) override;
 
+    friend class VehicleSpeedCurve;
+    void updateMaxSpeed();
+
     boost::signals2::connection decoderConnection;
 
     friend class Train;
+    float lastTrainSpeedStep = 0;
     Direction lastTrainSetDirection = Direction::Unknown;
 
   public:
     PowerProperty power;
+    ObjectProperty<VehicleSpeedCurve> speedCurve;
+    Property<double> maxAccelerationRate; // m/s^2
+    Property<double> maxBrakingRate; // m/s^2
 
     void setDirection(Direction value);
     void setEmergencyStop(bool value);
-    void setSpeed(double kmph);
 };
 
 #endif

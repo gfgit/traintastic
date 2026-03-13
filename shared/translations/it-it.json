@@ -2368,6 +2368,14 @@
         "definition": "Propriet\u00e0 Lavagna"
     },
     {
+        "term": "qtapp:export_speed_curve",
+        "definition": "Esporta curva velocit\u00e0"
+    },
+    {
+        "term": "qtapp:export_speed_curve_failed",
+        "definition": "Esportazione curva velocit\u00e0 fallita"
+    },
+    {
         "term": "qtapp:export_world_failed",
         "definition": "Esportazione mondo fallita"
     },
@@ -2376,8 +2384,20 @@
         "definition": "Griglia"
     },
     {
+        "term": "qtapp:import_speed_curve",
+        "definition": "Importa curva velocit\u00e0"
+    },
+    {
+        "term": "qtapp:import_speed_curve_failed",
+        "definition": "Importazione curva velocit\u00e0 fallita"
+    },
+    {
         "term": "qtapp:import_world_failed",
         "definition": "Importazione mondo fallita"
+    },
+    {
+        "term": "qtapp:invalid_speed_curve",
+        "definition": "Curva velocit\u00e0 non valida"
     },
     {
         "term": "qtapp:next",
@@ -2402,6 +2422,10 @@
     {
         "term": "qtapp:toggle_smoke",
         "definition": "Abilita/Disabilita fumo"
+    },
+    {
+        "term": "qtapp:traintastic_json_speed_curve",
+        "definition": "Traintastic Curva velocit\u00e0 JSON"
     },
     {
         "term": "qtapp:traintastic_world",

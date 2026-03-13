@@ -21,9 +21,13 @@
  */
 
 #include "poweredrailvehicle.hpp"
+#include "vehiclespeedcurve.hpp"
 #include "../../core/attributes.hpp"
+#include "../../core/objectproperty.tpp"
+#include "../../core/method.tpp"
 #include "../../utils/almostzero.hpp"
 #include "../../utils/displayname.hpp"
+#include "../../utils/utf8.hpp"
 #include "../../world/world.hpp"
 #include "../../hardware/decoder/decoder.hpp"
 #include "../../hardware/decoder/decoderchangeflags.hpp"
@@ -32,6 +36,9 @@
 PoweredRailVehicle::PoweredRailVehicle(World& world, std::string_view id_)
   : RailVehicle(world, id_)
   , power{*this, "power", 0, PowerUnit::KiloWatt, PropertyFlags::ReadWrite | PropertyFlags::Store}
+  , speedCurve{this, "speed_curve", nullptr, PropertyFlags::ReadOnly | PropertyFlags::SubObject | PropertyFlags::Store | PropertyFlags::ScriptReadOnly}
+  , maxAccelerationRate{this, "max_acceleration_rate", 3.0, PropertyFlags::ReadWrite | PropertyFlags::ScriptReadOnly | PropertyFlags::Store}
+  , maxBrakingRate{this, "max_braking_rate", 2.0, PropertyFlags::ReadWrite | PropertyFlags::ScriptReadOnly | PropertyFlags::Store}
 {
   const bool editable = contains(m_world.state.value(), WorldState::Edit);
 
@@ -41,6 +48,22 @@ PoweredRailVehicle::PoweredRailVehicle(World& world, std::string_view id_)
   Attributes::addEnabled(power, editable);
   Attributes::addObjectEditor(power, false); // FIXME: remove once used
   m_interfaceItems.add(power);
+
+  speedCurve.setValueInternal(std::make_shared<VehicleSpeedCurve>(*this, speedCurve.name()));
+  Attributes::addEnabled(speedCurve, editable);
+  m_interfaceItems.add(speedCurve);
+
+  Attributes::addDisplayName(maxAccelerationRate, DisplayName::Vehicle::Rail::maxAccelerationRate);
+  Attributes::addEnabled(maxAccelerationRate, editable);
+  Attributes::addMinMax(maxAccelerationRate, 0.01, 10.0); // m/s^2
+  Attributes::addUnit(maxAccelerationRate, "m/s" UTF8_SUPERSCRIPT_TWO);
+  m_interfaceItems.add(maxAccelerationRate);
+
+  Attributes::addDisplayName(maxBrakingRate, DisplayName::Vehicle::Rail::maxBrakingRate);
+  Attributes::addEnabled(maxBrakingRate, editable);
+  Attributes::addMinMax(maxBrakingRate, 0.01, 10.0); // m/s^2
+  Attributes::addUnit(maxBrakingRate, "m/s" UTF8_SUPERSCRIPT_TWO);
+  m_interfaceItems.add(maxBrakingRate);
 }
 
 PoweredRailVehicle::~PoweredRailVehicle()
@@ -60,6 +83,7 @@ void PoweredRailVehicle::destroying()
 void PoweredRailVehicle::loaded()
 {
   RailVehicle::loaded();
+  updateMaxSpeed();
   decoderChanged(decoder.value());
 }
 
@@ -75,35 +99,6 @@ void PoweredRailVehicle::setEmergencyStop(bool value)
     decoder->emergencyStop = value;
 }
 
-void PoweredRailVehicle::setSpeed(double kmph)
-{
-  if(!decoder)
-    return;
-
-  if(almostZero(kmph))
-  {
-    decoder->throttle.setValue(0);
-    return;
-  }
-
-  //! \todo Implement speed profile
-
-  // No speed profile -> linear
-  {
-    const double max = speedMax.getValue(SpeedUnit::KiloMeterPerHour);
-    if(max > 0)
-    {
-      const uint8_t steps = decoder->speedSteps;
-      if(steps == Decoder::speedStepsAuto)
-        decoder->throttle.setValue(kmph / max);
-      else
-        decoder->throttle.setValue(std::round(kmph / max * steps) / steps);
-    }
-    else
-      decoder->throttle.setValue(0);
-  }
-}
-
 void PoweredRailVehicle::worldEvent(WorldState state, WorldEvent event)
 {
   RailVehicle::worldEvent(state, event);
@@ -111,6 +106,24 @@ void PoweredRailVehicle::worldEvent(WorldState state, WorldEvent event)
   const bool editable = contains(state, WorldState::Edit);
 
   Attributes::setEnabled(power, editable);
+  Attributes::setEnabled(speedCurve, editable);
+  Attributes::setEnabled(maxAccelerationRate, editable);
+  Attributes::setEnabled(maxBrakingRate, editable);
+}
+
+void PoweredRailVehicle::updateMaxSpeed()
+{
+  propertyChanged(speedCurve); //TODO: find better way
+
+  if(!speedCurve->isValid())
+    return;
+
+  double speedMS = speedCurve->getSpeedForStep(126);
+  speedMS *= m_world.scaleRatio;
+
+  speedMax.setValueInternal(convertUnit(speedMS,
+                                        SpeedUnit::MeterPerSecond,
+                                        speedMax.unit()));
 }
 
 void PoweredRailVehicle::decoderChanged(const std::shared_ptr<Decoder> &newDecoder)
@@ -138,6 +151,19 @@ void PoweredRailVehicle::decoderChanged(const std::shared_ptr<Decoder> &newDecod
       if(has(flags, DecoderChangeFlags::EmergencyStop))
       {
         activeTrain->emergencyStop.setValue(self.emergencyStop);
+      }
+      else if(has(flags, DecoderChangeFlags::Throttle))
+      {
+        if(almostZero(lastTrainSpeedStep - self.throttle))
+        {
+          //When train speed changes, decoder throttle is updated
+          //Do not update train speed back when this happens
+          //Otherwise an infinite recursion would be triggered
+          return;
+        }
+
+        activeTrain->handleDecoderThrottle(shared_ptr<PoweredRailVehicle>(),
+                                           self.throttle);
       }
     });
 }
