@@ -1081,7 +1081,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
         }
         else if(s->state == Spawn::State::Ready && m.state == SpawnStateChange::RequestActivate)
         {
-          const std::string baseName = std::format("spawn{}_", s->address);
+          const std::string baseName = std::string("spawn") + std::to_string(s->address) + std::string("_");
           size_t count = 0;
           static const size_t maxTrains = 10000;
           while(count < maxTrains)
