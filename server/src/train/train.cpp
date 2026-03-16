@@ -1204,21 +1204,29 @@ std::error_code Train::setSpeed(Throttle& throttle, double value)
 
   value = std::clamp(value, Attributes::getMin(speed), Attributes::getMax(speed));
 
-  // Get speed point
-  auto match = m_speedTable->getClosestMatch(value);
+  if(m_speedTable)
+  {
+    // Get speed point
+    auto match = m_speedTable->getClosestMatch(value);
 
-  SpeedPoint speedPoint;
-  speedPoint.speedMetersPerSecond = match.tableEntry.avgSpeed;
-  speedPoint.tableIdx = match.tableIdx;
+    SpeedPoint speedPoint;
+    speedPoint.speedMetersPerSecond = match.tableEntry.avgSpeed;
+    speedPoint.tableIdx = match.tableIdx;
 
-  // Force set speed bypassing user acceleration
-  setThrottleSpeed(speedPoint, true);
+    // Force set speed bypassing user acceleration
+    setThrottleSpeed(speedPoint, true);
 
-  // Update real speed property
-  const double realSpeedMS = throttleSpeedPoint.speedMetersPerSecond * m_world.scaleRatio.value();
-  throttleSpeed.setValueInternal(convertUnit(realSpeedMS,
-                                             SpeedUnit::MeterPerSecond,
-                                             throttleSpeed.unit()));
+    // Update real speed property
+    const double realSpeedMS = throttleSpeedPoint.speedMetersPerSecond * m_world.scaleRatio.value();
+    throttleSpeed.setValueInternal(convertUnit(realSpeedMS,
+                                               SpeedUnit::MeterPerSecond,
+                                               throttleSpeed.unit()));
+  }
+  else
+  {
+    // Use legacy logic
+    setThrottleSpeed(SpeedPoint(), true);
+  }
 
   const bool currentValue = isStopped;
   isStopped.setValueInternal(m_speedState == SpeedState::Idle && almostZero(speed.value()) && almostZero(throttleSpeed.value()));
