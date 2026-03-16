@@ -164,7 +164,7 @@ void TrainVehicleList::load(WorldLoader& loader, const nlohmann::json& data)
   rowCountChanged();
 }
 
-void TrainVehicleList::propertyChanged(BaseProperty &property)
+void TrainVehicleList::itemPropertyChanged(BaseProperty &property)
 {
   if(property.name() == "length")
     train().updateLength();

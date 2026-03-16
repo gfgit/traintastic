@@ -41,6 +41,13 @@ TrainVehicleListItem::TrainVehicleListItem(const std::shared_ptr<RailVehicle> &v
   m_interfaceItems.add(vehicle);
   Attributes::addEnabled(invertDirection, true);
   m_interfaceItems.add(invertDirection);
+
+  propertyChanged.connect(
+    [this](BaseProperty &prop)
+    {
+      //Propagate property change
+      m_parent.itemPropertyChanged(prop);
+    });
 }
 
 TrainVehicleListItem::~TrainVehicleListItem()
@@ -82,7 +89,7 @@ void TrainVehicleListItem::connectVehicle(RailVehicle &object)
     [this](BaseProperty &prop)
     {
       //Propagate property change
-      m_parent.propertyChanged(prop);
+      m_parent.itemPropertyChanged(prop);
     });
 }
 
