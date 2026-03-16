@@ -455,7 +455,7 @@ void Train::setSpeed(const double kmph)
   for(const auto& vehicle : m_poweredVehicles)
     vehicle->setSpeed(kmph);
   speed.setValueInternal(convertUnit(kmph, SpeedUnit::KiloMeterPerHour, speed.unit()));
-  updateEnabled();
+  // NOTE: updateEnabled() is called by parent function
 }
 
 void Train::updateSpeed()
