@@ -1,5 +1,4 @@
 /**
-/**
  * This file is part of Traintastic,
  * see <https://github.com/traintastic/traintastic>.
  *
@@ -101,7 +100,7 @@ TrainVehicleList::TrainVehicleList(Train& train_, std::string_view parentPropert
   Attributes::addEnabled(reverse, false);
   m_interfaceItems.add(reverse);
 
-  //Attributes::addEnabled(toggleDirectionInvert, false);
+  Attributes::addEnabled(toggleDirectionInvert, false);
   m_interfaceItems.add(toggleDirectionInvert);
 }
 

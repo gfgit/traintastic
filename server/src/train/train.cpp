@@ -589,6 +589,7 @@ void Train::updateEnabled()
   Attributes::setEnabled(vehicles->remove, stopped);
   Attributes::setEnabled(vehicles->move, stopped);
   Attributes::setEnabled(vehicles->reverse, stopped);
+  Attributes::setEnabled(vehicles->toggleDirectionInvert, stopped);
 
   for(const auto& item : *vehicles)
   {
