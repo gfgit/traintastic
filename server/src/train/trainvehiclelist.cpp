@@ -166,6 +166,26 @@ void TrainVehicleList::load(WorldLoader& loader, const nlohmann::json& data)
 
 void TrainVehicleList::itemPropertyChanged(BaseProperty &property)
 {
+  if(!m_models.empty() && TrainVehicleListTableModel::isListedProperty(property.name()))
+  {
+    ObjectPtr obj = property.object().shared_from_this();
+    const uint32_t rows = static_cast<uint32_t>(items.size());
+    for(uint32_t row = 0; row < rows; row++)
+    {
+      if(items[row] == obj)
+      {
+        for(auto& model : m_models)
+        {
+          model->propertyChanged(property, row);
+          break;
+        }
+      }
+    }
+  }
+}
+
+void TrainVehicleList::itemVehiclePropertyChanged(BaseProperty &property)
+{
   if(property.name() == "length")
     train().updateLength();
   else if(property.name() == "total_weight")
@@ -179,7 +199,7 @@ void TrainVehicleList::itemPropertyChanged(BaseProperty &property)
     const uint32_t rows = static_cast<uint32_t>(items.size());
     for(uint32_t row = 0; row < rows; row++)
     {
-      if(items[row] == obj)
+      if(items[row]->vehicle.value() == obj)
       {
         for(auto& model : m_models)
         {

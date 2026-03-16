@@ -89,7 +89,7 @@ void TrainVehicleListItem::connectVehicle(RailVehicle &object)
     [this](BaseProperty &prop)
     {
       //Propagate property change
-      m_parent.itemPropertyChanged(prop);
+      m_parent.itemVehiclePropertyChanged(prop);
     });
 }
 

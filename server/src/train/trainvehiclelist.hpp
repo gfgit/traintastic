@@ -49,6 +49,7 @@ class TrainVehicleList : public SubObject, public Table
     void load(WorldLoader& loader, const nlohmann::json& data) final;
 
     void itemPropertyChanged(BaseProperty& property);
+    void itemVehiclePropertyChanged(BaseProperty& property);
 
     void rowCountChanged();
 
