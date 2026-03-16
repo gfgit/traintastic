@@ -47,6 +47,8 @@ class RailVehicle : public Vehicle
     virtual double calcTotalWeight(WeightUnit unit) const;
     void updateTotalWeight();
 
+    virtual void decoderChanged(const std::shared_ptr<Decoder>& newDecoder);
+
   public:
     ObjectProperty<Decoder> decoder;
     LengthProperty length;

@@ -22,7 +22,6 @@
 
 #include "poweredrailvehicle.hpp"
 #include "../../core/attributes.hpp"
-#include "../../core/objectproperty.tpp"
 #include "../../utils/almostzero.hpp"
 #include "../../utils/displayname.hpp"
 #include "../../world/world.hpp"
@@ -42,13 +41,6 @@ PoweredRailVehicle::PoweredRailVehicle(World& world, std::string_view id_)
   Attributes::addEnabled(power, editable);
   Attributes::addObjectEditor(power, false); // FIXME: remove once used
   m_interfaceItems.add(power);
-
-  propertyChanged.connect(
-    [this](BaseProperty &prop)
-    {
-      if(prop.name() == "decoder")
-        registerDecoder();
-    });
 }
 
 PoweredRailVehicle::~PoweredRailVehicle()
@@ -68,7 +60,7 @@ void PoweredRailVehicle::destroying()
 void PoweredRailVehicle::loaded()
 {
   RailVehicle::loaded();
-  registerDecoder();
+  decoderChanged(decoder.value());
 }
 
 void PoweredRailVehicle::setDirection(Direction value)
@@ -121,17 +113,16 @@ void PoweredRailVehicle::worldEvent(WorldState state, WorldEvent event)
   Attributes::setEnabled(power, editable);
 }
 
-void PoweredRailVehicle::registerDecoder()
+void PoweredRailVehicle::decoderChanged(const std::shared_ptr<Decoder> &newDecoder)
 {
   //Disconnect from previous decoder
   decoderConnection.disconnect();
 
-  auto decoderVal = decoder.value();
-  if(!decoderVal)
+  if(!newDecoder)
     return;
 
   //Connect to new decoder
-  decoderConnection = decoderVal->decoderChanged.connect(
+  decoderConnection = newDecoder->decoderChanged.connect(
     [this](Decoder& self, DecoderChangeFlags flags, uint32_t /*functionNumber*/)
     {
       if(!activeTrain)

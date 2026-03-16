@@ -37,7 +37,8 @@ class PoweredRailVehicle : public RailVehicle
     void loaded() override;
     void worldEvent(WorldState state, WorldEvent event) override;
 
-    void registerDecoder();
+    void decoderChanged(const std::shared_ptr<Decoder>& newDecoder) override;
+
     boost::signals2::connection decoderConnection;
 
     friend class Train;

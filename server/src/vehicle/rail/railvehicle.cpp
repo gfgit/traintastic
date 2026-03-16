@@ -38,7 +38,11 @@
 
 RailVehicle::RailVehicle(World& world, std::string_view _id) :
   Vehicle(world, _id),
-  decoder{this, "decoder", nullptr, PropertyFlags::ReadOnly | PropertyFlags::Store},
+  decoder{this, "decoder", nullptr, PropertyFlags::ReadOnly | PropertyFlags::Store,
+    [this](const std::shared_ptr<Decoder>& value)
+    {
+      decoderChanged(value);
+    }, nullptr},
   length{*this, "length", 0, LengthUnit::MilliMeter, PropertyFlags::ReadWrite | PropertyFlags::Store},
   speedMax{*this, "speed_max", 0, SpeedUnit::KiloMeterPerHour, PropertyFlags::ReadWrite | PropertyFlags::Store},
   weight{*this, "weight", 0, WeightUnit::Ton, PropertyFlags::ReadWrite | PropertyFlags::Store, [this](double /*value*/, WeightUnit /*unit*/){ updateTotalWeight(); }},
@@ -231,4 +235,9 @@ double RailVehicle::calcTotalWeight(WeightUnit unit) const
 void RailVehicle::updateTotalWeight()
 {
   totalWeight.setValueInternal(calcTotalWeight(totalWeight.unit()));
+}
+
+void RailVehicle::decoderChanged(const std::shared_ptr<Decoder> & /*newDecoder*/)
+{
+  // Used in PoweredRailVehicle
 }
