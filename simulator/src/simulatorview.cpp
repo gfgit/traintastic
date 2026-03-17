@@ -48,6 +48,12 @@
 
 #include <QMessageBox>
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+#define M_DELAY_MILLIS(ms) std::chrono::milliseconds(ms)
+#else
+#define M_DELAY_MILLIS(ms) ms
+#endif
+
 namespace
 {
 
@@ -505,7 +511,7 @@ SimulatorView::SimulatorView(QWidget* parent)
   setFocusPolicy(Qt::StrongFocus); // for key stuff
 
   // 800 ms turnout blink
-  turnoutBlinkTimer.start(std::chrono::milliseconds(800), Qt::PreciseTimer, this);
+  turnoutBlinkTimer.start(M_DELAY_MILLIS(800), Qt::PreciseTimer, this);
 
   setContextMenuPolicy(Qt::DefaultContextMenu);
 
@@ -1999,7 +2005,7 @@ void SimulatorView::mouseMoveEvent(QMouseEvent* e)
     // Refresh hovered segment every 100 ms
     m_lastHoverPos = mapToSim(e->pos());
     if(!segmentHoverTimer.isActive())
-      segmentHoverTimer.start(std::chrono::milliseconds(100), this);
+      segmentHoverTimer.start(M_DELAY_MILLIS(100), this);
   }
 }
 
