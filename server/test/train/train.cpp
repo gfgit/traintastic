@@ -200,13 +200,11 @@ TEST_CASE("Check direction propagation", "[train]")
   std::weak_ptr<RailVehicle> locomotiveWeak1 = world->railVehicles->create(Locomotive::classId);
   REQUIRE_FALSE(locomotiveWeak1.expired());
   REQUIRE(world->railVehicles->length == 1);
-  locomotiveWeak1.lock()->createDecoder();
   locomotiveWeak1.lock()->decoder->direction = Direction::Forward;
 
   std::weak_ptr<RailVehicle> locomotiveWeak2 = world->railVehicles->create(Locomotive::classId);
   REQUIRE_FALSE(locomotiveWeak2.expired());
   REQUIRE(world->railVehicles->length == 2);
-  locomotiveWeak2.lock()->createDecoder();
   locomotiveWeak2.lock()->decoder->direction = Direction::Reverse;
 
   std::weak_ptr<Train> trainWeak = world->trains->create();
@@ -256,6 +254,23 @@ TEST_CASE("Check direction propagation", "[train]")
   REQUIRE(trainWeak.lock()->direction == Direction::Reverse);
   REQUIRE(locomotiveWeak2.lock()->decoder->direction == Direction::Forward);
 
+  // Add new vehicle to active train, its direction will be synced to Train direction
+  std::weak_ptr<RailVehicle> locomotiveWeak3 = world->railVehicles->create(Locomotive::classId);
+  REQUIRE_FALSE(locomotiveWeak3.expired());
+  REQUIRE(world->railVehicles->length == 3);
+  locomotiveWeak3.lock()->decoder->direction = Direction::Forward;
+  REQUIRE(locomotiveWeak3.lock()->decoder->direction == Direction::Forward);
+
+  REQUIRE(locomotiveWeak3.lock()->trains.size() == 0);
+  trainWeak.lock()->vehicles->add(locomotiveWeak3.lock());
+  REQUIRE(trainWeak.lock()->vehicles->size() == 3);
+  REQUIRE(locomotiveWeak3.lock()->trains.size() == 1);
+
+  REQUIRE(trainWeak.lock()->direction == Direction::Reverse);
+  REQUIRE(locomotiveWeak1.lock()->decoder->direction == Direction::Reverse);
+  REQUIRE(locomotiveWeak2.lock()->decoder->direction == Direction::Forward);
+  REQUIRE(locomotiveWeak3.lock()->decoder->direction == Direction::Reverse);
+
   // Deactivate Train, it should no longer listen to decoder changes
   trainWeak.lock()->active = false;
   REQUIRE(trainWeak.lock()->active == false);
@@ -291,13 +306,11 @@ TEST_CASE("Check emergency stop propagation", "[train]")
   std::weak_ptr<RailVehicle> locomotiveWeak1 = world->railVehicles->create(Locomotive::classId);
   REQUIRE_FALSE(locomotiveWeak1.expired());
   REQUIRE(world->railVehicles->length == 1);
-  locomotiveWeak1.lock()->createDecoder();
   locomotiveWeak1.lock()->decoder->emergencyStop = false;
 
   std::weak_ptr<RailVehicle> locomotiveWeak2 = world->railVehicles->create(Locomotive::classId);
   REQUIRE_FALSE(locomotiveWeak2.expired());
   REQUIRE(world->railVehicles->length == 2);
-  locomotiveWeak2.lock()->createDecoder();
   locomotiveWeak2.lock()->decoder->emergencyStop = true;
 
   std::weak_ptr<Train> trainWeak = world->trains->create();
@@ -337,6 +350,44 @@ TEST_CASE("Check emergency stop propagation", "[train]")
   locomotiveWeak1.lock()->decoder->emergencyStop = true;
   REQUIRE(trainWeak.lock()->emergencyStop == true);
   REQUIRE(locomotiveWeak2.lock()->decoder->emergencyStop == true);
+
+  // Add new vehicle to active, emergency stopped train
+  std::weak_ptr<RailVehicle> locomotiveWeak3 = world->railVehicles->create(Locomotive::classId);
+  REQUIRE_FALSE(locomotiveWeak3.expired());
+  REQUIRE(world->railVehicles->length == 3);
+  locomotiveWeak3.lock()->decoder->emergencyStop = false;
+
+  REQUIRE(locomotiveWeak3.lock()->trains.size() == 0);
+  trainWeak.lock()->vehicles->add(locomotiveWeak3.lock());
+  REQUIRE(trainWeak.lock()->vehicles->size() == 3);
+  REQUIRE(locomotiveWeak3.lock()->trains.size() == 1);
+
+  REQUIRE(locomotiveWeak1.lock()->decoder->emergencyStop == true);
+  REQUIRE(locomotiveWeak2.lock()->decoder->emergencyStop == true);
+  REQUIRE(locomotiveWeak3.lock()->decoder->emergencyStop == true);
+
+  // Reset again emergency stop
+  trainWeak.lock()->emergencyStop = false;
+  REQUIRE(trainWeak.lock()->emergencyStop == false);
+  REQUIRE(locomotiveWeak1.lock()->decoder->emergencyStop == false);
+  REQUIRE(locomotiveWeak2.lock()->decoder->emergencyStop == false);
+  REQUIRE(locomotiveWeak3.lock()->decoder->emergencyStop == false);
+
+  // Add an emergency stopped vehicle to active train
+  std::weak_ptr<RailVehicle> locomotiveWeak4 = world->railVehicles->create(Locomotive::classId);
+  REQUIRE_FALSE(locomotiveWeak4.expired());
+  REQUIRE(world->railVehicles->length == 4);
+  locomotiveWeak4.lock()->decoder->emergencyStop = true;
+
+  REQUIRE(locomotiveWeak4.lock()->trains.size() == 0);
+  trainWeak.lock()->vehicles->add(locomotiveWeak4.lock());
+  REQUIRE(trainWeak.lock()->vehicles->size() == 4);
+  REQUIRE(locomotiveWeak4.lock()->trains.size() == 1);
+  REQUIRE(trainWeak.lock()->emergencyStop == true);
+  REQUIRE(locomotiveWeak1.lock()->decoder->emergencyStop == true);
+  REQUIRE(locomotiveWeak2.lock()->decoder->emergencyStop == true);
+  REQUIRE(locomotiveWeak3.lock()->decoder->emergencyStop == true);
+  REQUIRE(locomotiveWeak4.lock()->decoder->emergencyStop == true);
 
   // Deactivate Train, it should no longer listen to decoder changes
   trainWeak.lock()->active = false;
