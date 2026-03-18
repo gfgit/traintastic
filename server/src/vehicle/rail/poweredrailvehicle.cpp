@@ -27,7 +27,6 @@
 #include "../../utils/displayname.hpp"
 #include "../../world/world.hpp"
 #include "../../hardware/decoder/decoder.hpp"
-#include "../../hardware/decoder/decoderchangeflags.hpp"
 #include "../../train/train.hpp"
 
 PoweredRailVehicle::PoweredRailVehicle(World& world, std::string_view id_)
@@ -42,32 +41,6 @@ PoweredRailVehicle::PoweredRailVehicle(World& world, std::string_view id_)
   Attributes::addEnabled(power, editable);
   Attributes::addObjectEditor(power, false); // FIXME: remove once used
   m_interfaceItems.add(power);
-}
-
-PoweredRailVehicle::~PoweredRailVehicle()
-{
-  assert(!decoder);
-  assert(!decoderConnection.connected());
-}
-
-void PoweredRailVehicle::destroying()
-{
-  // decoder is reset by RailVehicle, but propertyChanged is not emitted when object is dying
-  // So disconnect manually
-  decoderConnection.disconnect();
-  RailVehicle::destroying();
-}
-
-void PoweredRailVehicle::loaded()
-{
-  RailVehicle::loaded();
-  decoderChanged(decoder.value());
-}
-
-void PoweredRailVehicle::setDirection(Direction value)
-{
-  if(decoder)
-    decoder->direction = value;
 }
 
 void PoweredRailVehicle::setEmergencyStop(bool value)
@@ -112,33 +85,4 @@ void PoweredRailVehicle::worldEvent(WorldState state, WorldEvent event)
   const bool editable = contains(state, WorldState::Edit);
 
   Attributes::setEnabled(power, editable);
-}
-
-void PoweredRailVehicle::decoderChanged(const std::shared_ptr<Decoder> &newDecoder)
-{
-  //Disconnect from previous decoder
-  decoderConnection.disconnect();
-
-  if(!newDecoder)
-    return;
-
-  //Connect to new decoder
-  decoderConnection = newDecoder->decoderChanged.connect(
-    [this](Decoder& self, DecoderChangeFlags flags, uint32_t /*functionNumber*/)
-    {
-      if(!activeTrain)
-        return;
-
-      if(has(flags, DecoderChangeFlags::Direction))
-      {
-        if(self.direction == lastTrainSetDirection)
-          return; //Direction change was caused by Train itself, no need propagate back
-        activeTrain->handleDecoderDirection(this->shared_ptr<PoweredRailVehicle>(), self.direction);
-      }
-
-      if(has(flags, DecoderChangeFlags::EmergencyStop))
-      {
-        activeTrain->emergencyStop.setValue(self.emergencyStop);
-      }
-    });
 }

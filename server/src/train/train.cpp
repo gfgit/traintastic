@@ -881,16 +881,13 @@ void Train::propagateDirection(Direction newDirection)
     if(item->invertDirection)
       dir = ~dir;
 
-    auto poweredVehicle = std::dynamic_pointer_cast<PoweredRailVehicle>(item->vehicle.value());
-    if(poweredVehicle)
-    {
-      poweredVehicle->lastTrainSetDirection = dir;
-      poweredVehicle->setDirection(dir);
-    }
+    item->vehicle->lastTrainSetDirection = dir;
+    if(item->vehicle->decoder)
+      item->vehicle->decoder->direction = dir;
   }
 }
 
-void Train::handleDecoderDirection(const std::shared_ptr<PoweredRailVehicle>& vehicle, Direction newDirection)
+void Train::handleDecoderDirection(const std::shared_ptr<RailVehicle>& vehicle, Direction newDirection)
 {
   //! \todo assert vehicle contained in train?
   if(!active || newDirection == Direction::Unknown)

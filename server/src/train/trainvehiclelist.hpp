@@ -39,7 +39,7 @@ class TrainVehicleList : public SubObject, public Table
   private:
     friend class TrainVehicleListItem;
     friend class TrainVehicleListTableModel;
-    inline Train& train();
+    Train& train();
     uint32_t getItemId() const;
 
   protected:

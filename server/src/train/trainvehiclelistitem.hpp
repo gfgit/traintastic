@@ -48,6 +48,7 @@ class TrainVehicleListItem final : public Object
     friend class TrainVehicleList;
     void connectVehicle(RailVehicle &object);
     void disconnectVehicle();
+    void syncVehicleDirection();
 
   public:
     ObjectProperty<RailVehicle> vehicle;

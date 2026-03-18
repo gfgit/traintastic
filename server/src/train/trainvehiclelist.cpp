@@ -31,6 +31,7 @@
 #include "../core/method.tpp"
 #include "../core/objectproperty.tpp"
 #include "../core/objectvectorproperty.tpp"
+#include "../hardware/decoder/decoder.hpp"
 #include "../utils/displayname.hpp"
 
 TrainVehicleList::TrainVehicleList(Train& train_, std::string_view parentPropertyName)
@@ -246,7 +247,20 @@ void TrainVehicleList::addObject(std::shared_ptr<RailVehicle> vehicle)
   object->connectVehicle(*(object->vehicle.value()));
 
   if(train().active)
+  {
+    if(object->vehicle->decoder)
+    {
+      // Do initial synchronization
+      object->syncVehicleDirection();
+
+      if(object->vehicle->decoder->emergencyStop)
+        train().emergencyStop = true;
+      else if(train().emergencyStop)
+        object->vehicle->decoder->emergencyStop = true;
+    }
+
     object->vehicle->setActiveTrain(train().shared_ptr<Train>());
+  }
 
   items.appendInternal(object);
 
