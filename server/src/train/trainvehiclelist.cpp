@@ -73,7 +73,7 @@ TrainVehicleList::TrainVehicleList(Train& train_, std::string_view parentPropert
         rowsChanged(0, items.size() - 1);
       }}
   , toggleDirectionInvert{*this, "toggle_direction_invert",
-      [this](const std::shared_ptr<TrainVehicleListItem>& item)
+      [](const std::shared_ptr<TrainVehicleListItem>& item)
       {
         if(item) [[likely]]
         {
