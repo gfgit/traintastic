@@ -22,9 +22,11 @@
 
 #include "trainvehiclelistitem.hpp"
 #include "trainvehiclelist.hpp"
+#include "train.hpp"
 #include "../world/getworld.hpp"
 #include "../core/attributes.hpp"
 #include "../core/objectproperty.tpp"
+#include "../hardware/decoder/decoder.hpp"
 #include "../vehicle/rail/railvehicle.hpp"
 
 
@@ -32,7 +34,12 @@ TrainVehicleListItem::TrainVehicleListItem(const std::shared_ptr<RailVehicle> &v
   : m_parent(parent)
   , m_itemId(itemId)
   , vehicle(this, "vehicle", vehicle_, PropertyFlags::ReadOnly | PropertyFlags::ScriptReadOnly | PropertyFlags::Store)
-  , invertDirection(this, "invert_direction", false, PropertyFlags::ReadWrite | PropertyFlags::ScriptReadWrite | PropertyFlags::Store)
+  , invertDirection(this, "invert_direction", false, PropertyFlags::ReadWrite | PropertyFlags::ScriptReadWrite | PropertyFlags::Store,
+    [this](const bool & /*newInvertDirection*/)
+    {
+      assert(!m_parent.train().active || m_parent.train().isStopped);
+      syncVehicleDirection();
+    })
 {
   auto& world = getWorld(m_parent);
 
@@ -97,4 +104,17 @@ void TrainVehicleListItem::disconnectVehicle()
 {
   //Disconnect from previous vehicle
   m_vehiclePropertyChanged.disconnect();
+}
+
+void TrainVehicleListItem::syncVehicleDirection()
+{
+  if(vehicle && vehicle->decoder && m_parent.train().active)
+  {
+    Direction newDirection = m_parent.train().direction;
+    if(invertDirection)
+      newDirection = ~newDirection;
+
+    vehicle->lastTrainSetDirection = newDirection;
+    vehicle->decoder->direction = newDirection;
+  }
 }

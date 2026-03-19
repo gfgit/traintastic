@@ -635,6 +635,19 @@ bool Train::setTrainActive(bool val)
     const bool stopValue = emergencyStop;
     for(const auto& vehicle : m_poweredVehicles)
       vehicle->setEmergencyStop(stopValue);
+
+    if(vehicles->size() == 1)
+    {
+      // Set train direction to vehicle direction if there is just one vehicle
+      const TrainVehicleList& vehicleList = *vehicles.value(); //TODO: is it the right way to get it?
+      if(vehicleList[0]->vehicle->decoder)
+      {
+        Direction newDirection = vehicleList[0]->vehicle->decoder->direction;
+        if(vehicleList[0]->invertDirection)
+          newDirection = ~newDirection;
+        direction = newDirection;
+      }
+    }
   }
   else
   {
@@ -881,16 +894,13 @@ void Train::propagateDirection(Direction newDirection)
     if(item->invertDirection)
       dir = ~dir;
 
-    auto poweredVehicle = std::dynamic_pointer_cast<PoweredRailVehicle>(item->vehicle.value());
-    if(poweredVehicle)
-    {
-      poweredVehicle->lastTrainSetDirection = dir;
-      poweredVehicle->setDirection(dir);
-    }
+    item->vehicle->lastTrainSetDirection = dir;
+    if(item->vehicle->decoder)
+      item->vehicle->decoder->direction = dir;
   }
 }
 
-void Train::handleDecoderDirection(const std::shared_ptr<PoweredRailVehicle>& vehicle, Direction newDirection)
+void Train::handleDecoderDirection(const std::shared_ptr<RailVehicle>& vehicle, Direction newDirection)
 {
   //! \todo assert vehicle contained in train?
   if(!active || newDirection == Direction::Unknown)

@@ -24,30 +24,18 @@
 #define TRAINTASTIC_SERVER_VEHICLE_RAIL_POWEREDRAILVEHICLE_HPP
 
 #include "railvehicle.hpp"
-#include <traintastic/enum/direction.hpp>
 #include "../../core/powerproperty.hpp"
 
 class PoweredRailVehicle : public RailVehicle
 {
   protected:
     PoweredRailVehicle(World& world, std::string_view id_);
-    ~PoweredRailVehicle() override;
 
-    void destroying() override;
-    void loaded() override;
     void worldEvent(WorldState state, WorldEvent event) override;
-
-    void decoderChanged(const std::shared_ptr<Decoder>& newDecoder) override;
-
-    boost::signals2::connection decoderConnection;
-
-    friend class Train;
-    Direction lastTrainSetDirection = Direction::Unknown;
 
   public:
     PowerProperty power;
 
-    void setDirection(Direction value);
     void setEmergencyStop(bool value);
     void setSpeed(double kmph);
 };
