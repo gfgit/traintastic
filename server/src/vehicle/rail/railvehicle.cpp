@@ -274,7 +274,11 @@ void RailVehicle::setDecoder(const std::shared_ptr<Decoder> &newDecoder)
       {
         if(self.direction == lastTrainSetDirection)
           return; //Direction change was caused by Train itself, no need propagate back
-        activeTrain->handleDecoderDirection(this->shared_ptr<RailVehicle>(), self.direction);
+
+        if(activeTrain->isStopped)
+          activeTrain->handleDecoderDirection(this->shared_ptr<RailVehicle>(), self.direction);
+        else
+          self.direction = lastTrainSetDirection; // Reject direction changes if train is not stopped
       }
 
       if(has(flags, DecoderChangeFlags::EmergencyStop))
