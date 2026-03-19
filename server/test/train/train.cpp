@@ -274,6 +274,29 @@ TEST_CASE("Check direction propagation", "[train]")
   REQUIRE(locomotiveWeak2.lock()->decoder->direction == Direction::Forward);
   REQUIRE(locomotiveWeak3.lock()->decoder->direction == Direction::Reverse);
 
+  // Remove vehicle 1 from train
+  trainWeak.lock()->vehicles->remove(trainWeak.lock()->vehicles->getItemFromVehicle(locomotiveWeak1.lock()));
+  REQUIRE(trainWeak.lock()->vehicles->size() == 2);
+  REQUIRE(locomotiveWeak1.lock()->trains.size() == 0);
+  REQUIRE(locomotiveWeak1.lock()->activeTrain.value() == nullptr);
+
+  locomotiveWeak1.lock()->decoder->direction = Direction::Forward;
+  REQUIRE(trainWeak.lock()->direction == Direction::Reverse);
+  REQUIRE(locomotiveWeak1.lock()->decoder->direction == Direction::Forward); // Not in train
+  REQUIRE(locomotiveWeak2.lock()->decoder->direction == Direction::Forward); // Inverted
+  REQUIRE(locomotiveWeak3.lock()->decoder->direction == Direction::Reverse);
+
+  trainWeak.lock()->direction = Direction::Forward;
+  REQUIRE(locomotiveWeak1.lock()->decoder->direction == Direction::Forward); // Not in train
+  REQUIRE(locomotiveWeak2.lock()->decoder->direction == Direction::Reverse); // Inverted
+  REQUIRE(locomotiveWeak3.lock()->decoder->direction == Direction::Forward);
+
+  locomotiveWeak2.lock()->decoder->direction = Direction::Forward;
+  REQUIRE(trainWeak.lock()->direction == Direction::Reverse);
+  REQUIRE(locomotiveWeak1.lock()->decoder->direction == Direction::Forward); // Not in train
+  REQUIRE(locomotiveWeak2.lock()->decoder->direction == Direction::Forward); // Inverted
+  REQUIRE(locomotiveWeak3.lock()->decoder->direction == Direction::Reverse);
+
   // Deactivate Train, it should no longer listen to decoder changes
   trainWeak.lock()->active = false;
   REQUIRE(trainWeak.lock()->active == false);
@@ -281,21 +304,22 @@ TEST_CASE("Check direction propagation", "[train]")
   REQUIRE(locomotiveWeak2.lock()->activeTrain.value() == nullptr);
   REQUIRE(locomotiveWeak3.lock()->activeTrain.value() == nullptr);
 
-  locomotiveWeak1.lock()->decoder->direction = Direction::Forward;
+  locomotiveWeak3.lock()->decoder->direction = Direction::Forward;
   REQUIRE(trainWeak.lock()->direction == Direction::Reverse);
   REQUIRE(locomotiveWeak2.lock()->decoder->direction == Direction::Forward);
 
   trainWeak.lock()->direction = Direction::Forward;
-  REQUIRE(locomotiveWeak1.lock()->decoder->direction == Direction::Forward);
   REQUIRE(locomotiveWeak2.lock()->decoder->direction == Direction::Forward);
+  REQUIRE(locomotiveWeak3.lock()->decoder->direction == Direction::Forward);
 
   trainWeak.lock()->direction = Direction::Reverse;
-  REQUIRE(locomotiveWeak1.lock()->decoder->direction == Direction::Forward);
   REQUIRE(locomotiveWeak2.lock()->decoder->direction == Direction::Forward);
+  REQUIRE(locomotiveWeak3.lock()->decoder->direction == Direction::Forward);
 
   world.reset();
   REQUIRE(locomotiveWeak1.expired());
   REQUIRE(locomotiveWeak2.expired());
+  REQUIRE(locomotiveWeak3.expired());
   REQUIRE(trainWeak.expired());
   REQUIRE(worldWeak.expired());
 }
@@ -401,6 +425,33 @@ TEST_CASE("Check emergency stop propagation", "[train]")
   REQUIRE(locomotiveWeak3.lock()->decoder->emergencyStop == true);
   REQUIRE(locomotiveWeak4.lock()->decoder->emergencyStop == true);
 
+  // Remove vehicle 1 from train
+  trainWeak.lock()->vehicles->remove(trainWeak.lock()->vehicles->getItemFromVehicle(locomotiveWeak1.lock()));
+  REQUIRE(trainWeak.lock()->vehicles->size() == 3);
+  REQUIRE(locomotiveWeak1.lock()->trains.size() == 0);
+  REQUIRE(locomotiveWeak1.lock()->activeTrain.value() == nullptr);
+
+  trainWeak.lock()->emergencyStop = false;
+  REQUIRE(trainWeak.lock()->emergencyStop == false);
+  REQUIRE(locomotiveWeak1.lock()->decoder->emergencyStop == true); // Not in train
+  REQUIRE(locomotiveWeak2.lock()->decoder->emergencyStop == false);
+  REQUIRE(locomotiveWeak3.lock()->decoder->emergencyStop == false);
+  REQUIRE(locomotiveWeak4.lock()->decoder->emergencyStop == false);
+
+  locomotiveWeak2.lock()->decoder->emergencyStop = true;
+  REQUIRE(trainWeak.lock()->emergencyStop == true);
+  REQUIRE(locomotiveWeak1.lock()->decoder->emergencyStop == true); // Not in train
+  REQUIRE(locomotiveWeak2.lock()->decoder->emergencyStop == true);
+  REQUIRE(locomotiveWeak3.lock()->decoder->emergencyStop == true);
+  REQUIRE(locomotiveWeak4.lock()->decoder->emergencyStop == true);
+
+  locomotiveWeak1.lock()->decoder->emergencyStop = false;
+  REQUIRE(trainWeak.lock()->emergencyStop == true);
+  REQUIRE(locomotiveWeak1.lock()->decoder->emergencyStop == false); // Not in train
+  REQUIRE(locomotiveWeak2.lock()->decoder->emergencyStop == true);
+  REQUIRE(locomotiveWeak3.lock()->decoder->emergencyStop == true);
+  REQUIRE(locomotiveWeak4.lock()->decoder->emergencyStop == true);
+
   // Deactivate Train, it should no longer listen to decoder changes
   trainWeak.lock()->active = false;
   REQUIRE(trainWeak.lock()->active == false);
@@ -409,18 +460,20 @@ TEST_CASE("Check emergency stop propagation", "[train]")
   REQUIRE(locomotiveWeak3.lock()->activeTrain.value() == nullptr);
   REQUIRE(locomotiveWeak4.lock()->activeTrain.value() == nullptr);
 
-  locomotiveWeak1.lock()->decoder->emergencyStop = false;
+  locomotiveWeak2.lock()->decoder->emergencyStop = false;
   REQUIRE(trainWeak.lock()->emergencyStop == true);
-  REQUIRE(locomotiveWeak2.lock()->decoder->emergencyStop == true);
+  REQUIRE(locomotiveWeak3.lock()->decoder->emergencyStop == true);
 
   trainWeak.lock()->emergencyStop = false;
   REQUIRE(trainWeak.lock()->emergencyStop == false);
-  REQUIRE(locomotiveWeak1.lock()->decoder->emergencyStop == false);
-  REQUIRE(locomotiveWeak2.lock()->decoder->emergencyStop == true);
+  REQUIRE(locomotiveWeak2.lock()->decoder->emergencyStop == false);
+  REQUIRE(locomotiveWeak3.lock()->decoder->emergencyStop == true);
 
   world.reset();
   REQUIRE(locomotiveWeak1.expired());
   REQUIRE(locomotiveWeak2.expired());
+  REQUIRE(locomotiveWeak3.expired());
+  REQUIRE(locomotiveWeak4.expired());
   REQUIRE(trainWeak.expired());
   REQUIRE(worldWeak.expired());
 }
