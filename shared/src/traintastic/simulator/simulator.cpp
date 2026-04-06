@@ -2225,7 +2225,7 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                     trackObj.signalName = signal->name;
 
                     size_t nLights = item.value("n_lights", std::max(size_t(1), signal->lights.size()));
-                    nLights = std::clamp(size_t(1), size_t(3), nLights);
+                    nLights = std::clamp(nLights, size_t(1), size_t(3));
                     signal->lights.resize(nLights);
 
                     signal->square = item.value("square", false);
