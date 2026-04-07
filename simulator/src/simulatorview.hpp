@@ -163,6 +163,7 @@ private:
   bool m_thinTracks = false;
 
   QPoint m_leftClickMousePos;
+  QPoint m_middleMousePos;
   QPoint m_rightMousePos;
 
   size_t m_trainIndex = 0;

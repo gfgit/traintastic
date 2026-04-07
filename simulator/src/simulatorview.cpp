@@ -1975,29 +1975,31 @@ void SimulatorView::mousePressEvent(QMouseEvent* e)
     m_leftClickMousePos = e->pos();
     resetSegmentHover();
   }
+  if(e->button() == Qt::MiddleButton)
+  {
+    m_middleMousePos = e->pos();
+    setCursor(Qt::ClosedHandCursor);
+    resetSegmentHover();
+  }
   if(e->button() == Qt::RightButton)
   {
     m_rightMousePos = e->pos();
-
-    if(e->modifiers() != Qt::ControlModifier)
-      setCursor(Qt::ClosedHandCursor);
-
     resetSegmentHover();
   }
 }
 
 void SimulatorView::mouseMoveEvent(QMouseEvent* e)
 {
-  if(e->buttons() & Qt::RightButton && e->modifiers() != Qt::ControlModifier)
+  if(e->buttons() & Qt::MiddleButton)
   {
     m_zoomFit = false;
 
-    const auto diff = m_rightMousePos - e->pos();
+    const auto diff = m_middleMousePos - e->pos();
 
     m_cameraX += diff.x() / m_zoomLevel;
     m_cameraY += diff.y() / m_zoomLevel;
 
-    m_rightMousePos = e->pos();
+    m_middleMousePos = e->pos();
     update();
   }
   else if(e->buttons() == Qt::NoButton && m_simulator)
@@ -2020,7 +2022,7 @@ void SimulatorView::mouseReleaseEvent(QMouseEvent* e)
       mouseLeftClick(mapToSim(m_leftClickMousePos), shiftPressed);
     }
   }
-  if(e->button() == Qt::RightButton)
+  if(e->button() == Qt::MiddleButton)
   {
     setCursor(Qt::ArrowCursor);
   }
@@ -2071,9 +2073,6 @@ void SimulatorView::timerEvent(QTimerEvent *e)
 
 void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
 {
-  if(e->modifiers() != Qt::ControlModifier)
-    return; // Use control to distinguish from right click pan
-
   const Simulator::Point point = mapToSim(e->pos());
   const size_t idx = getSegmentAt(point, m_simulator->staticData);
   if(idx == Simulator::invalidIndex)
