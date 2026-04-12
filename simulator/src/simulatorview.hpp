@@ -164,7 +164,6 @@ private:
 
   QPoint m_leftClickMousePos;
   QPoint m_middleMousePos;
-  QPoint m_rightMousePos;
 
   size_t m_trainIndex = 0;
   size_t m_trainToBeRemovedIdx = Simulator::invalidIndex;

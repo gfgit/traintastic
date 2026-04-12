@@ -1981,11 +1981,6 @@ void SimulatorView::mousePressEvent(QMouseEvent* e)
     setCursor(Qt::ClosedHandCursor);
     resetSegmentHover();
   }
-  if(e->button() == Qt::RightButton)
-  {
-    m_rightMousePos = e->pos();
-    resetSegmentHover();
-  }
 }
 
 void SimulatorView::mouseMoveEvent(QMouseEvent* e)
