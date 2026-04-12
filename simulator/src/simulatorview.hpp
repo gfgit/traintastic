@@ -163,7 +163,7 @@ private:
   bool m_thinTracks = false;
 
   QPoint m_leftClickMousePos;
-  QPoint m_rightMousePos;
+  QPoint m_middleMousePos;
 
   size_t m_trainIndex = 0;
   size_t m_trainToBeRemovedIdx = Simulator::invalidIndex;
