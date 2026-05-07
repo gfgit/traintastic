@@ -1131,6 +1131,7 @@ static_assert(sizeof(LocomotiveInfoBase) == 5);
 // 2.19.1 Locomotive information reply (from Central version 3.0)
 struct LocomotiveInfo : LocomotiveInfoBase
 {
+  static constexpr uint8_t functionIndexMax = 12;
   uint8_t checksum = 0x00;
 
   LocomotiveInfo() :
@@ -1478,6 +1479,12 @@ namespace RocoMultiMAUS
     uint8_t functions = 0x00;
     uint8_t checksum;
 
+    FunctionInstructionF13F20(uint16_t address) :
+      LocomotiveInstruction(address)
+    {
+      identification = idSetFuncGroup4_Roco;
+    }
+
     FunctionInstructionF13F20(uint16_t address, bool f13, bool f14, bool f15, bool f16, bool f17, bool f18, bool f19, bool f20) :
       LocomotiveInstruction(address)
     {
@@ -1529,6 +1536,8 @@ namespace RocoMultiMAUS
   // multiMAUS V1.02 Locomotive state reply up to F20 and speed, direction info
   struct LocomotiveCumulativeInfo : LocomotiveInfoBase
   {
+    static constexpr uint8_t functionIndexMax = 20;
+
     uint8_t functions4 = 0x00;
     uint8_t unused0 = 0x00;
     uint8_t unused1 = 0x00;

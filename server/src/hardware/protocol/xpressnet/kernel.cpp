@@ -107,6 +107,21 @@ void Kernel::onPendingQueryTimeout(const boost::system::error_code& ec)
     return;
 
   // Remove first query which did not get reply
+  const Utils::PendingQuery &query = *m_pendingQueries.begin();
+  if(query.type == Utils::PendingQuery::LocoInfoAndF0F12 || query.type == Utils::PendingQuery::ROCOCumulativeLocoInfo)
+  {
+    auto loco = std::find_if(m_locomotives.begin(), m_locomotives.end(),
+      [address=query.address](const Locomotive &item) -> bool
+      {
+        return item.address == address;
+      });
+
+    if(loco != m_locomotives.end() && loco->hasPendingSpeedMessage)
+    {
+      sendPendingMessages(*loco);
+    }
+  }
+
   m_pendingQueries.erase(m_pendingQueries.begin());
 
   // Go on to next query
@@ -121,6 +136,22 @@ uint16_t Kernel::popAddressQuerySendNext(Utils::PendingQuery::QueryType type)
   const uint16_t address = m_pendingQueries.at(0).address;
 
   // Remove first query which completed succesfully
+  // Remove first query which did not get reply
+  const Utils::PendingQuery &query = *m_pendingQueries.begin();
+  if(query.type == Utils::PendingQuery::LocoInfoAndF0F12 || query.type == Utils::PendingQuery::ROCOCumulativeLocoInfo)
+  {
+    auto loco = std::find_if(m_locomotives.begin(), m_locomotives.end(),
+      [address=query.address](const Locomotive &item) -> bool
+      {
+        return item.address == address;
+      });
+
+    if(loco != m_locomotives.end() && loco->hasPendingSpeedMessage)
+    {
+      sendPendingMessages(*loco);
+    }
+  }
+
   m_pendingQueries.erase(m_pendingQueries.begin());
 
   // Go on to next query
@@ -455,6 +486,7 @@ void Kernel::receive(const Message& message)
             break;
 
           loco->flags |= Locomotive::Flags::OwnedByXBus;
+          loco->waitingInfoReply = true;
 
           // Immediately start querying
           postQuery({locoInstr.address(),
@@ -511,67 +543,7 @@ void Kernel::receive(const Message& message)
         if((locoInstr.identification & LocomotiveInfo::identificationMask) == 0)
         {
           const auto& locoInfo = static_cast<const LocomotiveInfo&>(message);
-
-          const uint16_t replyAddress = popAddressQuerySendNext(Utils::PendingQuery::LocoInfoAndF0F12);
-          if(!replyAddress)
-            break; // We did not ask for locomotive info, ignore it
-
-          // After receiving basic loco info, query higher functions
-          auto loco = std::find_if(m_locomotives.begin(), m_locomotives.end(),
-            [replyAddress](const Locomotive &item) -> bool
-            {
-              return item.address == replyAddress;
-            });
-
-          if(loco == m_locomotives.end())
-            break;
-
-          if((loco->flags & Locomotive::Flags::HasF13F28) == Locomotive::Flags::HasF13F28)
-            postQuery({replyAddress, Utils::PendingQuery::FuncInfoF13F28});
-          else if((loco->flags & Locomotive::Flags::HasF29F68) == Locomotive::Flags::HasF29F68)
-            postQuery({replyAddress, Utils::PendingQuery::FuncInfoF29F68});
-
-          // Enable/disable polling for this locomotive
-          // When disabling, complete last poll cycle
-          if(locoInfo.isBusy())
-            loco->flags |= Locomotive::Flags::OwnedByXBus;
-          else
-            loco->flags &= ~Locomotive::Flags::OwnedByXBus;
-
-          EventLoop::call(
-            [this, replyAddress, locoInfoCopy=locoInfo]()
-            {
-              try
-              {
-                if(auto decoder = m_decoderController->getDecoder(DCC::getProtocol(replyAddress), replyAddress))
-                {
-                  const float throttle = Decoder::speedStepToThrottle(locoInfoCopy.speedStep(), locoInfoCopy.speedSteps());
-
-                  m_isUpdatingDecoderFromKernel = true;
-                  decoder->emergencyStop = locoInfoCopy.isEmergencyStop();
-
-                  m_isUpdatingDecoderFromKernel = true;
-                  decoder->direction = locoInfoCopy.direction();
-
-                  m_isUpdatingDecoderFromKernel = true;
-                  decoder->throttle = throttle;
-
-                  //Reset flag guard at end
-                  m_isUpdatingDecoderFromKernel = false;
-
-                  //Function get always updated because we do not store a copy in cache
-                  //so there is no way to tell in advance if they changed
-                  for(int i = 0; i <= 12; i++)
-                  {
-                    decoder->setFunctionValue(i, locoInfoCopy.getFunction(i));
-                  }
-                }
-              }
-              catch(...)
-              {
-
-              }
-            });
+          handleLocoInfoReply(locoInfo);
           break;
         }
 
@@ -615,61 +587,7 @@ void Kernel::receive(const Message& message)
         const auto& locoInfo = static_cast<const RocoMultiMAUS::LocomotiveCumulativeInfo&>(message);
         if((locoInfo.identification & RocoMultiMAUS::LocomotiveCumulativeInfo::identificationMask) == 0)
         {
-          const uint16_t replyAddress = popAddressQuerySendNext(Utils::PendingQuery::ROCOCumulativeLocoInfo);
-          if(!replyAddress)
-            break; // We did not ask for locomotive info, ignore it
-
-          // After receiving basic loco info, query higher functions
-          auto loco = std::find_if(m_locomotives.begin(), m_locomotives.end(),
-            [replyAddress](const Locomotive &item) -> bool
-            {
-              return item.address == replyAddress;
-            });
-
-          if(loco == m_locomotives.end())
-            break;
-
-          // Enable/disable polling for this locomotive
-          // When disabling, complete last poll cycle
-          if(locoInfo.isBusy())
-            loco->flags |= Locomotive::Flags::OwnedByXBus;
-          else
-            loco->flags &= ~Locomotive::Flags::OwnedByXBus;
-
-          EventLoop::call(
-            [this, replyAddress, locoInfoCopy=locoInfo]()
-            {
-              try
-              {
-                if(auto decoder = m_decoderController->getDecoder(DCC::getProtocol(replyAddress), replyAddress))
-                {
-                  const float throttle = Decoder::speedStepToThrottle(locoInfoCopy.speedStep(), locoInfoCopy.speedSteps());
-
-                  m_isUpdatingDecoderFromKernel = true;
-                  decoder->emergencyStop = locoInfoCopy.isEmergencyStop();
-
-                  m_isUpdatingDecoderFromKernel = true;
-                  decoder->direction = locoInfoCopy.direction();
-
-                  m_isUpdatingDecoderFromKernel = true;
-                  decoder->throttle = throttle;
-
-                  //Reset flag guard at end
-                  m_isUpdatingDecoderFromKernel = false;
-
-                  //Function get always updated because we do not store a copy in cache
-                  //so there is no way to tell in advance if they changed
-                  for(int i = 0; i <= 20; i++)
-                  {
-                    decoder->setFunctionValue(i, locoInfoCopy.getFunction(i));
-                  }
-                }
-              }
-              catch(...)
-              {
-
-              }
-            });
+          handleLocoInfoReply(locoInfo);
           break;
         }
 
@@ -737,7 +655,27 @@ void Kernel::decoderChanged(const Decoder& decoder, DecoderChangeFlags changes, 
 
   if(m_config.useEmergencyStopLocomotiveCommand && changes == DecoderChangeFlags::EmergencyStop && decoder.emergencyStop)
   {
-    postSend(EmergencyStopLocomotive(decoder.address));
+    boost::asio::post(m_ioContext,
+      [this, address=decoder.address.value()]()
+      {
+        send(EmergencyStopLocomotive(address));
+
+        auto loco = std::find_if(m_locomotives.begin(), m_locomotives.end(),
+          [address](const Locomotive &item) -> bool
+          {
+            return item.address == address;
+          });
+
+        if(loco != m_locomotives.end())
+        {
+          loco->speedStep = 0;
+          if(loco->waitingInfoReply)
+          {
+            // It is an emergency stop, ignore other queued speed commands
+            loco->hasPendingSpeedMessage = false;
+          }
+        }
+      });
   }
   else if(has(changes, DecoderChangeFlags::EmergencyStop | DecoderChangeFlags::Direction | DecoderChangeFlags::Throttle | DecoderChangeFlags::SpeedSteps))
   {
@@ -756,7 +694,47 @@ void Kernel::decoderChanged(const Decoder& decoder, DecoderChangeFlags changes, 
       static_cast<SpeedAndDirectionInstruction14&>(spd).setFl(decoder.getFunctionValue(0));
 
     spd.updateChecksum();
-    postSend(spd);
+
+    boost::asio::post(m_ioContext,
+      [this, spd]()
+      {
+        auto loco = std::find_if(m_locomotives.begin(), m_locomotives.end(),
+          [address=spd.address()](const Locomotive &item) -> bool
+          {
+            return item.address == address;
+          });
+
+        if(loco != m_locomotives.end())
+        {
+          //Rescale everything to 126 steps
+          int currentSpeedStep = spd.speedStep();
+          if(spd.speedSteps() != 126)
+          {
+            currentSpeedStep = float(currentSpeedStep) / float(spd.speedSteps()) * 126.0;
+            if(abs(currentSpeedStep - loco->speedStep) < 5)
+              currentSpeedStep = loco->speedStep; //Consider it a rounding error
+          }
+
+          loco->speedStep = currentSpeedStep;
+
+          if(loco->waitingInfoReply)
+          {
+            // If we are waiting on a reply here hold messages
+            // unless it is an emergency stop
+            if(spd.isEmergencyStop())
+              loco->hasPendingSpeedMessage = false;
+            else
+            {
+              loco->hasPendingSpeedMessage = true;
+              loco->pendingSpeedIdentification = spd.identification;
+              loco->pendingSpeedAndDirection = spd.speedAndDirection;
+              return; // Do not send now, queue it for later
+            }
+          }
+        }
+
+        send(spd);
+      });
   }
   else if(has(changes, DecoderChangeFlags::FunctionValue))
   {
@@ -778,7 +756,7 @@ void Kernel::decoderChanged(const Decoder& decoder, DecoderChangeFlags changes, 
 
       if(group == 4 && m_config.useRocoF13F20Command)
       {
-        postSend(RocoMultiMAUS::FunctionInstructionF13F20(
+        RocoMultiMAUS::FunctionInstructionF13F20 setFuncRoco(
           decoder.address,
           decoder.getFunctionValue(13),
           decoder.getFunctionValue(14),
@@ -787,7 +765,32 @@ void Kernel::decoderChanged(const Decoder& decoder, DecoderChangeFlags changes, 
           decoder.getFunctionValue(17),
           decoder.getFunctionValue(18),
           decoder.getFunctionValue(19),
-          decoder.getFunctionValue(20)));
+          decoder.getFunctionValue(20));
+
+        boost::asio::post(m_ioContext,
+          [this, setFuncRoco]()
+          {
+            auto loco = std::find_if(m_locomotives.begin(), m_locomotives.end(),
+              [address=setFuncRoco.address()](const Locomotive &item) -> bool
+              {
+                return item.address == address;
+              });
+
+            if(loco != m_locomotives.end() && loco->waitingInfoReply)
+            {
+              // If we are waiting on a reply here hold messages
+
+              // Convert ROCO message to standard message
+              FunctionInstructionGroup setFunc(setFuncRoco.address(), 4);
+              setFunc.functions = setFuncRoco.functions;
+              setFunc.updateChecksum();
+
+              addPendingFunctionMessage(setFunc);
+              return;
+            }
+
+            send(setFuncRoco);
+          });
       }
       else
       {
@@ -795,7 +798,25 @@ void Kernel::decoderChanged(const Decoder& decoder, DecoderChangeFlags changes, 
         for(uint8_t i = minIndex; i <= maxIndex; i++)
           setFunc.setFunction(i, decoder.getFunctionValue(i));
         setFunc.updateChecksum();
-        postSend(setFunc);
+
+        boost::asio::post(m_ioContext,
+          [this, setFunc]()
+          {
+            auto loco = std::find_if(m_locomotives.begin(), m_locomotives.end(),
+              [address=setFunc.address()](const Locomotive &item) -> bool
+              {
+                return item.address == address;
+              });
+
+            if(loco != m_locomotives.end() && loco->waitingInfoReply)
+            {
+              // If we are waiting on a reply here hold messages
+              addPendingFunctionMessage(setFunc);
+              return;
+            }
+
+            send(setFunc);
+          });
       }
       break;
     }
@@ -932,6 +953,63 @@ void Kernel::send(const Message& message)
   {} // log message and go to error state
 }
 
+void Kernel::addPendingFunctionMessage(const FunctionInstructionGroup &msg)
+{
+  for(FunctionInstructionGroup &other : pendingFunctionMessages)
+  {
+    if(other.address() != msg.address() || other.identification != msg.identification)
+      continue;
+
+    // Override last queued message
+    other.functions = msg.functions;
+    return;
+  }
+
+  // Not in queue, add it
+  pendingFunctionMessages.push_back(msg);
+}
+
+void Kernel::sendPendingMessages(Locomotive &loco)
+{
+  if(!loco.hasPendingSpeedMessage)
+    return;
+
+  assert(loco.waitingInfoReply);
+
+  SpeedAndDirectionInstruction spd(loco.address, false, Direction::Forward);
+  spd.identification = loco.pendingSpeedIdentification;
+  spd.speedAndDirection = loco.pendingSpeedAndDirection;
+  spd.updateChecksum();
+  send(spd);
+
+  for(auto it = pendingFunctionMessages.begin(); it != pendingFunctionMessages.end(); )
+  {
+    if(it->address() != loco.address)
+    {
+      it++;
+      continue;
+    }
+
+    if(m_config.useRocoF13F20Command && it->getGroup() == 4)
+    {
+      // Convert standard message to ROCO message
+      RocoMultiMAUS::FunctionInstructionF13F20 setFuncRoco(it->address());
+      setFuncRoco.functions = it->functions;
+      setFuncRoco.updateChecksum();
+      send(setFuncRoco);
+    }
+    else
+      send(*it);
+
+    it = pendingFunctionMessages.erase(it);
+  }
+
+  loco.pendingSpeedIdentification = 0;
+  loco.pendingSpeedAndDirection = 0;
+  loco.hasPendingSpeedMessage = false;
+  loco.waitingInfoReply = false;
+}
+
 bool Kernel::send(std::vector<uint8_t> message, bool autoChecksum)
 {
   assert(isEventLoopThread());
@@ -958,6 +1036,97 @@ bool Kernel::send(std::vector<uint8_t> message, bool autoChecksum)
     });
 
   return true;
+}
+
+template<class T>
+void Kernel::handleLocoInfoReply(const T &locoInfo)
+{
+  constexpr auto replyType = []() -> auto {
+    if constexpr(std::is_same_v<T, LocomotiveInfo>)
+      return Utils::PendingQuery::LocoInfoAndF0F12;
+    else if constexpr(std::is_same_v<T, RocoMultiMAUS::LocomotiveCumulativeInfo>)
+      return Utils::PendingQuery::ROCOCumulativeLocoInfo;
+    else
+      static_assert(false, "Wrong message type");
+  }();
+
+  const uint16_t replyAddress = popAddressQuerySendNext(replyType);
+  if(!replyAddress)
+    return; // We did not ask for locomotive info, ignore it
+
+  // After receiving basic loco info, query higher functions
+  auto loco = std::find_if(m_locomotives.begin(), m_locomotives.end(),
+    [replyAddress](const Locomotive &item) -> bool
+    {
+      return item.address == replyAddress;
+    });
+
+  if(loco == m_locomotives.end())
+    return;
+
+  if((loco->flags & Locomotive::Flags::HasF13F28) == Locomotive::Flags::HasF13F28)
+    postQuery({replyAddress, Utils::PendingQuery::FuncInfoF13F28});
+  else if((loco->flags & Locomotive::Flags::HasF29F68) == Locomotive::Flags::HasF29F68)
+    postQuery({replyAddress, Utils::PendingQuery::FuncInfoF29F68});
+
+  // Enable/disable polling for this locomotive
+  // When disabling, complete last poll cycle
+  if(locoInfo.isBusy())
+    loco->flags |= Locomotive::Flags::OwnedByXBus;
+  else
+    loco->flags &= ~Locomotive::Flags::OwnedByXBus;
+
+  //Rescale everything to 126 steps
+  int currentSpeedStep = locoInfo.speedStep();
+  if(locoInfo.speedSteps() != 126)
+  {
+    currentSpeedStep = float(currentSpeedStep) / float(locoInfo.speedSteps()) * 126.0;
+    if(abs(currentSpeedStep - loco->speedStep) < 5)
+      currentSpeedStep = loco->speedStep; //Consider it a rounding error
+  }
+
+  // Only update decoder if speed really changed from last set speed
+  // Also ignore reported speed if locomotive is controlled by us
+  const bool speedReallyChanged = locoInfo.isBusy() && (loco->speedStep != currentSpeedStep);
+  loco->speedStep = currentSpeedStep;
+
+  EventLoop::call(
+    [this, replyAddress, speedReallyChanged, locoInfoCopy=locoInfo]()
+    {
+      try
+      {
+        if(auto decoder = m_decoderController->getDecoder(DCC::getProtocol(replyAddress), replyAddress))
+        {
+          const float throttle = Decoder::speedStepToThrottle(locoInfoCopy.speedStep(), locoInfoCopy.speedSteps());
+
+          m_isUpdatingDecoderFromKernel = true;
+          decoder->emergencyStop = locoInfoCopy.isEmergencyStop();
+
+          m_isUpdatingDecoderFromKernel = true;
+          decoder->direction = locoInfoCopy.direction();
+
+          if(speedReallyChanged)
+          {
+            m_isUpdatingDecoderFromKernel = true;
+            decoder->throttle = throttle;
+          }
+
+          //Reset flag guard at end
+          m_isUpdatingDecoderFromKernel = false;
+
+          //Function get always updated because we do not store a copy in cache
+          //so there is no way to tell in advance if they changed
+          for(int i = 0; i <= T::functionIndexMax; i++)
+          {
+            decoder->setFunctionValue(i, locoInfoCopy.getFunction(i));
+          }
+        }
+      }
+      catch(...)
+      {
+
+      }
+    });
 }
 
 }

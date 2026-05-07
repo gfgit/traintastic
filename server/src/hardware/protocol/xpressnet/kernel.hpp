@@ -33,6 +33,8 @@
 #include "utils.hpp"
 #include "iohandler/iohandler.hpp"
 
+#include "messages.hpp" // TODO: used for queue, find better way
+
 class Decoder;
 enum class DecoderChangeFlags;
 class DecoderController;
@@ -66,6 +68,13 @@ class Kernel : public ::KernelBase
       };
 
       uint8_t flags = Flags::OwnedByXBus;
+      uint8_t speedStep = 0;
+
+      // Do not send while locomotive request is waiting reply
+      uint8_t pendingSpeedIdentification = 0;
+      uint8_t pendingSpeedAndDirection = 0;
+      bool waitingInfoReply = false;
+      bool hasPendingSpeedMessage = false;
     };
 
   private:
@@ -134,6 +143,7 @@ class Kernel : public ::KernelBase
     bool m_isUpdatingDecoderFromKernel = false;
 
     std::vector<Locomotive> m_locomotives;
+    std::vector<FunctionInstructionGroup> pendingFunctionMessages;
 
     void postQuery(const Utils::PendingQuery& query);
     void sendCurrentQuery();
@@ -157,6 +167,12 @@ class Kernel : public ::KernelBase
     }
 
     void send(const Message& message);
+
+    template<class T>
+    void handleLocoInfoReply(const T& locoInfo);
+
+    void addPendingFunctionMessage(const FunctionInstructionGroup &msg);
+    void sendPendingMessages(Locomotive &loco);
 
   public:
     Kernel(const Kernel&) = delete;
