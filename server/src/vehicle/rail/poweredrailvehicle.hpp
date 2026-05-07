@@ -23,23 +23,37 @@
 #ifndef TRAINTASTIC_SERVER_VEHICLE_RAIL_POWEREDRAILVEHICLE_HPP
 #define TRAINTASTIC_SERVER_VEHICLE_RAIL_POWEREDRAILVEHICLE_HPP
 
+#include <memory>
 #include "railvehicle.hpp"
-#include <traintastic/enum/direction.hpp>
 #include "../../core/powerproperty.hpp"
+#include "../../core/method.hpp"
+#include "../../core/objectproperty.hpp"
+
+#include "vehiclespeedcurve.hpp" // TODO: i would like to forwad declare
+
+class VehicleSpeedCurve;
 
 class PoweredRailVehicle : public RailVehicle
 {
   protected:
     PoweredRailVehicle(World& world, std::string_view id_);
 
+    void loaded() override;
     void worldEvent(WorldState state, WorldEvent event) override;
+
+    void onDecoderChanged(Decoder& decoderRef, DecoderChangeFlags flags, uint32_t functionNumber) override;
+
+    friend class VehicleSpeedCurve;
+    void updateMaxSpeed();
+
+    friend class Train;
+    float lastTrainSpeedStep = 0;
 
   public:
     PowerProperty power;
-
-    void setDirection(Direction value);
-    void setEmergencyStop(bool value);
-    void setSpeed(double kmph);
+    ObjectProperty<VehicleSpeedCurve> speedCurve;
+    Property<double> maxAccelerationRate; // m/s^2
+    Property<double> maxBrakingRate; // m/s^2
 };
 
 #endif

@@ -1,9 +1,8 @@
 /**
- * server/src/utils/utf8.hpp
+ * This file is part of Traintastic,
+ * see <https://github.com/traintastic/traintastic>.
  *
- * This file is part of the traintastic source code.
- *
- * Copyright (C) 2019-2020 Reinder Feenstra
+ * Copyright (C) 2026 Reinder Feenstra
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -20,11 +19,23 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef TRAINTASTIC_SERVER_UTILS_UTF8_HPP
-#define TRAINTASTIC_SERVER_UTILS_UTF8_HPP
+#ifndef TRAINTASTIC_CLIENT_WIDGET_OBJECTLIST_TRAINVEHICLELISTWIDGET_HPP
+#define TRAINTASTIC_CLIENT_WIDGET_OBJECTLIST_TRAINVEHICLELISTWIDGET_HPP
 
-#define UTF8_CHECKMARK "\u2713"
-#define UTF8_BALLOT_X "\u2717"
-#define UTF8_SUPERSCRIPT_TWO "\u00B2"
+#include "objectlistwidget.hpp"
+
+class Method;
+
+class TrainVehicleListWidget : public ObjectListWidget
+{
+public:
+  explicit TrainVehicleListWidget(const ObjectPtr& object, QWidget* parent = nullptr);
+
+protected:
+  void tableDoubleClicked(const QModelIndex& index) override;
+
+private:
+  Method* m_toggleDirectionInvert = nullptr;
+};
 
 #endif

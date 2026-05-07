@@ -25,6 +25,7 @@
 #include "objectlist/interfacelistwidget.hpp"
 #include "objectlist/throttleobjectlistwidget.hpp"
 #include "objectlist/trainlistwidget.hpp"
+#include "objectlist/trainvehiclelistwidget.hpp"
 #include "objectlist/zoneblocklistwidget.hpp"
 #include "object/luascripteditwidget.hpp"
 #include "object/objecteditwidget.hpp"
@@ -42,6 +43,7 @@
 #include "propertyvaluelabel.hpp"
 #include "objectpropertycombobox.hpp"
 #include "objectnamelabel.hpp"
+#include "vehiclespeedcurvewidget.hpp"
 #include "../board/boardwidget.hpp"
 #include "../network/object.hpp"
 #include "../network/inputmonitor.hpp"
@@ -74,6 +76,10 @@ QWidget* createWidgetIfCustom(const ObjectPtr& object, QWidget* parent)
   {
     return new TrainListWidget(object, parent);
   }
+  if(classId == "list.train_vehicle")
+  {
+    return new TrainVehicleListWidget(object, parent);
+  }
   if(classId == "list.zone_block")
   {
     return new ZoneBlockListWidget(object, parent);
@@ -92,6 +98,8 @@ QWidget* createWidgetIfCustom(const ObjectPtr& object, QWidget* parent)
     return new ListWidget(object, parent);
   else if(classId == "marklin_can_locomotive_list")
     return new MarklinCANLocomotiveListWidget(object, parent);
+  else if(classId == "vehicle_speed_curve")
+    return new VehicleSpeedCurveWidget(object, parent);
   else
     return nullptr;
 }
