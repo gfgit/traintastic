@@ -42,7 +42,8 @@ enum class OpCode : uint8_t
   RequestChannel = 9,
   OwnSpawn = 10,
   SpawnStateChange = 11,
-  AuxSignalSetState = 12
+  AuxSignalSetState = 12,
+  SensorBatchState = 13
 };
 
 struct Message
@@ -301,6 +302,22 @@ struct SpawnStateChange : Message
   }
 } ATTRIBUTE_PACKED;
 static_assert(sizeof(SpawnStateChange) == 5);
+
+struct SensorBatchState : Message
+{
+  uint16_t channel;
+  uint16_t batchIdx;
+  uint16_t state;
+
+  SensorBatchState(uint16_t ch, uint16_t batchIdx_, uint16_t state_)
+    : Message(OpCode::SensorBatchState, sizeof(SensorBatchState))
+    , channel{ch}
+    , batchIdx{batchIdx_}
+    , state(state_)
+  {
+  }
+} ATTRIBUTE_PACKED;
+static_assert(sizeof(SensorBatchState) == 8);
 
 PRAGMA_PACK_POP
 

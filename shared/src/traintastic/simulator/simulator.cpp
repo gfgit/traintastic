@@ -879,6 +879,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       break;
     }
     case OpCode::SensorChanged:
+    case OpCode::SensorBatchState:
       break; // only sent by simulator
     case OpCode::Handshake:
     case OpCode::HandshakeResponse:
@@ -1007,6 +1008,9 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
     {
       const auto& m = static_cast<const RequestChannel&>(message);
       std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+
+      if(staticData.sensorChannelMap.find(m.channel) == staticData.sensorChannelMap.end())
+        break;
 
       for(const std::shared_ptr<SimulatorConnection>& connection : m_connections)
       {
@@ -1365,45 +1369,82 @@ void Simulator::syncSensorState()
 {
   m_syncSensorStateTimer.expires_after(syncSensorRate);
   m_syncSensorStateTimer.async_wait(
-      [this](std::error_code ec)
+    [this](std::error_code ec)
+    {
+      if(!ec)
       {
-        if(!ec)
-        {
-          syncSensorState();
-        }
-      });
+        syncSensorState();
+      }
+    });
 
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-  for(const auto& connection : m_connections)
+  for(const std::shared_ptr<SimulatorConnection>& connection : m_connections)
   {
-    size_t idx = connection->m_lastSyncedSensorIdx;
-    idx++;
-    while(idx < m_stateData.sensors.size())
+    if(connection->subscribedChannels.empty())
+      continue;
+
+    const size_t currentChannel = connection->subscribedChannels[connection->m_lastSyncedChannelIdx];
+    const auto& channelMap = staticData.sensorChannelMap.at(currentChannel);
+
+    size_t batchIdx = connection->m_nextSyncBatchIdx;
+    bool sensorFound = false;
+
+    uint16_t stateBuf = 0;
+    std::map<size_t, size_t>::const_iterator it;
+
+    while(true)
     {
-      const auto& sensor = staticData.sensors[idx];
+      const size_t firstAddress = batchIdx * 16 + 1;
+      const size_t lastAddress = (batchIdx + 1) * 16;
 
-      // Axle counter sensor send diffs so there is no point in querying them
-      if(sensor.type == Sensor::Type::AxleCounter)
+      it = channelMap.lower_bound(firstAddress);
+      stateBuf = 0;
+
+      while(it != channelMap.end())
       {
-        idx++;
-        continue;
+        if(it->first > lastAddress)
+          break;
+
+        const auto& sensor = staticData.sensors[it->second];
+
+        // Axle counter sensor send diffs so there is no point in querying them
+        if(sensor.type == Sensor::Type::AxleCounter)
+        {
+          it++;
+          continue;
+        }
+
+        const auto& sensorState = m_stateData.sensors[it->second];
+        if(sensorState.value)
+          stateBuf |= 1 << (sensor.address - firstAddress);
+
+        sensorFound = true;
+        it++;
       }
 
-      if(!connection->subscribedChannels.empty() &&
-          !vec_contains(connection->subscribedChannels, sensor.channel))
-      {
-        idx++;
-        continue;
-      }
+      if(sensorFound || it == channelMap.end())
+        break;
 
-      connection->m_lastSyncedSensorIdx = idx;
-      const auto& sensorState = m_stateData.sensors[idx];
-      connection->send(SimulatorProtocol::SensorChanged(sensor.channel, sensor.address, 0, sensorState.value));
-      break;
+      // Go to next batch
+      batchIdx = it->first / 16;
     }
 
-    if(idx >= m_stateData.sensors.size())
-      connection->m_lastSyncedSensorIdx = 0;
+    if(sensorFound)
+      connection->send(SimulatorProtocol::SensorBatchState(currentChannel, m_stateData.powerOn ? batchIdx : 0, stateBuf));
+
+    if(it == channelMap.end())
+    {
+      // We reached channel end, go to start of next channel
+      connection->m_nextSyncBatchIdx = 0;
+      connection->m_lastSyncedChannelIdx++;
+
+      if(connection->m_lastSyncedChannelIdx >= connection->subscribedChannels.size())
+        connection->m_lastSyncedChannelIdx = 0; // Restart from first channel
+    }
+    else
+    {
+      connection->m_nextSyncBatchIdx = batchIdx + 1;
+    }
   }
 }
 
@@ -2151,23 +2192,20 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                     {
                         const uint16_t sensorChannel = item.value("sensor_channel", defaultChannel);
 
-                        for(size_t i = 0; i < data.sensors.size(); ++i)
+                        auto &channelMap = data.sensorChannelMap[sensorChannel];
+                        auto it = channelMap.find(sensorAddress);
+                        if(it == channelMap.end())
                         {
-                            if(data.sensors[i].channel == sensorChannel && data.sensors[i].address == sensorAddress)
-                            {
-                                trackObj.sensorIndex = i;
-                                break;
-                            }
+                          // new sensor
+                          trackObj.sensorIndex = data.sensors.size();
+                          data.sensors.emplace_back(Sensor{sensorChannel, sensorAddress, Sensor::Type::PositionSensor});
+                          channelMap.insert({sensorAddress, trackObj.sensorIndex});
+                          if(type == "axle_counter")
+                            data.sensors.at(trackObj.sensorIndex).type = Sensor::Type::AxleCounter;
+                          stateData.sensors.emplace_back(SensorState{{0}, 0, 0, false});
                         }
-
-                        if(trackObj.sensorIndex == invalidIndex) // new sensor
-                        {
-                            trackObj.sensorIndex = data.sensors.size();
-                            data.sensors.emplace_back(Sensor{sensorChannel, sensorAddress, Sensor::Type::PositionSensor});
-                            if(type == "axle_counter")
-                              data.sensors.at(trackObj.sensorIndex).type = Sensor::Type::AxleCounter;
-                            stateData.sensors.emplace_back(SensorState{{0}, 0, 0, false});
-                        }
+                        else
+                          trackObj.sensorIndex = it->second;
 
                         switch(data.sensors.at(trackObj.sensorIndex).type)
                         {
@@ -2762,21 +2800,18 @@ void Simulator::loadTrackplan(const nlohmann::json& world, StaticData &data, Sta
             {
                 const uint16_t sensorChannel = obj.value("sensor_channel", defaultChannel);
 
-                for(size_t i = 0; i < data.sensors.size(); ++i)
+                auto &channelMap = data.sensorChannelMap[sensorChannel];
+                auto it = channelMap.find(sensorAddress);
+                if(it == channelMap.end())
                 {
-                    if(data.sensors[i].channel == sensorChannel && data.sensors[i].address == sensorAddress)
-                    {
-                        segment.sensor.index = i;
-                        break;
-                    }
+                  // new sensor
+                  segment.sensor.index = data.sensors.size();
+                  data.sensors.emplace_back(Sensor{sensorChannel, sensorAddress, Sensor::Type::TrackCircuit});
+                  channelMap.insert({sensorAddress, segment.sensor.index});
+                  stateData.sensors.emplace_back(SensorState{{0}, 0, 0, false});
                 }
-
-                if(segment.sensor.index == invalidIndex) // new sensor
-                {
-                    segment.sensor.index = data.sensors.size();
-                    data.sensors.emplace_back(Sensor{sensorChannel, sensorAddress, Sensor::Type::TrackCircuit});
-                    stateData.sensors.emplace_back(SensorState{{0}, 0, 0, false});
-                }
+                else
+                  segment.sensor.index = it->second;
             }
 
             loadTrackObjects(obj, data, stateData, segment);
