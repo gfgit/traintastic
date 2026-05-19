@@ -1021,17 +1021,53 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
         if(!vec_contains(connection->subscribedChannels, m.channel))
           connection->subscribedChannels.push_back(m.channel);
 
-        const size_t count = staticData.sensors.size();
-        for(size_t i = 0; i < count; ++i)
+        const auto& channelMap = staticData.sensorChannelMap.at(m.channel);
+
+        size_t batchIdx = 0;
+        bool sensorFound = false;
+
+        uint16_t stateBuf = 0;
+        std::map<size_t, size_t>::const_iterator it;
+
+        while(true)
         {
-          const auto& sensor = staticData.sensors[i];
+          const size_t firstAddress = batchIdx * 16 + 1;
+          const size_t lastAddress = (batchIdx + 1) * 16;
 
-          // Axle counter sensor send diffs so there is no point in querying them
-          if((m.channel != invalidAddress && m.channel != sensor.channel) || sensor.type == Sensor::Type::AxleCounter)
-            continue;
+          it = channelMap.lower_bound(firstAddress);
+          stateBuf = 0;
+          sensorFound = false;
 
-          const auto& sensorState = m_stateData.sensors[i];
-          connection->send(SimulatorProtocol::SensorChanged(sensor.channel, sensor.address, 0, sensorState.value));
+          while(it != channelMap.end())
+          {
+            if(it->first > lastAddress)
+              break;
+
+            const auto& sensor = staticData.sensors[it->second];
+
+            // Axle counter sensor send diffs so there is no point in querying them
+            if(sensor.type == Sensor::Type::AxleCounter)
+            {
+              it++;
+              continue;
+            }
+
+            const auto& sensorState = m_stateData.sensors[it->second];
+            if(sensorState.value)
+              stateBuf |= 1 << (sensor.address - firstAddress);
+
+            sensorFound = true;
+            it++;
+          }
+
+          if(sensorFound)
+            connection->send(SimulatorProtocol::SensorBatchState(m.channel, m_stateData.powerOn ? batchIdx : 0, stateBuf));
+
+          if(it == channelMap.end())
+            break;
+
+          // Go to next batch
+          batchIdx = it->first / 16;
         }
         break;
       }
