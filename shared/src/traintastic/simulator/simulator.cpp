@@ -1812,10 +1812,16 @@ bool Simulator::updateVehiclePosition(VehicleState::Face& face,
       stop = true;
       return false;
     }
-    else if(isFirst && obj.type == Object::Type::StationStopPoint)
+    else if(train.state.mode != TrainState::Mode::Manual && obj.type == Object::Type::StationStopPoint)
     {
-      if(train.state.mode != TrainState::Mode::Manual)
+      if(isFirst)
+      {
+        // When train head enters station stop, set flag
         train.state.isOnStationStop = true;
+      }
+
+      // At each train wagon passing recalculate previous signal
+      train.state.prevSignal.dirty = true;
     }
 
     return true;
@@ -3615,7 +3621,7 @@ void Simulator::updateTrainNextSignal(Train *train, bool next)
   bool dirFwd = face.segmentDirectionInverted == trainReverse;
   float startPos = face.distance;
 
-  while(totalDistance < 800)
+  while(totalDistance < 1000)
   {
     if(MainSignal *s = helper(dirFwd, segmentIndex, startPos))
     {
