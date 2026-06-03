@@ -1754,7 +1754,7 @@ void SimulatorView::drawTrains(QPainter *painter)
                        length, trainWidth);
     painter->drawRect(vehicleRect);
 
-    if(activeTrain && activeTrain->state.isOnStationStop)
+    if(activeTrain && activeTrain == vehicle->activeTrain && activeTrain->state.isOnStationStop)
     {
       QRectF adjVehicleRect = vehicleRect.adjusted(1, 1, -1, -1);
       painter->setPen(stationStopTrainPen);
