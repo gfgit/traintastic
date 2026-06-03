@@ -1669,6 +1669,24 @@ void Simulator::updateTrainPositions()
   }
 }
 
+inline bool isTurnout(const Simulator::TrackSegment& segment)
+{
+  switch (segment.type)
+  {
+  case Simulator::TrackSegment::Type::Straight:
+  case Simulator::TrackSegment::Type::Curve:
+    return false;
+  case Simulator::TrackSegment::Type::Turnout:
+  case Simulator::TrackSegment::Type::TurnoutCurved:
+  case Simulator::TrackSegment::Type::Turnout3Way:
+    return true;
+  default:
+    assert(false);
+  }
+
+  return false;
+}
+
 inline bool isTurnoutUnknownState(const Simulator::TrackSegment& segment,
                                   const Simulator::StateData& stateData)
 {
@@ -1864,10 +1882,27 @@ bool Simulator::updateVehiclePosition(VehicleState::Face& face,
 
       const auto& nextSegment = staticData.trackSegments[nextSegmentIndex];
 
-      if(isTurnoutUnknownState(nextSegment, m_stateData))
+      if(isTurnout(nextSegment))
       {
-        outRemaining = segmentLength - face.distance - 0.0001;
-        return false;
+        // Check turnout
+        if(nextSegment.nextSegmentIndex[0] != faceSegmentIndexBefore)
+        {
+          // We take turnout from straight/curve side, check its state
+          if(getNextSegmentIndex(nextSegment, true, m_stateData) != faceSegmentIndexBefore)
+          {
+            // Turnout is not in good state, train will hit switch blades and derail
+            // We simulate by stopping train and setting turnout to unknown position
+            setTurnoutState(nextSegmentIndex, TurnoutState::State::Unknown);
+          }
+        }
+
+        if(m_stateData.turnouts.at(nextSegment.turnout.index).state
+            == TurnoutState::State::Unknown)
+        {
+          // Turnout is in unknown position, stop train
+          outRemaining = segmentLength - face.distance - 0.0001;
+          return false;
+        }
       }
 
       if(segment.sensor.index != invalidIndex)
@@ -1912,10 +1947,27 @@ bool Simulator::updateVehiclePosition(VehicleState::Face& face,
 
       const auto& nextSegment = staticData.trackSegments[nextSegmentIndex];
 
-      if(isTurnoutUnknownState(nextSegment, m_stateData))
+      if(isTurnout(nextSegment))
       {
-        outRemaining = face.distance;
-        return false;
+        // Check turnout
+        if(nextSegment.nextSegmentIndex[0] != faceSegmentIndexBefore)
+        {
+          // We take turnout from straight/curve side, check its state
+          if(getNextSegmentIndex(nextSegment, true, m_stateData) != faceSegmentIndexBefore)
+          {
+            // Turnout is not in good state, train will hit switch blades and derail
+            // We simulate by stopping train and setting turnout to unknown position
+            setTurnoutState(nextSegmentIndex, TurnoutState::State::Unknown);
+          }
+        }
+
+        if(m_stateData.turnouts.at(nextSegment.turnout.index).state
+            == TurnoutState::State::Unknown)
+        {
+          // Turnout is in unknown position, stop train
+          outRemaining = face.distance;
+          return false;
+        }
       }
 
       if(segment.sensor.index != invalidIndex)
