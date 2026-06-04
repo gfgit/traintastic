@@ -1462,7 +1462,7 @@ void Simulator::syncSensorState()
         break;
 
       // Go to next batch
-      batchIdx = it->first / 16;
+      batchIdx = (it->first - 1) / 16;
     }
 
     if(sensorFound)
