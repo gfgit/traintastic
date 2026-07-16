@@ -65,6 +65,7 @@ public:
   void zoomIn();
   void zoomOut();
   void zoomToFit();
+  void zoomToDefaultCenter();
 
   inline Simulator::Point getCamera() const
   {

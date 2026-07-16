@@ -95,7 +95,6 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
         {
           settings.setValue("LastLoadDir", QFileInfo(filename).absoluteFilePath());
           load(filename);
-          QMetaObject::invokeMethod(m_view, &SimulatorView::zoomToFit, Qt::QueuedConnection);
         }
       });
     menu->addAction("Load Images",
@@ -156,7 +155,14 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
 
     toolbar->addAction("Zoom in", m_view, &SimulatorView::zoomIn);
     toolbar->addAction("Zoom out", m_view, &SimulatorView::zoomOut);
-    toolbar->addAction("Zoom fit", m_view, &SimulatorView::zoomToFit);
+    QAction* act = toolbar->addAction("Zoom Default", m_view, [this]()
+    {
+      if(QGuiApplication::keyboardModifiers() & Qt::ShiftModifier)
+        m_view->zoomToFit();
+      else
+        m_view->zoomToDefaultCenter();
+    });
+    act->setToolTip("Hold shift to Zoom Fit instead");
 
     addToolBar(Qt::TopToolBarArea, toolbar);
   }
@@ -221,7 +227,7 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
   connect(m_view, &SimulatorView::powerOnChanged, m_power, &QAction::setChecked);
 }
 
-void MainWindow::load(const QString& filename)
+void MainWindow::load(const QString& filename, bool zoomToDefault)
 {
   setWindowFilePath(filename);
 
@@ -243,6 +249,10 @@ void MainWindow::load(const QString& filename)
       return;
     }
 
+    if(zoomToDefault)
+    {
+      QMetaObject::invokeMethod(m_view, &SimulatorView::zoomToDefaultCenter, Qt::QueuedConnection);
+    }
   }
 }
 
@@ -303,7 +313,7 @@ void MainWindow::keyPressEvent(QKeyEvent* ev)
     const float zoomLevel = m_view->getZoomLevel();
     const auto &cameraPt = m_view->getCamera();
 
-    load(windowFilePath());
+    load(windowFilePath(), false); // Do not zoom fit
 
     m_view->setZoomLevel(zoomLevel);
     m_view->setCamera(cameraPt);

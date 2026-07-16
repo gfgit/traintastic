@@ -34,7 +34,7 @@ class MainWindow : public QMainWindow
 public:
   explicit MainWindow(QWidget* parent = nullptr, Qt::WindowFlags flags = Qt::WindowFlags());
 
-  void load(const QString& filename);
+  void load(const QString& filename, bool zoomToDefault = true);
   void setFullScreen(bool value);
 
   void loadExtraImages(const QString &filename);

@@ -223,6 +223,8 @@ public:
     // Channel, (Address, sensor index)
     std::unordered_map<size_t, std::map<size_t, size_t>> sensorChannelMap;
 
+    Simulator::Point defaultCenterPos = {0, 0};
+    float defaultViewScale = 1.0f;
     float trainWidth = 10.0f;
     float trainCouplingLength = 4.0f;
     float worldScale = 1.0f;

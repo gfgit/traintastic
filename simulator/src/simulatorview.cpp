@@ -692,18 +692,29 @@ void SimulatorView::zoomToFit()
     return;
   }
 
-    m_zoomFit = true;
+  // When window gets resized, keep fitting
+  m_zoomFit = true;
 
   // Make it fit:
   const float zoomLevelX = width() / m_simulator->staticData.view.width();
   const float zoomLevelY = height() / m_simulator->staticData.view.height();
   const float zoomLevel = std::min(zoomLevelX, zoomLevelY);
+  setZoomLevel(zoomLevel); // Clamp zoom level to range
 
   // Center it:
-  m_cameraX = m_simulator->staticData.view.left - (width() / zoomLevel - m_simulator->staticData.view.width()) / 2;
-  m_cameraY = m_simulator->staticData.view.top - (height() / zoomLevel - m_simulator->staticData.view.height()) / 2;
+  m_cameraX = m_simulator->staticData.view.left - (width() / m_zoomLevel - m_simulator->staticData.view.width()) / 2;
+  m_cameraY = m_simulator->staticData.view.top - (height() / m_zoomLevel - m_simulator->staticData.view.height()) / 2;
+}
 
-  setZoomLevel(zoomLevel);
+void SimulatorView::zoomToDefaultCenter()
+{
+  setZoomLevel(m_simulator->staticData.defaultViewScale);
+  m_zoomFit = false; // Do not follow center when resizing view
+
+  // Center on default center:
+  const Simulator::Point oldCenter = mapToSim({width() / 2.0, height() / 2.0});
+  m_cameraX += m_simulator->staticData.defaultCenterPos.x - oldCenter.x;
+  m_cameraY += m_simulator->staticData.defaultCenterPos.y - oldCenter.y;
 }
 
 void SimulatorView::setCamera(const Simulator::Point &cameraPt)
