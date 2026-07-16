@@ -2301,7 +2301,13 @@ void SimulatorView::showItemTooltip(const Simulator::Point &point, QHelpEvent *e
 
 void SimulatorView::setZoomLevel(float value)
 {
+  const float oldZoomLevel = m_zoomLevel;
   m_zoomLevel = std::clamp(value, zoomLevelMin, zoomLevelMax);
+
+  // Keep anchor on current mouse pos
+  m_cameraX += ((m_lastHoverPos.x - m_cameraX) * (m_zoomLevel - oldZoomLevel)) / m_zoomLevel;
+  m_cameraY += ((m_lastHoverPos.y - m_cameraY) * (m_zoomLevel - oldZoomLevel)) / m_zoomLevel;
+
   update();
 }
 
