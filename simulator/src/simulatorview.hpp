@@ -27,6 +27,7 @@
 
 #include <QBasicTimer>
 #include <QImage>
+#include <QTransform>
 
 #include <traintastic/simulator/simulator.hpp>
 
@@ -69,20 +70,21 @@ public:
 
   inline Simulator::Point getCamera() const
   {
-      return {m_cameraX, m_cameraY};
+    return mapToSim({0, 0});
   }
 
   void setCamera(const Simulator::Point& cameraPt);
 
-  inline Simulator::Point mapToSim(const QPointF& p)
+  inline Simulator::Point mapToSim(const QPointF& p) const
   {
-    return {m_cameraX + float(p.x()) / m_zoomLevel,
-            m_cameraY + float(p.y()) / m_zoomLevel};
+    const QPointF& res = m_transform.inverted().map(p);
+    return {float(res.x()), float(res.y())};
   }
 
   inline float getZoomLevel() const { return m_zoomLevel; }
 
   void setZoomLevel(float zoomLevel);
+  void setRotation(float newRotation);
 
   void setImageVisible(int idx, bool val);
 
@@ -154,9 +156,9 @@ private:
   TrainsModel *mTrainsModel = nullptr;
 
   // View
-  float m_cameraX = 0.0f;
-  float m_cameraY = 0.0f;
+  QTransform m_transform;
   float m_zoomLevel = 1.0f;
+  float m_rotation = 0.0f;
   float m_signalsScaleFactor = 1.0f;
 
   bool m_zoomFit = false;

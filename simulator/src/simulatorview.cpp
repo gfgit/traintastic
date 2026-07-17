@@ -701,9 +701,15 @@ void SimulatorView::zoomToFit()
   const float zoomLevel = std::min(zoomLevelX, zoomLevelY);
   setZoomLevel(zoomLevel); // Clamp zoom level to range
 
-  // Center it:
-  m_cameraX = m_simulator->staticData.view.left - (width() / m_zoomLevel - m_simulator->staticData.view.width()) / 2;
-  m_cameraY = m_simulator->staticData.view.top - (height() / m_zoomLevel - m_simulator->staticData.view.height()) / 2;
+  // Center on default center:
+  const Simulator::Point oldCenter = mapToSim({width() / 2.0, height() / 2.0});
+  const Simulator::Point newCenter = {m_simulator->staticData.view.left + m_simulator->staticData.view.width() / 2,
+                                      m_simulator->staticData.view.top + m_simulator->staticData.view.height() / 2};
+
+  m_transform.rotate(-m_rotation);
+  m_transform.translate(-newCenter.x + oldCenter.x,
+                        -newCenter.y + oldCenter.y);
+  m_transform.rotate(m_rotation);
 }
 
 void SimulatorView::zoomToDefaultCenter()
@@ -713,14 +719,22 @@ void SimulatorView::zoomToDefaultCenter()
 
   // Center on default center:
   const Simulator::Point oldCenter = mapToSim({width() / 2.0, height() / 2.0});
-  m_cameraX += m_simulator->staticData.defaultCenterPos.x - oldCenter.x;
-  m_cameraY += m_simulator->staticData.defaultCenterPos.y - oldCenter.y;
+
+  m_transform.rotate(-m_rotation);
+  m_transform.translate(-m_simulator->staticData.defaultCenterPos.x + oldCenter.x,
+                        -m_simulator->staticData.defaultCenterPos.y + oldCenter.y);
+  m_transform.rotate(m_rotation);
 }
 
 void SimulatorView::setCamera(const Simulator::Point &cameraPt)
 {
-  m_cameraX = cameraPt.x;
-  m_cameraY = cameraPt.y;
+  const Simulator::Point oldCamera = getCamera();
+
+  m_transform.rotate(-m_rotation);
+  m_transform.translate(cameraPt.x - oldCamera.x,
+                        cameraPt.y - oldCamera.y);
+  m_transform.rotate(m_rotation);
+
   update();
 }
 
@@ -728,11 +742,7 @@ void SimulatorView::paintEvent(QPaintEvent */*e*/)
 {
   QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing, true);
-
-  painter.scale(m_zoomLevel, m_zoomLevel);
-  painter.translate(-m_cameraX, -m_cameraY);
-
-  const QTransform trasf = painter.transform();
+  painter.setTransform(m_transform);
 
   if(!m_images.empty() || !m_extraImages.empty())
   {
@@ -745,7 +755,7 @@ void SimulatorView::paintEvent(QPaintEvent */*e*/)
       painter.rotate(qRadiansToDegrees(image.ref.rotation));
       painter.scale(image.ref.ratio, image.ref.ratio);
       painter.drawImage(QPoint(), image.img);
-      painter.setTransform(trasf);
+      painter.setTransform(m_transform);
     }
 
     for(const auto &image : m_images)
@@ -755,7 +765,7 @@ void SimulatorView::paintEvent(QPaintEvent */*e*/)
       painter.rotate(qRadiansToDegrees(image.ref.rotation));
       painter.scale(image.ref.ratio, image.ref.ratio);
       painter.drawImage(QPoint(), image.img);
-      painter.setTransform(trasf);
+      painter.setTransform(m_transform);
     }
 
     painter.setOpacity(1);
@@ -2002,8 +2012,9 @@ void SimulatorView::mouseMoveEvent(QMouseEvent* e)
 
     const auto diff = m_middleMousePos - e->pos();
 
-    m_cameraX += diff.x() / m_zoomLevel;
-    m_cameraY += diff.y() / m_zoomLevel;
+    m_transform.rotate(-m_rotation);
+    m_transform.translate(-diff.x() / m_zoomLevel, -diff.y() / m_zoomLevel);
+    m_transform.rotate(m_rotation);
 
     m_middleMousePos = e->pos();
     update();
@@ -2037,14 +2048,29 @@ void SimulatorView::mouseReleaseEvent(QMouseEvent* e)
 void SimulatorView::wheelEvent(QWheelEvent* e)
 {
   m_zoomFit = false;
-  if(e->angleDelta().y() < 0)
+  if(QGuiApplication::keyboardModifiers() & Qt::ControlModifier)
   {
-    zoomOut();
+    if(e->angleDelta().y() < 0)
+    {
+      setRotation(m_rotation - 2);
+    }
+    else
+    {
+      setRotation(m_rotation + 2);
+    }
   }
   else
   {
-    zoomIn();
+    if(e->angleDelta().y() < 0)
+    {
+      zoomOut();
+    }
+    else
+    {
+      zoomIn();
+    }
   }
+
 }
 
 void SimulatorView::timerEvent(QTimerEvent *e)
@@ -2314,10 +2340,31 @@ void SimulatorView::setZoomLevel(float value)
 {
   const float oldZoomLevel = m_zoomLevel;
   m_zoomLevel = std::clamp(value, zoomLevelMin, zoomLevelMax);
+  if(qFuzzyCompare(m_zoomLevel, oldZoomLevel))
+    return;
 
-  // Keep anchor on current mouse pos
-  m_cameraX += ((m_lastHoverPos.x - m_cameraX) * (m_zoomLevel - oldZoomLevel)) / m_zoomLevel;
-  m_cameraY += ((m_lastHoverPos.y - m_cameraY) * (m_zoomLevel - oldZoomLevel)) / m_zoomLevel;
+  const float zoomDiff = m_zoomLevel / oldZoomLevel;
+
+  m_transform.translate(m_lastHoverPos.x, m_lastHoverPos.y);
+  m_transform.scale(zoomDiff, zoomDiff);
+  m_transform.translate(-m_lastHoverPos.x, -m_lastHoverPos.y);
+
+  update();
+}
+
+void SimulatorView::setRotation(float newRotation)
+{
+  newRotation = std::clamp(newRotation, -180.0f, 180.0f);
+
+  if(qFuzzyCompare(m_rotation, newRotation))
+    return;
+
+  const double oldRotate = m_rotation;
+  m_rotation = newRotation;
+
+  m_transform.translate(m_lastHoverPos.x, m_lastHoverPos.y);
+  m_transform.rotate(m_rotation - oldRotate);
+  m_transform.translate(-m_lastHoverPos.x, -m_lastHoverPos.y);
 
   update();
 }
