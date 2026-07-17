@@ -295,6 +295,14 @@ void MainWindow::loadExtraImages(const QString& filename)
   }
 }
 
+void MainWindow::setPowerOn(bool value)
+{
+  if(auto* simulator = m_view->simulator())
+  {
+    simulator->setPowerOn(value);
+  }
+}
+
 void MainWindow::keyPressEvent(QKeyEvent* ev)
 {
   if(ev->key() == Qt::Key_F11) // Once fullscreen the QAction does't receive the key press because it is hidden.

@@ -89,6 +89,7 @@ int main(int argc, char* argv[])
   if(!options.filename.isEmpty())
   {
     mw.load(options.filename);
+    mw.setPowerOn(true);
   }
   if(options.fullscreen)
   {

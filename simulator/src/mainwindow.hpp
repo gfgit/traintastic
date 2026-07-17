@@ -39,6 +39,8 @@ public:
 
   void loadExtraImages(const QString &filename);
 
+  void setPowerOn(bool value);
+
   inline void setOptions(bool localOnly, bool discoverable)
   {
     mLocalOnly = localOnly;
