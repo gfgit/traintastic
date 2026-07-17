@@ -1998,15 +1998,23 @@ void SimulatorView::mousePressEvent(QMouseEvent* e)
   }
   if(e->button() == Qt::MiddleButton)
   {
-    m_middleMousePos = e->pos();
-    setCursor(Qt::ClosedHandCursor);
-    resetSegmentHover();
+    if(e->modifiers() & Qt::ControlModifier)
+    {
+      setRotation(0); // Reset rotation
+    }
+    else
+    {
+      // Pan
+      m_middleMousePos = e->pos();
+      setCursor(Qt::ClosedHandCursor);
+      resetSegmentHover();
+    }
   }
 }
 
 void SimulatorView::mouseMoveEvent(QMouseEvent* e)
 {
-  if(e->buttons() & Qt::MiddleButton)
+  if(e->buttons() & Qt::MiddleButton && e->modifiers() == Qt::NoModifier)
   {
     m_zoomFit = false;
 
