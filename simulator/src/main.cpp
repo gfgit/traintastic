@@ -85,7 +85,7 @@ int main(int argc, char* argv[])
   MainWindow mw;
   mw.setOptions(options.localOnly, options.discoverable);
 
-  mw.show();
+  mw.showMaximized();
   if(!options.filename.isEmpty())
   {
     mw.load(options.filename);
