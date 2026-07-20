@@ -2140,14 +2140,16 @@ void SimulatorView::wheelEvent(QWheelEvent* e)
   m_zoomFit = false;
   if(QGuiApplication::keyboardModifiers() & Qt::ControlModifier)
   {
-    if(e->angleDelta().y() < 0)
-    {
-      setRotation(m_rotation - 2);
-    }
-    else
-    {
-      setRotation(m_rotation + 2);
-    }
+    float step = (QGuiApplication::keyboardModifiers() & Qt::ShiftModifier) ? 1 : 5;
+    float newRotation = m_rotation + (e->angleDelta().y() < 0 ? -step : step);
+
+    // Warp rotation in 0, +360
+    if(newRotation > 360.0f)
+      newRotation -= 360.0f;
+    if(newRotation < 0.0f)
+      newRotation += 360.0f;
+
+    setRotation(newRotation);
   }
   else
   {
@@ -2444,7 +2446,7 @@ void SimulatorView::setZoomLevel(float value)
 
 void SimulatorView::setRotation(float newRotation)
 {
-  newRotation = std::clamp(newRotation, -180.0f, 180.0f);
+  newRotation = std::clamp(newRotation, 0.0f, 360.0f);
 
   if(qFuzzyCompare(m_rotation, newRotation))
     return;
