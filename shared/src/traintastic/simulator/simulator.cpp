@@ -638,6 +638,8 @@ void Simulator::setTrainMode(Train *train, TrainState::Mode mode)
 
     if(train->state.mode == TrainState::Mode::Manual)
     {
+      // Reset acceleration and signals
+      train->state.targetSpeed = train->state.speed;
       train->state.isOnStationStop = false;
       clearTrainSignalCache(m_stateData, train, false);
     }
