@@ -2118,7 +2118,7 @@ void SimulatorView::mousePressEvent(QMouseEvent* e)
   {
     m_leftClickMousePos = e->pos();
   }
-  else if(e->button() == Qt::MiddleButton)
+  else if(e->button() == Qt::MiddleButton || e->button() == Qt::RightButton)
   {
     if(e->modifiers() & Qt::ControlModifier)
     {
@@ -2131,13 +2131,6 @@ void SimulatorView::mousePressEvent(QMouseEvent* e)
       setCursor(Qt::ClosedHandCursor);
       resetSegmentHover();
     }
-  }
-  else if(e->button() == Qt::RightButton && e->modifiers() == Qt::NoModifier)
-  {
-    // Pan also with right click and no modifier
-    m_middleMousePos = e->pos();
-    setCursor(Qt::ClosedHandCursor);
-    resetSegmentHover();
   }
 }
 
@@ -2244,7 +2237,7 @@ void SimulatorView::timerEvent(QTimerEvent *e)
 
 void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
 {
-  if(e->modifiers() != Qt::ControlModifier)
+  if(e->modifiers() != Qt::AltModifier)
     return; // Keep right click without Ctrl for panning
 
   const Simulator::Point point = mapToSim(e->pos());
