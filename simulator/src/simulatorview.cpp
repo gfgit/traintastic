@@ -806,6 +806,9 @@ void SimulatorView::drawTracks(QPainter *painter)
   QPen trackPenOccupied = trackPen;
   trackPenOccupied.setColor(QColor(255, 0, 0));
 
+  QPen trackPenOccupiedSelected = trackPenOccupied;
+  trackPenOccupiedSelected.setColor(QColor(115, 10, 10));
+
   QPen trackPenGreen = trackPen;
   trackPenGreen.setColor(QColor(20, 144, 0));
 
@@ -854,10 +857,15 @@ void SimulatorView::drawTracks(QPainter *painter)
       }
     }
 
-    if((!m_stateData.powerOn || !occupied) && idx == m_hoverSegmentIdx)
+    if((!m_stateData.powerOn || !occupied || !m_showTrackOccupancy) && idx == m_hoverSegmentIdx)
     {
-      // Green on hover
+      // Green on hover when not powered or not occupied
       painter->setPen(trackPenGreen);
+    }
+    else if(m_stateData.powerOn && m_showTrackOccupancy && occupied && idx == m_hoverSegmentIdx)
+    {
+      // Dark red on hover when powered and occupied occupied
+      painter->setPen(trackPenOccupiedSelected);
     }
 
     painter->translate(segment.origin().x, segment.origin().y);
