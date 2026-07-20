@@ -181,7 +181,7 @@ size_t getSegmentAt(const Simulator::Point &point, const Simulator::StaticData &
     case Simulator::TrackSegment::Type::TurnoutCurved:
     case Simulator::TrackSegment::Type::Turnout3Way:
     {
-      std::span<const Simulator::Point, 3> points(
+      const std::span<const Simulator::Point, 3> points(
           {segment.points[0], segment.points[1], segment.points[2]});
 
       if (isPointInTriangle(points, point))
@@ -201,10 +201,10 @@ size_t getSegmentAt(const Simulator::Point &point, const Simulator::StaticData &
     }
     case Simulator::TrackSegment::Type::Straight:
     {
-      QPointF pos(point.x, point.y);
+      const QPointF pos(point.x, point.y);
 
-      QPointF a(segment.points[0].x, segment.points[0].y);
-      QPointF b(segment.points[1].x, segment.points[1].y);
+      const QPointF a(segment.points[0].x, segment.points[0].y);
+      const QPointF b(segment.points[1].x, segment.points[1].y);
 
       QRectF br;
       br.setTop(segment.points[0].y);
@@ -483,8 +483,8 @@ void drawCurve(const Simulator::TrackSegment& segment, size_t curveIndex, QPaint
   const auto& curve = segment.curves[curveIndex];
   const float rotation = curve.angle < 0 ? 0.0f : pi;
 
-  int numSegments = qCeil(curve.length / 10.0); // Smooth curve
-  float step = curve.angle / numSegments;
+  const int numSegments = qCeil(curve.length / 10.0); // Smooth curve
+  const float step = curve.angle / numSegments;
   const float cx = curve.radius * sinf(rotation);
   const float cy = curve.radius * -cosf(rotation);
 
@@ -494,9 +494,9 @@ void drawCurve(const Simulator::TrackSegment& segment, size_t curveIndex, QPaint
 
   for(int i = 1; i <= numSegments; i++)
   {
-    float angle = rotation + i * step;
-    float x = cx - curve.radius * sinf(angle);
-    float y = cy - curve.radius * -cosf(angle);
+    const float angle = rotation + i * step;
+    const float x = cx - curve.radius * sinf(angle);
+    const float y = cy - curve.radius * -cosf(angle);
     pointVec.append({x, y});
   }
 
@@ -654,7 +654,7 @@ void SimulatorView::loadExtraImages(const nlohmann::json& world,
       img.ref = item;
 
       QString fileName = QString::fromStdString(img.ref.fileName);
-      QFileInfo info(fileName);
+      const QFileInfo info(fileName);
       if(info.isRelative())
       {
         // Treat as relative to image JSON file
@@ -1024,10 +1024,10 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
 {
   assert(m_simulator);
 
-  QColor positionSensorActive = Qt::red;
-  QColor positionSensorInactive = Qt::darkGreen;
-  QColor axleCountSensorColor = Qt::cyan;
-  QColor axleCountSensorDecrease = Qt::darkYellow;
+  const QColor positionSensorActive = Qt::red;
+  const QColor positionSensorInactive = Qt::darkGreen;
+  const QColor axleCountSensorColor = Qt::cyan;
+  const QColor axleCountSensorDecrease = Qt::darkYellow;
 
   // Make signals more visible at low zoom levels by scaling
   QPen signalMastPen(Qt::lightGray, 0.6 * m_signalsScaleFactor);
@@ -1051,7 +1051,7 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
   QPen signalLightArrowPenOn = signalLightArrowPenOff;
   signalLightArrowPenOn.setColor(Qt::white);
 
-  QPen signalIndicatorBorder(Qt::darkGray, 0.1 * m_signalsScaleFactor);
+  const QPen signalIndicatorBorder(Qt::darkGray, 0.1 * m_signalsScaleFactor);
 
   const qreal mastBaseLength = 3.0 * m_signalsScaleFactor;
   const qreal lightDiameter = 2.0 * m_signalsScaleFactor;
@@ -1081,14 +1081,14 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
   QPen rotDwarfBorderPenBlack(Qt::darkGray, 0.1 * RotatingDwarfFactor);;
   rotDwarfBorderPenBlack.setColor(Qt::black);
 
-  QPen dwarfDiagPenBlack(Qt::black, 0.2 * RotatingDwarfFactor);
+  const QPen dwarfDiagPenBlack(Qt::black, 0.2 * RotatingDwarfFactor);
 
   QPen trackPen(QColor(204, 204, 204), 1);
   trackPen.setCapStyle(Qt::RoundCap);
 
   const QTransform trasf = painter->transform();
 
-  QPen borderPen(Qt::red, 1);
+  const QPen borderPen(Qt::red, 1);
   const float trainWidth = m_simulator->staticData.trainWidth;
 
   for(const auto& segment : m_simulator->staticData.trackSegments)
@@ -1309,7 +1309,7 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
           else if(blinkState < 0)
             blinkState += 8;
 
-          QPointF ct(lateralDiff, lightRect.top() + advanceSignalHeight * 1.2);
+          const QPointF ct(lateralDiff, lightRect.top() + advanceSignalHeight * 1.2);
           QRectF startSignalRect(0, 0, advanceSignalWidth, advanceSignalHeight);
           startSignalRect.moveCenter(ct);
 
@@ -1355,7 +1355,7 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
 
         if(signal->hasDirectionIndicator)
         {
-          QPointF ct(lateralDiff, lightRect.top() + directionIndicatorHeight * 0.7);
+          const QPointF ct(lateralDiff, lightRect.top() + directionIndicatorHeight * 0.7);
           QRectF directionIndicatorRect(0, 0, directionIndicatorWidth, directionIndicatorHeight);
           directionIndicatorRect.moveCenter(ct);
 
@@ -1363,7 +1363,7 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
           painter->setPen(signalIndicatorBorder);
           painter->drawRect(directionIndicatorRect);
 
-          QChar letter = QChar::fromLatin1(signal->directionIndicatorText);
+          const QChar letter = QChar::fromLatin1(signal->directionIndicatorText);
           if(letter.isLetterOrNumber() && letter != ' ')
           {
             painter->setFont(directionFont);
@@ -1379,27 +1379,27 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
 
         if(signal->hasRappel)
         {
-          QPointF ct(lateralDiff, lightRect.top() + directionIndicatorHeight * 0.7);
+          const QPointF ct(lateralDiff, lightRect.top() + directionIndicatorHeight * 0.7);
           QRectF rappelRect(0, 0, directionIndicatorWidth, directionIndicatorHeight);
           rappelRect.moveCenter(ct);
 
-          QRectF rappelRectAdj = rappelRect.adjusted(signalLightArrowPenOn.widthF(), signalLightArrowPenOn.widthF(),
-                                                     -signalLightArrowPenOn.widthF(), -signalLightArrowPenOn.widthF());
+          const QRectF rappelRectAdj = rappelRect.adjusted(signalLightArrowPenOn.widthF(), signalLightArrowPenOn.widthF(),
+                                                           -signalLightArrowPenOn.widthF(), -signalLightArrowPenOn.widthF());
 
           painter->fillRect(rappelRect, Qt::black);
 
           if(signal->rappelState == Simulator::MainSignal::RappelState::OneLine_60)
           {
-            QLineF line(rappelRectAdj.left(), ct.y(), rappelRectAdj.right(), ct.y());
+            const QLineF line(rappelRectAdj.left(), ct.y(), rappelRectAdj.right(), ct.y());
             painter->setPen(signalLightArrowPenOn);
             painter->drawLine(line);
           }
           else if(signal->rappelState == Simulator::MainSignal::RappelState::TwoLines_100)
           {
-            QLineF line1(rappelRectAdj.left(), rappelRectAdj.top() + rappelRectAdj.height() * 0.25,
-                         rappelRectAdj.right(), rappelRectAdj.top() + rappelRectAdj.height() * 0.25);
-            QLineF line2(rappelRectAdj.left(), rappelRectAdj.top() + rappelRectAdj.height() * 0.75,
-                         rappelRectAdj.right(), rappelRectAdj.top() + rappelRectAdj.height() * 0.75);
+            const QLineF line1(rappelRectAdj.left(), rappelRectAdj.top() + rappelRectAdj.height() * 0.25,
+                               rappelRectAdj.right(), rappelRectAdj.top() + rappelRectAdj.height() * 0.25);
+            const QLineF line2(rappelRectAdj.left(), rappelRectAdj.top() + rappelRectAdj.height() * 0.75,
+                               rappelRectAdj.right(), rappelRectAdj.top() + rappelRectAdj.height() * 0.75);
             painter->setPen(signalLightArrowPenOn);
             painter->drawLine(line1);
             painter->drawLine(line2);
@@ -1762,8 +1762,8 @@ void SimulatorView::drawTrains(QPainter *painter)
 
   const QRectF lightGlowRect(0, 0, trainWidth * 1.2, trainWidth * 1.2);
 
-  QBrush frontLightBrush(qRgba(254, 243, 144, 120));
-  QBrush rearLightBrush (qRgba(255,  70,   70, 120));
+  const QBrush frontLightBrush(qRgba(254, 243, 144, 120));
+  const QBrush rearLightBrush (qRgba(255,  70,   70, 120));
 
   // We need to access simulator data
   std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
@@ -1843,7 +1843,7 @@ void SimulatorView::drawTrains(QPainter *painter)
 
     if(activeTrain && activeTrain == train && activeTrain->state.isOnStationStop)
     {
-      QRectF adjVehicleRect = vehicleRect.adjusted(1, 1, -1, -1);
+      const QRectF adjVehicleRect = vehicleRect.adjusted(1, 1, -1, -1);
       painter->setPen(stationStopTrainPen);
       painter->setBrush(Qt::NoBrush);
       painter->drawRect(adjVehicleRect);
@@ -1983,8 +1983,8 @@ void SimulatorView::keyPressEvent(QKeyEvent* e)
 
         QTransform trasf;
         trasf.rotate(m_rotation);
-        std::pair<QPointF, QPointF> mappedExtents = {trasf.map(QPointF{extents.first.x, extents.first.y}),
-                                                   trasf.map(QPointF{extents.second.x, extents.second.y})};
+        const std::pair<QPointF, QPointF> mappedExtents = {trasf.map(QPointF{extents.first.x, extents.first.y}),
+                                                           trasf.map(QPointF{extents.second.x, extents.second.y})};
 
         bool inverted = false;
         if(qAbs(mappedExtents.first.x() - mappedExtents.second.x()) < 10 && qAbs(mappedExtents.first.y() - mappedExtents.second.y()) >= 10)
@@ -2140,7 +2140,7 @@ void SimulatorView::wheelEvent(QWheelEvent* e)
   m_zoomFit = false;
   if(QGuiApplication::keyboardModifiers() & Qt::ControlModifier)
   {
-    float step = (QGuiApplication::keyboardModifiers() & Qt::ShiftModifier) ? 1 : 5;
+    const float step = (QGuiApplication::keyboardModifiers() & Qt::ShiftModifier) ? 1 : 5;
     float newRotation = m_rotation + (e->angleDelta().y() < 0 ? -step : step);
 
     // Warp rotation in 0, +360
@@ -2175,7 +2175,7 @@ void SimulatorView::timerEvent(QTimerEvent *e)
   }
   else if(e->timerId() == segmentHoverTimer.timerId())
   {
-    size_t newHoverSegment = getSegmentAt(m_lastHoverPos, m_simulator->staticData);
+    const size_t newHoverSegment = getSegmentAt(m_lastHoverPos, m_simulator->staticData);
     if(m_hoverSegmentIdx != newHoverSegment)
     {
       m_hoverSegmentIdx = newHoverSegment;
@@ -2278,7 +2278,7 @@ void SimulatorView::showItemTooltip(const Simulator::Point &point, QHelpEvent *e
   if (QGuiApplication::keyboardModifiers().testFlag(Qt::ShiftModifier))
   {
     // Cursor position tooltip
-    QString text = tr("X: %1\n"
+    const QString text = tr("X: %1\n"
                       "Y: %2")
         .arg(point.x)
         .arg(point.y);
@@ -2293,7 +2293,7 @@ void SimulatorView::showItemTooltip(const Simulator::Point &point, QHelpEvent *e
   auto addPt = [&ptCount, &text](const QString &name, const Simulator::Point &p)
   {
     ptCount++;
-    QString ptText
+    const QString ptText
         = tr("%1: %2; %3").arg(name.isEmpty() ? QString::number(ptCount) : name).arg(p.x).arg(p.y);
     text.append("<br>");
     text.append(ptText);
