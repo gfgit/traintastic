@@ -1742,17 +1742,32 @@ void SimulatorView::drawTrains(QPainter *painter)
 
   const Simulator::Train *const activeTrain = m_simulator->getTrainAt(m_trainIndex);
 
-  QPen activeTrainPen(Qt::white, 1);
-  activeTrainPen.setCosmetic(true);
+  QPen activeTrainPen(Qt::white, 0.3);
+  activeTrainPen.setCosmetic(false);
+
+  QPen autoTrainBorderPenLow = activeTrainPen;
+  autoTrainBorderPenLow.setColor(Qt::darkGray);
+
+  QPen autoTrainBorderPenTop = autoTrainBorderPenLow;
+  autoTrainBorderPenTop.setColor(Qt::red);
+  autoTrainBorderPenTop.setStyle(Qt::DashDotLine);
+
+  QPen semiautoTrainBorderPenTop = autoTrainBorderPenTop;
+  semiautoTrainBorderPenTop.setColor(Qt::darkGreen);
 
   QPen stationStopTrainPen(Qt::black, 1);
   stationStopTrainPen.setCosmetic(true);
 
   painter->setPen(Qt::NoPen);
 
+  const QRectF lightGlowRect(0, 0, trainWidth * 1.2, trainWidth * 1.2);
+
+  QBrush frontLightBrush(qRgba(254, 243, 144, 120));
+  QBrush rearLightBrush (qRgba(255,  70,   70, 120));
+
   for(auto it : m_stateData.vehicles)
   {
-    const auto* vehicle = it.second;
+    const Simulator::Vehicle* vehicle = it.second;
     const auto& vehicleState = vehicle->state;
     const float length = vehicle->length;
 
@@ -1763,17 +1778,60 @@ void SimulatorView::drawTrains(QPainter *painter)
     painter->translate(center.x, center.y);
     painter->rotate(qRadiansToDegrees(angle));
 
+    if(vehicle->activeTrain->isHeadOrTail(vehicle))
+    {
+      // On head and tail, draw light glow
+      const Simulator::Train::VehicleItem trainHead = vehicle->activeTrain->getHead();
+      const Simulator::Train::VehicleItem trainTail = vehicle->activeTrain->getTail();
+
+      const QPointF frontPt(-length / 2.0, 0);
+      const QPointF backPt(length / 2.0,   0);
+
+      QRectF lightRect = lightGlowRect;
+      painter->setPen(Qt::NoPen);
+
+      // If train is composed of only one vehicle, it's both head and tail!
+      if(trainHead.vehicle == vehicle)
+      {
+        lightRect.moveCenter(!trainHead.reversed ? backPt : frontPt);
+        const bool forwardLight = !vehicle->activeTrain->state.reverse;
+        painter->setBrush(forwardLight ? frontLightBrush : rearLightBrush);
+        painter->drawEllipse(lightRect);
+      }
+
+      if(trainTail.vehicle == vehicle)
+      {
+        lightRect.moveCenter(trainHead.reversed ? backPt : frontPt);
+        const bool forwardLight = vehicle->activeTrain->state.reverse;
+        painter->setBrush(forwardLight ? frontLightBrush : rearLightBrush);
+        painter->drawEllipse(lightRect);
+      }
+    }
+
     const auto& color = colors[static_cast<size_t>(vehicle->color)];
     painter->setBrush(QColor(color.red * 255, color.green * 255, color.blue * 255));
 
     if(activeTrain && activeTrain == vehicle->activeTrain)
       painter->setPen(activeTrainPen);
+    else if(vehicle->activeTrain->state.mode != Simulator::TrainState::Mode::Manual)
+      painter->setPen(autoTrainBorderPenLow);
     else
       painter->setPen(Qt::NoPen);
 
-    QRectF vehicleRect(-length / 2, -trainWidth / 2,
-                       length, trainWidth);
+    const QRectF vehicleRect(-length / 2.0, -trainWidth / 2.0,
+                             length, trainWidth);
     painter->drawRect(vehicleRect);
+
+    if(vehicle->activeTrain->state.mode == Simulator::TrainState::Mode::Automatic)
+    {
+      painter->setPen(autoTrainBorderPenTop);
+      painter->drawRect(vehicleRect);
+    }
+    else if(vehicle->activeTrain->state.mode == Simulator::TrainState::Mode::SemiAutomatic)
+    {
+      painter->setPen(semiautoTrainBorderPenTop);
+      painter->drawRect(vehicleRect);
+    }
 
     if(activeTrain && activeTrain == vehicle->activeTrain && activeTrain->state.isOnStationStop)
     {

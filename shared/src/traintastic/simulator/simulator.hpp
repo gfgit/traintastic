@@ -490,7 +490,7 @@ public:
 
     struct VehicleItem
     {
-      Vehicle *vehicle;
+      Vehicle *vehicle = nullptr;
       bool reversed = false;
     };
 
@@ -508,6 +508,23 @@ public:
         assert(item.vehicle->activeTrain == this);
         item.vehicle->activeTrain = nullptr;
       }
+    }
+
+    inline bool isHeadOrTail(const Vehicle *vehicle) const
+    {
+      if(vehicles.empty())
+        return false;
+      return vehicle == vehicles.front().vehicle || vehicle == vehicles.back().vehicle;
+    }
+
+    inline VehicleItem getHead() const
+    {
+      return vehicles.empty() ? VehicleItem{} : vehicles.front();
+    }
+
+    inline VehicleItem getTail() const
+    {
+      return vehicles.empty() ? VehicleItem{} : vehicles.back();
     }
   };
 
