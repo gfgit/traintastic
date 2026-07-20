@@ -563,18 +563,22 @@ Simulator::Train *Simulator::getTrainAt(size_t trainIndex) const
   return nullptr;
 }
 
-bool Simulator::isTrainDirectionInverted(Train *train)
+std::pair<Simulator::Point, Simulator::Point> Simulator::getTrainExtents(Train *train)
 {
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
   if(train->vehicles.empty())
-    return false;
+    return {};
 
-  const auto vehicleItem = train->vehicles.front();
-  if(vehicleItem.vehicle->state.front.position.x < vehicleItem.vehicle->state.rear.position.x)
-    return true;
+  std::pair<Simulator::Point, Simulator::Point> ret;
 
-  return false;
+  const auto frontVehicle = train->vehicles.front();
+  ret.first = frontVehicle.reversed ? frontVehicle.vehicle->state.rear.position : frontVehicle.vehicle->state.front.position;
+
+  const auto rearVehicle = train->vehicles.back();
+  ret.second = !rearVehicle.reversed ? rearVehicle.vehicle->state.rear.position : rearVehicle.vehicle->state.front.position;
+
+  return ret;
 }
 
 void Simulator::setTrainDirection(Train *train, bool reverse)

@@ -1979,7 +1979,23 @@ void SimulatorView::keyPressEvent(QKeyEvent* e)
       if(train)
       {
         bool dir = (e->key() == Qt::Key_Left);
-        if(m_simulator->isTrainDirectionInverted(train))
+        std::pair<Simulator::Point, Simulator::Point> extents = m_simulator->getTrainExtents(train);
+
+        QTransform trasf;
+        trasf.rotate(m_rotation);
+        std::pair<QPointF, QPointF> mappedExtents = {trasf.map(QPointF{extents.first.x, extents.first.y}),
+                                                   trasf.map(QPointF{extents.second.x, extents.second.y})};
+
+        bool inverted = false;
+        if(qAbs(mappedExtents.first.x() - mappedExtents.second.x()) < 10 && qAbs(mappedExtents.first.y() - mappedExtents.second.y()) >= 10)
+        {
+          if(mappedExtents.first.y() < mappedExtents.second.y())
+            inverted = true;
+        }
+        else if(mappedExtents.first.x() < mappedExtents.second.x())
+          inverted = true;
+
+        if(inverted)
           dir = !dir;
         m_simulator->setTrainDirection(train, dir);
       }

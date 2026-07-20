@@ -575,7 +575,7 @@ public:
 
   Train *getTrainAt(size_t trainIndex) const;
 
-  bool isTrainDirectionInverted(Train *train);
+  std::pair<Point, Point> getTrainExtents(Train *train);
   void setTrainDirection(Train *train, bool reverse);
   void setTrainSpeed(Train *train, float speed, bool immediate = false);
   void applyTrainSpeedDelta(Train *train, float delta);
