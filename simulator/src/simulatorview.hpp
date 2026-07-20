@@ -119,7 +119,7 @@ protected:
   void contextMenuEvent(QContextMenuEvent *e) override;
 
 private:
-  struct Turnout
+  struct Turnout // TODO: consider removing
   {
     size_t segmentIndex;
     std::span<const Simulator::Point, 3> points;

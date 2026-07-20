@@ -84,23 +84,6 @@ inline static const std::array<ColorF, 17> colors{{
     {0.00f, 1.00f, 1.00f}, // Aqua
                                                   }};
 
-float crossProduct(Simulator::Point p1, Simulator::Point p2, Simulator::Point p3)
-{
-  return (p2.x - p1.x) * (p3.y - p1.y) - (p2.y - p1.y) * (p3.x - p1.x);
-}
-
-bool isPointInTriangle(std::span<const Simulator::Point, 3> triangle, const Simulator::Point point)
-{
-  const float cross1 = crossProduct(triangle[0], triangle[1], point);
-  const float cross2 = crossProduct(triangle[1], triangle[2], point);
-  const float cross3 = crossProduct(triangle[2], triangle[0], point);
-
-  const bool hasNeg = (cross1 < 0) || (cross2 < 0) || (cross3 < 0);
-  const bool hasPos = (cross1 > 0) || (cross2 > 0) || (cross3 > 0);
-
-  return !(hasNeg && hasPos);
-}
-
 bool lineContains(const QPointF& pos,
                   const QPointF& a, const QPointF& b,
                   float &distanceOut,
@@ -166,6 +149,117 @@ bool lineContains(const QPointF& pos,
   return distanceOut <= tolerance;
 }
 
+inline bool straightContains(const Simulator::Point &point, const Simulator::TrackSegment &segment, float &segDistanceOut)
+{
+  const QPointF pos(point.x, point.y);
+
+  const QPointF a(segment.points[0].x, segment.points[0].y);
+  const QPointF b(segment.points[1].x, segment.points[1].y);
+
+  QRectF br;
+  br.setTop(segment.points[0].y);
+  br.setLeft(segment.points[0].x);
+  br.setBottom(segment.points[1].y);
+  br.setRight(segment.points[1].x);
+  br = br.normalized();
+
+  const QRectF brAdj = br.adjusted(-5, -5, 5, 5);
+
+  if (br.width() > 0.0001 && br.height() > 0.0001 && !brAdj.contains(pos))
+    return false;
+
+  return lineContains(pos, a, b, segDistanceOut, 5);
+}
+
+inline bool curveContains(const Simulator::Point &point,
+                          const Simulator::TrackSegment &segment,
+                          float &segDistanceOut, const size_t bestIdx, const float bestDistance,
+                          const size_t curveIdx)
+{
+  const Simulator::Point center = segment.curves[curveIdx].center;
+  const Simulator::Point diff = point - center;
+  const float radius = std::sqrt(diff.x * diff.x + diff.y * diff.y);
+  const float distance = std::abs(radius - segment.curves[curveIdx].radius);
+
+  if (distance > 5)
+    return false;
+
+  if (bestIdx != Simulator::invalidIndex && distance > bestDistance)
+    return false;
+
+  // Y coordinate is swapped
+  float angle = std::atan2(-diff.y, diff.x);
+
+  float rotation = segment.rotation;
+  if (rotation < 0)
+    rotation += 2 * pi;
+
+  const float curveAngle = segment.curves[curveIdx].angle;
+  float angleMax = -rotation + pi / 2.0 * (curveAngle > 0 ? 1 : -1);
+  float angleMin = -rotation - curveAngle + pi / 2.0 * (curveAngle > 0 ? 1 : -1);
+
+  if (curveAngle < 0)
+    std::swap(angleMin, angleMax);
+
+  if (angleMin < 0)
+  {
+    angleMin += 2 * pi;
+    angleMax += 2 * pi;
+  }
+
+  if (angleMin < 0 && angle < 0)
+  {
+    angleMin += 2 * pi;
+    angleMax += 2 * pi;
+  }
+
+  if (angle < 0)
+  {
+    angle += 2 * pi;
+  }
+
+  // TODO: really ugly...
+  if (angleMin <= angleMax)
+  {
+    // min -> max
+    if (angle < angleMin || angle > angleMax)
+    {
+      // Try again with + 2 * pi
+      const float angleBis = angle + 2 * pi;
+      if (angleBis < angleMin || angleBis > angleMax)
+      {
+        // Try again with - 2 * pi
+        const float angleTer = angle - 2 * pi;
+        if (angleTer < angleMin || angleTer > angleMax)
+        {
+          return false;
+        }
+      }
+    }
+  }
+  else
+  {
+    // 0 -> min, max -> 2 * pi
+    if (angle > angleMin && angle < angleMax)
+    {
+      // Try again with + 2 * pi
+      const float angleBis = angle + 2 * pi;
+      if (angleBis > angleMin && angleBis < angleMax)
+      {
+        // Try again with - 2 * pi
+        const float angleTer = angle - 2 * pi;
+        if (angleTer > angleMin && angleTer < angleMax)
+        {
+          return false;
+        }
+      }
+    }
+  }
+
+  segDistanceOut = distance;
+  return true;
+}
+
 size_t getSegmentAt(const Simulator::Point &point, const Simulator::StaticData &data)
 {
   size_t bestIdx = Simulator::invalidIndex;
@@ -184,6 +278,7 @@ size_t getSegmentAt(const Simulator::Point &point, const Simulator::StaticData &
       const std::span<const Simulator::Point, 3> points(
           {segment.points[0], segment.points[1], segment.points[2]});
 
+      /*
       if (isPointInTriangle(points, point))
         return idx;
 
@@ -196,30 +291,44 @@ size_t getSegmentAt(const Simulator::Point &point, const Simulator::StaticData &
         if (isPointInTriangle(arr, point))
           return idx;
       }
+      */
 
+      float segDistance = 0;
+
+      if (segment.type == Simulator::TrackSegment::Type::Turnout ||
+          segment.type == Simulator::TrackSegment::Type::Turnout3Way)
+      {
+        if (straightContains(point, segment, segDistance))
+        {
+          if (bestIdx == Simulator::invalidIndex || segDistance < bestDistance)
+          {
+            bestIdx = idx;
+            bestDistance = segDistance;
+          }
+        }
+      }
+
+      if (curveContains(point, segment, segDistance, bestIdx, bestDistance, 0))
+      {
+        bestIdx = idx;
+        bestDistance = segDistance;
+      }
+
+      if (segment.type == Simulator::TrackSegment::Type::TurnoutCurved ||
+          segment.type == Simulator::TrackSegment::Type::Turnout3Way)
+      {
+        if (curveContains(point, segment, segDistance, bestIdx, bestDistance, 1))
+        {
+          bestIdx = idx;
+          bestDistance = segDistance;
+        }
+      }
       continue;
     }
     case Simulator::TrackSegment::Type::Straight:
     {
-      const QPointF pos(point.x, point.y);
-
-      const QPointF a(segment.points[0].x, segment.points[0].y);
-      const QPointF b(segment.points[1].x, segment.points[1].y);
-
-      QRectF br;
-      br.setTop(segment.points[0].y);
-      br.setLeft(segment.points[0].x);
-      br.setBottom(segment.points[1].y);
-      br.setRight(segment.points[1].x);
-      br = br.normalized();
-
-      const QRectF brAdj = br.adjusted(-5, -5, 5, 5);
-
-      if (br.width() > 0.0001 && br.height() > 0.0001 && !brAdj.contains(pos))
-        continue;
-
       float segDistance = 0;
-      if (!lineContains(pos, a, b, segDistance, 5))
+      if (!straightContains(point, segment, segDistance))
         continue;
 
       if (bestIdx == Simulator::invalidIndex || segDistance < bestDistance)
@@ -231,88 +340,12 @@ size_t getSegmentAt(const Simulator::Point &point, const Simulator::StaticData &
     }
     case Simulator::TrackSegment::Type::Curve:
     {
-      const Simulator::Point center = segment.curves[0].center;
-      const Simulator::Point diff = point - center;
-      const float radius = std::sqrt(diff.x * diff.x + diff.y * diff.y);
-      const float distance = std::abs(radius - segment.curves[0].radius);
-
-      if (distance > 5)
+      float segDistance = 0;
+      if(!curveContains(point, segment, segDistance, bestIdx, bestDistance, 0))
         continue;
-
-      if (bestIdx != Simulator::invalidIndex && distance > bestDistance)
-        continue;
-
-      // Y coordinate is swapped
-      float angle = std::atan2(-diff.y, diff.x);
-
-      float rotation = segment.rotation;
-      if (rotation < 0)
-        rotation += 2 * pi;
-
-      const float curveAngle = segment.curves[0].angle;
-      float angleMax = -rotation + pi / 2.0 * (curveAngle > 0 ? 1 : -1);
-      float angleMin = -rotation - curveAngle + pi / 2.0 * (curveAngle > 0 ? 1 : -1);
-
-      if (curveAngle < 0)
-        std::swap(angleMin, angleMax);
-
-      if (angleMin < 0)
-      {
-        angleMin += 2 * pi;
-        angleMax += 2 * pi;
-      }
-
-      if (angleMin < 0 && angle < 0)
-      {
-        angleMin += 2 * pi;
-        angleMax += 2 * pi;
-      }
-
-      if (angle < 0)
-      {
-        angle += 2 * pi;
-      }
-
-      // TODO: really ugly...
-      if (angleMin <= angleMax)
-      {
-        // min -> max
-        if (angle < angleMin || angle > angleMax)
-        {
-          // Try again with + 2 * pi
-          const float angleBis = angle + 2 * pi;
-          if (angleBis < angleMin || angleBis > angleMax)
-          {
-            // Try again with - 2 * pi
-            const float angleTer = angle - 2 * pi;
-            if (angleTer < angleMin || angleTer > angleMax)
-            {
-              continue;
-            }
-          }
-        }
-      }
-      else
-      {
-        // 0 -> min, max -> 2 * pi
-        if (angle > angleMin && angle < angleMax)
-        {
-          // Try again with + 2 * pi
-          const float angleBis = angle + 2 * pi;
-          if (angleBis > angleMin && angleBis < angleMax)
-          {
-            // Try again with - 2 * pi
-            const float angleTer = angle - 2 * pi;
-            if (angleTer > angleMin && angleTer < angleMax)
-            {
-              continue;
-            }
-          }
-        }
-      }
 
       bestIdx = idx;
-      bestDistance = distance;
+      bestDistance = segDistance;
       continue;
     }
     default:
@@ -2084,9 +2117,8 @@ void SimulatorView::mousePressEvent(QMouseEvent* e)
   if(e->button() == Qt::LeftButton)
   {
     m_leftClickMousePos = e->pos();
-    resetSegmentHover();
   }
-  if(e->button() == Qt::MiddleButton)
+  else if(e->button() == Qt::MiddleButton)
   {
     if(e->modifiers() & Qt::ControlModifier)
     {
@@ -2100,11 +2132,18 @@ void SimulatorView::mousePressEvent(QMouseEvent* e)
       resetSegmentHover();
     }
   }
+  else if(e->button() == Qt::RightButton && e->modifiers() == Qt::NoModifier)
+  {
+    // Pan also with right click and no modifier
+    m_middleMousePos = e->pos();
+    setCursor(Qt::ClosedHandCursor);
+    resetSegmentHover();
+  }
 }
 
 void SimulatorView::mouseMoveEvent(QMouseEvent* e)
 {
-  if(e->buttons() & Qt::MiddleButton && e->modifiers() == Qt::NoModifier)
+  if((e->buttons() & Qt::MiddleButton || e->buttons() & Qt::RightButton) && e->modifiers() == Qt::NoModifier)
   {
     m_zoomFit = false;
 
@@ -2137,7 +2176,7 @@ void SimulatorView::mouseReleaseEvent(QMouseEvent* e)
       mouseLeftClick(mapToSim(m_leftClickMousePos), shiftPressed);
     }
   }
-  if(e->button() == Qt::MiddleButton)
+  if(e->button() == Qt::MiddleButton || e->button() == Qt::RightButton)
   {
     setCursor(Qt::ArrowCursor);
   }
@@ -2205,6 +2244,9 @@ void SimulatorView::timerEvent(QTimerEvent *e)
 
 void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
 {
+  if(e->modifiers() != Qt::ControlModifier)
+    return; // Keep right click without Ctrl for panning
+
   const Simulator::Point point = mapToSim(e->pos());
   const size_t idx = getSegmentAt(point, m_simulator->staticData);
   if(idx == Simulator::invalidIndex)
@@ -2270,14 +2312,24 @@ void SimulatorView::setThinTracks(bool newThinTracks)
 
 void SimulatorView::mouseLeftClick(const Simulator::Point &point, bool shiftPressed)
 {
-  for(const auto& turnout : m_turnouts)
+  const size_t clickedSegIdx = getSegmentAt(point, m_simulator->staticData);
+  if(clickedSegIdx == Simulator::invalidIndex)
+    return;
+
+  const auto& segment = m_simulator->staticData.trackSegments[clickedSegIdx];
+
+  switch (segment.type)
   {
-    if(isPointInTriangle(turnout.points, point))
-    {
-      m_simulator->toggleTurnoutState(turnout.segmentIndex, shiftPressed);
-      update();
-      break;
-    }
+  case Simulator::TrackSegment::Type::Turnout:
+  case Simulator::TrackSegment::Type::TurnoutCurved:
+  case Simulator::TrackSegment::Type::Turnout3Way:
+  {
+    m_simulator->toggleTurnoutState(clickedSegIdx, shiftPressed);
+    update();
+    break;
+  }
+  default:
+    break;
   }
 }
 
