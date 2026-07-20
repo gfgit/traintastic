@@ -77,6 +77,8 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
 
   setCentralWidget(m_view);
 
+  QMenu* viewMenu;
+
   // Menu bar:
   {
     QMenu* menu;
@@ -111,7 +113,7 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
       });
     menu->addAction("Quit", this, &MainWindow::close);
 
-    menu = menuBar()->addMenu("View");
+    viewMenu = menu = menuBar()->addMenu("View");
     m_actFullScreen = menu->addAction("Fullscreen", this, &MainWindow::toggleFullScreen);
     m_actFullScreen->setCheckable(true);
     m_actFullScreen->setShortcut(Qt::Key_F11);
@@ -132,8 +134,8 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
   }
 
   // Toolbar:
+  auto* toolbar = new QToolBar();
   {
-    auto* toolbar = new QToolBar();
     toolbar->setFloatable(false);
     toolbar->setMovable(false);
 
@@ -149,13 +151,22 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
         }
       });
 
+    viewMenu->addSeparator();
+    viewMenu->addAction(m_power);
+
     QWidget* spacer = new QWidget();
     spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     toolbar->addWidget(spacer);
 
-    toolbar->addAction("Zoom in", m_view, &SimulatorView::zoomIn);
-    toolbar->addAction("Zoom out", m_view, &SimulatorView::zoomOut);
-    QAction* act = toolbar->addAction("Zoom Default", m_view, [this]()
+    viewMenu->addSeparator();
+
+    QAction* act = toolbar->addAction("Zoom in", m_view, &SimulatorView::zoomIn);
+    viewMenu->addAction(act);
+
+    act = toolbar->addAction("Zoom out", m_view, &SimulatorView::zoomOut);
+    viewMenu->addAction(act);
+
+    act = toolbar->addAction("Zoom Default", m_view, [this]()
     {
       if(QGuiApplication::keyboardModifiers() & Qt::ShiftModifier)
         m_view->zoomToFit();
@@ -163,6 +174,7 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
         m_view->zoomToDefaultCenter();
     });
     act->setToolTip("Hold shift to Zoom Fit instead");
+    viewMenu->addAction(act);
 
     addToolBar(Qt::TopToolBarArea, toolbar);
   }
@@ -210,8 +222,30 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
               mTrainSpeedFactorSpin->setValue(val * 100.0f);
             });
 
+    // HACK: add space after so permanent widgets get aligned on the left
+    QWidget* spacer2 = new QWidget();
+    spacer2->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    statusBar->addPermanentWidget(spacer2, 100);
 
     setStatusBar(statusBar);
+
+    viewMenu->addSeparator();
+    m_showToolBar = viewMenu->addAction("Show Toolbar");
+    m_showToolBar->setCheckable(true);
+    m_showToolBar->setChecked(true);
+    m_showToolBar->setShortcut(Qt::Key_F10);
+    connect(m_showToolBar, &QAction::toggled, this, &MainWindow::setToolBarVisible);
+
+    m_showStatusBar = viewMenu->addAction("Show Statusbar");
+    m_showStatusBar->setCheckable(true);
+    m_showStatusBar->setChecked(true);
+    m_showStatusBar->setShortcut(Qt::Key_F9);
+    connect(m_showStatusBar,
+            &QAction::toggled,
+            [this, statusBar](bool value)
+            {
+              statusBar->setVisible(value);
+            });
   }
 
   connect(m_view, &SimulatorView::tickActiveChanged,
@@ -359,12 +393,19 @@ void MainWindow::toggleFullScreen()
     {
       showMaximized();
     }
+
     menuBar()->show();
-    for (auto* toolbar : findChildren<QToolBar*>())
+
+    if(m_showToolBar->isChecked())
     {
-      toolbar->show();
+      for (auto* toolbar : findChildren<QToolBar*>())
+      {
+        toolbar->show();
+      }
     }
-    statusBar()->show();
+
+    if(m_showStatusBar->isChecked())
+      statusBar()->show();
   }
 }
 
@@ -391,4 +432,13 @@ void MainWindow::showAbout()
       " MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the"
       " GNU General Public License for more details.</p>"
       "<p><a href=\"https://traintastic.org\">traintastic.org</a></p>");
+}
+
+void MainWindow::setToolBarVisible(bool val)
+{
+  for (auto* toolbar : findChildren<QToolBar*>())
+  {
+    toolbar->setVisible(val);
+  }
+  m_showToolBar->setChecked(val);
 }

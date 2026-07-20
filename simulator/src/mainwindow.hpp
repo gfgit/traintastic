@@ -54,11 +54,16 @@ private:
   void toggleFullScreen();
   void showAbout();
 
+private slots:
+  void setToolBarVisible(bool val);
+
 private:
   SimulatorView* m_view;
   QAction* m_actFullScreen;
   QByteArray m_beforeFullScreenGeometry;
   QAction* m_power;
+  QAction* m_showToolBar;
+  QAction* m_showStatusBar;
   QLabel* m_tickActive;
   QMenu *imagesMenu;
   QSpinBox *mSignalZoomSpin;
