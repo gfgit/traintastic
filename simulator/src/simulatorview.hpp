@@ -171,6 +171,7 @@ private:
   size_t m_trainIndex = 0;
   size_t m_trainToBeRemovedIdx = Simulator::invalidIndex;
   size_t m_trainUnderMouseIdx = Simulator::invalidIndex;
+  size_t m_trainUnderMouseVehicleIdx = Simulator::invalidIndex;
 
   // Turnout blink
   QBasicTimer turnoutBlinkTimer;

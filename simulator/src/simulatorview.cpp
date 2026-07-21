@@ -1781,13 +1781,15 @@ void SimulatorView::drawTrains(QPainter *painter)
 
   const float trainWidth = m_simulator->staticData.trainWidth;
 
-  QPen activeTrainPen(Qt::white, 0.3);
-  activeTrainPen.setCosmetic(false);
+  QPen activeTrainPen(Qt::white, 0.4);
+
+  QPen vehicleUnderMousePen = activeTrainPen;
+  vehicleUnderMousePen.setColor(Qt::darkCyan);
 
   QPen autoTrainBorderPenLow = activeTrainPen;
   autoTrainBorderPenLow.setColor(Qt::darkGray);
 
-  QPen autoTrainBorderPenTop = autoTrainBorderPenLow;
+  QPen autoTrainBorderPenTop = activeTrainPen;
   autoTrainBorderPenTop.setColor(Qt::red);
   autoTrainBorderPenTop.setStyle(Qt::DashDotLine);
 
@@ -1809,6 +1811,13 @@ void SimulatorView::drawTrains(QPainter *painter)
 
   const Simulator::Train *const activeTrain = m_simulator->getTrainAt(m_trainIndex);
   const Simulator::Train *const trainUnderMouse = m_simulator->getTrainAt(m_trainUnderMouseIdx);
+  const Simulator::Vehicle * vehicleUnderMouse = nullptr;
+
+  if(trainUnderMouse && m_trainUnderMouseVehicleIdx != Simulator::invalidIndex
+      && m_trainUnderMouseVehicleIdx <= trainUnderMouse->vehicles.size())
+  {
+    vehicleUnderMouse = trainUnderMouse->vehicles.at(m_trainUnderMouseVehicleIdx).vehicle;
+  }
 
   for(auto it : m_stateData.vehicles)
   {
@@ -1855,17 +1864,18 @@ void SimulatorView::drawTrains(QPainter *painter)
     }
 
     const auto& color = colors[static_cast<size_t>(vehicle->color)];
-
-    const int alpha = (vehicle->activeTrain && vehicle->activeTrain == trainUnderMouse) ? 100 : 255;
+    const int alpha = (vehicle != vehicleUnderMouse && vehicle->activeTrain && vehicle->activeTrain == trainUnderMouse) ? 130 : 255;
     painter->setBrush(QColor(color.red * 255, color.green * 255, color.blue * 255, alpha));
 
     Simulator::TrainState::Mode mode = Simulator::TrainState::Mode::Manual;
     if(train)
       mode = train->state.mode;
 
-    if(activeTrain && activeTrain == train)
+    if(vehicle == vehicleUnderMouse)
+      painter->setPen(vehicleUnderMousePen);
+    else if(activeTrain && activeTrain == train)
       painter->setPen(activeTrainPen);
-    else if(mode != Simulator::TrainState::Mode::Manual)
+     else if(mode != Simulator::TrainState::Mode::Manual)
       painter->setPen(autoTrainBorderPenLow);
     else
       painter->setPen(Qt::NoPen);
@@ -1874,23 +1884,27 @@ void SimulatorView::drawTrains(QPainter *painter)
                              length, trainWidth);
     painter->drawRect(vehicleRect);
 
-    if(mode == Simulator::TrainState::Mode::Automatic)
+    if(vehicle != vehicleUnderMouse)
     {
-      painter->setPen(autoTrainBorderPenTop);
-      painter->drawRect(vehicleRect);
-    }
-    else if(mode == Simulator::TrainState::Mode::SemiAutomatic)
-    {
-      painter->setPen(semiautoTrainBorderPenTop);
-      painter->drawRect(vehicleRect);
-    }
-
-    if(activeTrain && activeTrain == train && activeTrain->state.isOnStationStop)
-    {
-      const QRectF adjVehicleRect = vehicleRect.adjusted(1, 1, -1, -1);
-      painter->setPen(stationStopTrainPen);
       painter->setBrush(Qt::NoBrush);
-      painter->drawRect(adjVehicleRect);
+
+      if(mode == Simulator::TrainState::Mode::Automatic)
+      {
+        painter->setPen(autoTrainBorderPenTop);
+        painter->drawRect(vehicleRect);
+      }
+      else if(mode == Simulator::TrainState::Mode::SemiAutomatic)
+      {
+        painter->setPen(semiautoTrainBorderPenTop);
+        painter->drawRect(vehicleRect);
+      }
+
+      if(activeTrain && activeTrain == train && activeTrain->state.isOnStationStop)
+      {
+        const QRectF adjVehicleRect = vehicleRect.adjusted(1, 1, -1, -1);
+        painter->setPen(stationStopTrainPen);
+        painter->drawRect(adjVehicleRect);
+      }
     }
 
     painter->setTransform(trasf);
@@ -2260,6 +2274,19 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
     if(vehicle && vehicle->activeTrain)
     {
       m_trainUnderMouseIdx = m_simulator->getTrainIndex(vehicle->activeTrain);
+      m_trainUnderMouseVehicleIdx = Simulator::invalidIndex;
+
+      size_t vehicleIdx = 0;
+      for(const Simulator::Train::VehicleItem& item : vehicle->activeTrain->vehicles)
+      {
+        if(item.vehicle == vehicle)
+        {
+          m_trainUnderMouseVehicleIdx = vehicleIdx;
+          break;
+        }
+        vehicleIdx++;
+      }
+
       foundTrain = true;
     }
   }
@@ -2329,6 +2356,8 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
     foundTrain = false;
     update();
   }
+
+  m_trainUnderMouseVehicleIdx = Simulator::invalidIndex;
 }
 
 float SimulatorView::signalsScaleFactor() const
