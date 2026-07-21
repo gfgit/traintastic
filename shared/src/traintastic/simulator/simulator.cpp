@@ -1876,12 +1876,12 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
     const auto& segment = staticData.trackSegments[face.segmentIndex];
     const auto segmentLength = getSegmentLength(segment, m_stateData);
 
+    bool stop = false;
     const bool dirFwd = face.segmentDirectionInverted == (speed < 0);
     if(dirFwd)
     {
         for(const TrackSegment::Object& obj : segment.objects)
         {
-          bool stop = false;
           if(objHelper(obj, face.distance, distance,
                        train_, true, isFirst_, stop, trainRemoved))
             continue;
@@ -1889,7 +1889,6 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
           if(stop)
           {
             outRemaining = std::abs(face.distance - obj.position) - 0.0001;
-            return false;
           }
           break;
         }
@@ -1898,16 +1897,65 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
     {
       for(const TrackSegment::Object& obj : segment.objects | std::views::reverse)
       {
-        bool stop = false;
         if(objHelper(obj, face.distance, distance,
                      train_, false, isFirst_, stop, trainRemoved))
           continue;
-
-        if(stop)
-          return false;
         break;
       }
     }
+
+    if(isFirst_ && vehicle->activeTrain)
+    {
+      // We are train head, check other trains for collision
+
+      auto it = m_stateData.segmentVehicles.find(face.segmentIndex);
+      const SegmentVehicles &segVec = it->second;
+
+      for(Vehicle *otherVehicle : segVec.vehicles)
+      {
+        if(otherVehicle->activeTrain == vehicle->activeTrain)
+          continue; // Same train, skip
+
+        auto faceHelper = [&](const VehicleState::Face &otherFace)
+        {
+          if(dirFwd && otherFace.distance > face.distance && (otherFace.distance - staticData.trainCouplingLength) < distance)
+          {
+            stop = true;
+            float remDist = std::max(face.distance, otherFace.distance - staticData.trainCouplingLength) - face.distance - 0.0001;
+            if(remDist < outRemaining)
+              outRemaining = remDist;
+          }
+          else if(!dirFwd && otherFace.distance < face.distance && (otherFace.distance + staticData.trainCouplingLength) > distance)
+          {
+            stop = true;
+            float remDist = face.distance - std::min(face.distance, otherFace.distance + staticData.trainCouplingLength) - 0.0001;
+            if(remDist < outRemaining)
+              outRemaining = remDist;
+          }
+        };
+
+        if(otherVehicle->state.front.segmentIndex == face.segmentIndex)
+            faceHelper(otherVehicle->state.front);
+
+        if(otherVehicle->state.rear.segmentIndex == face.segmentIndex)
+          faceHelper(otherVehicle->state.rear);
+      }
+
+      if(!stop || outRemaining > staticData.trainCouplingLength)
+      {
+        if(dirFwd && (distance + staticData.trainCouplingLength) > segmentLength)
+        {
+          // TODO: search next segments
+        }
+        else if(!dirFwd && (distance + staticData.trainCouplingLength) < 0)
+        {
+
+        }
+      }
+    }
+
+    if(stop)
+      return false;
 
     // If train is right on the end of segment (distance == segmentLenght) do not update
     // unlsess we are effectively moving. Because if speed is 0, segmentDirectionInverted is
