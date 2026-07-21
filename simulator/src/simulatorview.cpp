@@ -2266,7 +2266,9 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
 
   const float posInSeg = getSegmentPosAt(idx, point, m_simulator->staticData);
 
+  QString trainName;
   bool foundTrain = false;
+  bool isManualMode = false;
   {
     std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
 
@@ -2275,6 +2277,9 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
     {
       m_trainUnderMouseIdx = m_simulator->getTrainIndex(vehicle->activeTrain);
       m_trainUnderMouseVehicleIdx = Simulator::invalidIndex;
+
+      trainName = QString::fromStdString(vehicle->activeTrain->name);
+      isManualMode = vehicle->activeTrain->state.mode == Simulator::TrainState::Mode::Manual;
 
       size_t vehicleIdx = 0;
       for(const Simulator::Train::VehicleItem& item : vehicle->activeTrain->vehicles)
@@ -2300,12 +2305,21 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
   copySegData->setVisible(!m_stateData.powerOn);
 
   QAction *addTrain = m->addAction(tr("Add Train"));
+  addTrain->setVisible(!foundTrain);
+
+  if(foundTrain)
+    m->addSection(trainName);
 
   QAction *remTrain = m->addAction(tr("Remove Train"));
   remTrain->setVisible(foundTrain);
 
   QAction *activateTrain = m->addAction(tr("Set Train Active"));
   activateTrain->setVisible(foundTrain);
+
+  if(foundTrain && isManualMode)
+  {
+    // TODO: coupling
+  }
 
   const QAction *result = m->exec(e->globalPos());
   if(result == copySegData)
