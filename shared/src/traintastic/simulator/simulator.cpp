@@ -3866,18 +3866,9 @@ void Simulator::loadTrains(const nlohmann::json &world)
   }
 }
 
-Simulator::Vehicle *Simulator::getVehicleNear(size_t segmentIdx, float pos, float maxDistance)
+Simulator::Vehicle *Simulator::getVehicleNearHelper(size_t segmentIdx, float pos, float maxDistance,
+                                                    bool canGoForward, bool canGoBackwards, Vehicle *bestVehicle, float &bestDistance)
 {
-  if(segmentIdx == invalidIndex)
-    return nullptr;
-
-  // const TrackSegment &segment = staticData.trackSegments.at(segmentIdx);
-  // const float segLength = getSegmentLength(segment, m_stateData);
-
-  // bool searchNearSegments = false;
-  // if((pos - maxDistance) < 0 || (pos + maxDistance) > segLength)
-  //   searchNearSegments = true;
-
   auto it = m_stateData.segmentVehicles.find(segmentIdx);
   if(it == m_stateData.segmentVehicles.end())
     return nullptr;
@@ -3885,9 +3876,6 @@ Simulator::Vehicle *Simulator::getVehicleNear(size_t segmentIdx, float pos, floa
   SegmentVehicles &seg = it->second;
   if(seg.vehicles.empty())
     return nullptr;
-
-  Vehicle *bestVehicle = nullptr;
-  float bestDistance = 0.0;
 
   for(Vehicle *vehicle : seg.vehicles)
   {
@@ -3956,7 +3944,7 @@ Simulator::Vehicle *Simulator::getVehicleNear(size_t segmentIdx, float pos, floa
             }
             else
             {
-              if(segmentFace.distance < pos && (segmentFace.distance + vehicle->length) > pos)
+              if(segmentFace.distance > pos && (segmentFace.distance - vehicle->length) < pos)
               {
                 bestVehicle = vehicle;
                 bestDistance = 0.0;
@@ -3979,22 +3967,107 @@ Simulator::Vehicle *Simulator::getVehicleNear(size_t segmentIdx, float pos, floa
         return found;
       };
 
-      // Try going forward
-      if(helper(true, segmentIdx))
+      const float segmentLegth = getSegmentLength(staticData.trackSegments.at(segmentIdx), m_stateData);
+
+      if(canGoForward && (segmentFace.distance + vehicle->length) > segmentLegth)
       {
-        if(bestVehicle && bestDistance == 0.0)
-          return bestVehicle;
-        continue;
+        // Try going forward
+        if(helper(true, segmentIdx))
+        {
+          if(bestVehicle && bestDistance == 0.0)
+            return bestVehicle;
+          continue;
+        }
       }
 
-      // Try going backwards
-      if(helper(false, segmentIdx))
+      if(canGoBackwards && (segmentFace.distance - vehicle->length) < 0)
       {
-        if(bestVehicle && bestDistance == 0.0)
-          return bestVehicle;
-        continue;
+        // Try going backwards
+        if(helper(false, segmentIdx))
+        {
+          if(bestVehicle && bestDistance == 0.0)
+            return bestVehicle;
+          continue;
+        }
       }
     }
+  }
+
+  return bestVehicle;
+}
+
+Simulator::Vehicle *Simulator::getVehicleNear(size_t segmentIdx, float pos, float maxDistance)
+{
+  if(segmentIdx == invalidIndex)
+    return nullptr;
+
+  Vehicle *bestVehicle = nullptr;
+  float bestDistance = 0.0;
+
+  bestVehicle = getVehicleNearHelper(segmentIdx, pos, maxDistance, true, true, bestVehicle, bestDistance);
+  if(bestVehicle && bestDistance == 0.0)
+    return bestVehicle;
+
+  const TrackSegment &segment = staticData.trackSegments.at(segmentIdx);
+  const float segLength = getSegmentLength(segment, m_stateData);
+
+  auto helper = [&](bool goForward, size_t nextSegIdx, float originalPos, float remainingPos)
+  {
+    while(true)
+    {
+      const size_t segmentIdxBefore = nextSegIdx;
+      const TrackSegment &segmentBefore = staticData.trackSegments.at(segmentIdxBefore);
+      const float segmentBeforeLength = getSegmentLength(segmentBefore, m_stateData);
+
+      if(goForward && remainingPos < segmentBeforeLength)
+        break;
+      else if(!goForward && remainingPos >= 0)
+        break;
+
+      nextSegIdx = getNextSegmentIndex(segmentBefore, goForward, m_stateData);
+      if(nextSegIdx == invalidIndex)
+        break;
+
+      if(goForward)
+      {
+        remainingPos -= segmentBeforeLength;
+        originalPos  -= segmentBeforeLength;
+      }
+      else
+      {
+        remainingPos = -remainingPos;
+        originalPos  = -originalPos;
+      }
+
+      const TrackSegment &nextSegment = staticData.trackSegments.at(nextSegIdx);
+      goForward = nextSegment.nextSegmentIndex[0] == segmentIdxBefore;
+
+      const float nextSegmentLength = getSegmentLength(nextSegment, m_stateData);
+
+      if(!goForward)
+      {
+        remainingPos = nextSegmentLength - remainingPos;
+        originalPos  = nextSegmentLength - originalPos;
+      }
+
+      bestVehicle = getVehicleNearHelper(nextSegIdx, originalPos, maxDistance, goForward, !goForward, bestVehicle, bestDistance);
+      if(bestVehicle && bestDistance == 0.0)
+        return;
+    }
+  };
+
+  if((pos - maxDistance) < 0)
+  {
+    helper(false, segmentIdx, pos, pos - maxDistance);
+    if(bestVehicle && bestDistance == 0.0)
+      return bestVehicle;
+  }
+
+  if((pos + maxDistance) > segLength)
+  {
+    helper(true, segmentIdx, pos, pos + maxDistance);
+    if(bestVehicle && bestDistance == 0.0)
+      return bestVehicle;
   }
 
   return bestVehicle;

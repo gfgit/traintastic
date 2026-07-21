@@ -695,6 +695,10 @@ private:
 
   void updateTrainNextSignal(Train *train, bool next);
   bool checkNextSignal(Train *train);
+
+  Simulator::Vehicle *getVehicleNearHelper(size_t segmentIdx, float pos, float maxDistance,
+                                           bool canGoForward, bool canGoBackwards,
+                                           Vehicle *bestVehicle, float &bestDistance);
 };
 
 inline size_t Simulator::getTrainIndex(Train *train) const
