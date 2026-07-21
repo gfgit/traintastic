@@ -1781,8 +1781,6 @@ void SimulatorView::drawTrains(QPainter *painter)
 
   const float trainWidth = m_simulator->staticData.trainWidth;
 
-  const Simulator::Train *const activeTrain = m_simulator->getTrainAt(m_trainIndex);
-
   QPen activeTrainPen(Qt::white, 0.3);
   activeTrainPen.setCosmetic(false);
 
@@ -1808,6 +1806,9 @@ void SimulatorView::drawTrains(QPainter *painter)
 
   // We need to access simulator data
   std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
+
+  const Simulator::Train *const activeTrain = m_simulator->getTrainAt(m_trainIndex);
+  const Simulator::Train *const trainUnderMouse = m_simulator->getTrainAt(m_trainUnderMouseIdx);
 
   for(auto it : m_stateData.vehicles)
   {
@@ -1854,7 +1855,9 @@ void SimulatorView::drawTrains(QPainter *painter)
     }
 
     const auto& color = colors[static_cast<size_t>(vehicle->color)];
-    painter->setBrush(QColor(color.red * 255, color.green * 255, color.blue * 255));
+
+    const int alpha = (vehicle->activeTrain && vehicle->activeTrain == trainUnderMouse) ? 100 : 255;
+    painter->setBrush(QColor(color.red * 255, color.green * 255, color.blue * 255, alpha));
 
     Simulator::TrainState::Mode mode = Simulator::TrainState::Mode::Manual;
     if(train)
@@ -2118,8 +2121,9 @@ void SimulatorView::mousePressEvent(QMouseEvent* e)
   {
     m_leftClickMousePos = e->pos();
   }
-  else if(e->button() == Qt::MiddleButton || e->button() == Qt::RightButton)
+  else if(e->button() == Qt::MiddleButton || (e->button() == Qt::RightButton && !e->modifiers().testFlag(Qt::AltModifier)))
   {
+    // Allow both middle click and right click but without Alt because it's used by context menu
     if(e->modifiers() & Qt::ControlModifier)
     {
       setRotation(0); // Reset rotation
@@ -2245,12 +2249,35 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
   if(idx == Simulator::invalidIndex)
     return;
 
+  const float posInSeg = getSegmentPosAt(idx, point, m_simulator->staticData);
+
+  bool foundTrain = false;
+  {
+    std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
+
+    Simulator::Vehicle *vehicle = m_simulator->getVehicleNear(idx, posInSeg, 5);
+    if(vehicle && vehicle->activeTrain)
+    {
+      m_trainUnderMouseIdx = m_simulator->getTrainIndex(vehicle->activeTrain);
+      foundTrain = true;
+    }
+  }
+
+  if(foundTrain)
+    update();
+
   QMenu *m = new QMenu(this);
   QAction *copySegData = m->addAction(tr("Copy segment data"));
   copySegData->setEnabled(!m_stateData.powerOn);
   copySegData->setVisible(!m_stateData.powerOn);
 
   QAction *addTrain = m->addAction(tr("Add Train"));
+
+  QAction *remTrain = m->addAction(tr("Remove Train"));
+  remTrain->setVisible(foundTrain);
+
+  QAction *activateTrain = m->addAction(tr("Set Train Active"));
+  activateTrain->setVisible(foundTrain);
 
   const QAction *result = m->exec(e->globalPos());
   if(result == copySegData)
@@ -2260,7 +2287,46 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
   }
   else if(result == addTrain)
   {
+    if(foundTrain)
+    {
+      std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
+      m_trainUnderMouseIdx = Simulator::invalidIndex;
+      foundTrain = false;
+      update();
+    }
+
     showAddTrainDialog(idx, point);
+  }
+  else if(result == remTrain && foundTrain)
+  {
+    std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
+    size_t trainToRemove = m_trainUnderMouseIdx;
+    m_trainUnderMouseIdx = Simulator::invalidIndex;
+    foundTrain = false;
+
+    if(trainToRemove != Simulator::invalidIndex)
+    {
+      userAskRemoveTrain(trainToRemove);
+      update();
+    }
+  }
+  else if(result == activateTrain && foundTrain)
+  {
+    std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
+    if(m_trainUnderMouseIdx != Simulator::invalidIndex)
+      m_trainIndex = m_trainUnderMouseIdx;
+
+    m_trainUnderMouseIdx = Simulator::invalidIndex;
+    foundTrain = false;
+    update();
+  }
+
+  if(foundTrain)
+  {
+    std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
+    m_trainUnderMouseIdx = Simulator::invalidIndex;
+    foundTrain = false;
+    update();
   }
 }
 
@@ -2583,29 +2649,28 @@ void SimulatorView::trainAddedRemoved(bool add, size_t trainIdx)
 
   // Avoid to shift current controlled train when list is updated
   // TODO: entirely remove this trainIndex thing!!!
-  if(add)
+  auto helper = [](bool add_, size_t changedIdx, size_t &storedTrainIdx, size_t defaultValue)
   {
-    if(m_trainIndex >= trainIdx)
-      m_trainIndex++;
+    if(storedTrainIdx == Simulator::invalidIndex)
+      return;
 
-    if(m_trainToBeRemovedIdx != Simulator::invalidIndex && m_trainToBeRemovedIdx >= trainIdx)
-      m_trainToBeRemovedIdx++;
-  }
-  else
-  {
-    if(m_trainIndex == trainIdx)
-      m_trainIndex = 0;
-    else if(m_trainIndex > trainIdx)
-      m_trainIndex--;
+    if(add_)
+    {
+      if(storedTrainIdx >= changedIdx)
+        storedTrainIdx++;
+    }
+    else
+    {
+      if(storedTrainIdx == changedIdx)
+        storedTrainIdx = defaultValue;
+      else if(storedTrainIdx > changedIdx)
+        storedTrainIdx--;
+    }
+  };
 
-    if(m_trainToBeRemovedIdx != Simulator::invalidIndex && m_trainToBeRemovedIdx == trainIdx)
-      m_trainToBeRemovedIdx = Simulator::invalidIndex;
-    else if(m_trainToBeRemovedIdx != Simulator::invalidIndex && m_trainToBeRemovedIdx > trainIdx)
-      m_trainToBeRemovedIdx--;
-  }
-
-
-
+  helper(add, trainIdx, m_trainIndex, 0);
+  helper(add, trainIdx, m_trainToBeRemovedIdx, Simulator::invalidIndex);
+  helper(add, trainIdx, m_trainUnderMouseIdx, Simulator::invalidIndex);
 }
 
 void SimulatorView::userAskRemoveTrain(size_t trainIdx)

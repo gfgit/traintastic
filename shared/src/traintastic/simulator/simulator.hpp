@@ -582,6 +582,7 @@ public:
   void togglePowerOn();
 
   Train *getTrainAt(size_t trainIndex) const;
+  size_t getTrainIndex(Train *train) const;
 
   std::pair<Point, Point> getTrainExtents(Train *train);
   void setTrainDirection(Train *train, bool reverse);
@@ -614,6 +615,8 @@ public:
 
   Vehicle *addVehicle(const std::string_view &baseName, float length, Color color);
   bool removeVehicle(Vehicle *vehicle);
+
+  Vehicle *getVehicleNear(size_t segmentIdx, float pos, float maxDistance);
 
   void liftRestrictions(bool val)
   {
@@ -690,6 +693,20 @@ private:
   void updateTrainNextSignal(Train *train, bool next);
   bool checkNextSignal(Train *train);
 };
+
+inline size_t Simulator::getTrainIndex(Train *train) const
+{
+  std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+
+  size_t idx = 0;
+  for(auto it : m_stateData.trains)
+  {
+    if(it.second == train)
+      return idx;
+    idx++;
+  }
+  return invalidIndex;
+}
 
 
 constexpr Simulator::Point operator+(const Simulator::Point lhs, const Simulator::Point rhs)

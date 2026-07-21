@@ -551,6 +551,9 @@ void Simulator::togglePowerOn()
 
 Simulator::Train *Simulator::getTrainAt(size_t trainIndex) const
 {
+  if(trainIndex == invalidIndex)
+    return nullptr;
+
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
   if(trainIndex < m_stateData.trains.size())
   {
@@ -3835,4 +3838,138 @@ void Simulator::loadTrains(const nlohmann::json &world)
                unused1);
     }
   }
+}
+
+Simulator::Vehicle *Simulator::getVehicleNear(size_t segmentIdx, float pos, float maxDistance)
+{
+  if(segmentIdx == invalidIndex)
+    return nullptr;
+
+  // const TrackSegment &segment = staticData.trackSegments.at(segmentIdx);
+  // const float segLength = getSegmentLength(segment, m_stateData);
+
+  // bool searchNearSegments = false;
+  // if((pos - maxDistance) < 0 || (pos + maxDistance) > segLength)
+  //   searchNearSegments = true;
+
+  auto it = m_stateData.segmentVehicles.find(segmentIdx);
+  if(it == m_stateData.segmentVehicles.end())
+    return nullptr;
+
+  SegmentVehicles &seg = it->second;
+  if(seg.vehicles.empty())
+    return nullptr;
+
+  Vehicle *bestVehicle = nullptr;
+  float bestDistance = 0.0;
+
+  for(Vehicle *vehicle : seg.vehicles)
+  {
+    const VehicleState::Face &front = vehicle->state.front;
+    const VehicleState::Face &rear = vehicle->state.rear;
+
+    if(front.segmentIndex == segmentIdx && rear.segmentIndex == segmentIdx)
+    {
+      // Both in segment
+      float posA = front.distance;
+      float posB = rear.distance;
+      if(posA > posB)
+        std::swap(posA, posB);
+
+      if(posA <= pos && pos <= posB)
+        return vehicle;
+
+      float distance = std::min(std::abs(posA - pos), std::abs(posB - pos));
+      if(distance < maxDistance && (!bestVehicle || distance < bestDistance))
+      {
+        bestVehicle = vehicle;
+        bestDistance = distance;
+      }
+      continue;
+    }
+    else if(front.segmentIndex == segmentIdx || rear.segmentIndex == segmentIdx)
+    {
+      const VehicleState::Face &segmentFace = front.segmentIndex == segmentIdx ? front : rear;
+      const VehicleState::Face &otherFace = front.segmentIndex != segmentIdx ? front : rear;
+
+      auto helper = [&](bool goForward, size_t nextSegIdx) -> bool
+      {
+        float remainingDistance = vehicle->length;
+        bool found = false;
+        bool goNextSegment = goForward;
+
+        while(remainingDistance > 0.0)
+        {
+          const size_t segmentIdxBefore = nextSegIdx;
+          nextSegIdx = getNextSegmentIndex(staticData.trackSegments.at(segmentIdxBefore), goNextSegment, m_stateData);
+          if(nextSegIdx == invalidIndex)
+            break;
+
+          const TrackSegment &nextSegment = staticData.trackSegments.at(nextSegIdx);
+          goNextSegment = nextSegment.nextSegmentIndex[0] == segmentIdxBefore;
+
+          if(otherFace.segmentIndex == nextSegIdx)
+          {
+            found = true;
+
+            if(goForward)
+            {
+              if(segmentFace.distance < pos && (segmentFace.distance + vehicle->length) > pos)
+              {
+                bestVehicle = vehicle;
+                bestDistance = 0.0;
+                return true;
+              }
+
+              float distance = std::min(std::abs(segmentFace.distance - pos), std::abs(segmentFace.distance + vehicle->length - pos));
+              if(distance < maxDistance && (!bestVehicle || distance < bestDistance))
+              {
+                bestVehicle = vehicle;
+                bestDistance = distance;
+              }
+            }
+            else
+            {
+              if(segmentFace.distance < pos && (segmentFace.distance + vehicle->length) > pos)
+              {
+                bestVehicle = vehicle;
+                bestDistance = 0.0;
+                return true;
+              }
+
+              float distance = std::min(std::abs(segmentFace.distance - pos), std::abs(segmentFace.distance + vehicle->length - pos));
+              if(distance < maxDistance && (!bestVehicle || distance < bestDistance))
+              {
+                bestVehicle = vehicle;
+                bestDistance = distance;
+              }
+            }
+            break;
+          }
+
+          remainingDistance -= getSegmentLength(nextSegment, m_stateData);
+        }
+
+        return found;
+      };
+
+      // Try going forward
+      if(helper(true, segmentIdx))
+      {
+        if(bestVehicle && bestDistance == 0.0)
+          return bestVehicle;
+        continue;
+      }
+
+      // Try going backwards
+      if(helper(false, segmentIdx))
+      {
+        if(bestVehicle && bestDistance == 0.0)
+          return bestVehicle;
+        continue;
+      }
+    }
+  }
+
+  return bestVehicle;
 }
