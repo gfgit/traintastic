@@ -23,6 +23,8 @@
 #define TRAINTASTIC_SHARED_TRAINTASTIC_SIMULATOR_SIMULATOR_HPP
 
 #include <list>
+#include <unordered_map>
+#include <unordered_set>
 #include <memory>
 #include <mutex>
 #include <numbers>
@@ -528,6 +530,11 @@ public:
     }
   };
 
+  struct SegmentVehicles
+  {
+    std::unordered_set<Vehicle *> vehicles;
+  };
+
   struct StateData
   {
     float tickActive = 0.0f;
@@ -544,6 +551,7 @@ public:
     std::unordered_map<std::string, MainSignal *, StringHash, StringEqual> mainSignals;
     std::unordered_map<std::string, AuxSignal *, StringHash, StringEqual> auxSignals;
     std::unordered_map<size_t, Spawn *> spawns;
+    std::unordered_map<size_t, SegmentVehicles> segmentVehicles;
   };
 
 private:
@@ -596,24 +604,10 @@ public:
 
   inline std::recursive_mutex& stateMutex() { return m_stateMutex; }
 
-  static bool addTrain(const std::string_view &name,
-                       DecoderProtocol proto, uint16_t addr,
-                       const std::vector<Train::VehicleItem> &vehicles, size_t segmentIndex,
-                       const StaticData &data, StateData &stateData, size_t &idxOut, const float startPos = -1.0);
-
-  bool addTrain(const std::string_view& name, DecoderProtocol proto, uint16_t addr,
-                const std::vector<Train::VehicleItem> &vehicles, size_t segmentIndex, size_t &idxOut, const float startPos = -1.0)
-  {
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-    bool success = addTrain(name, proto, addr, vehicles,
-                            segmentIndex, staticData, m_stateData, idxOut, startPos);
-
-    if(!success)
-      return false;
-
-    onTrainAddedRemoved(true, idxOut);
-    return true;
-  }
+  bool addTrain(const std::string_view& name,
+                DecoderProtocol proto, uint16_t addr,
+                const std::vector<Train::VehicleItem> &vehicles, size_t segmentIndex,
+                size_t &idxOut, const float startPos = -1.0);
 
   bool removeTrain(const std::string_view& name, bool removeWagons);
   void destroyTrain(Train *train, bool removeWagons);
@@ -672,9 +666,13 @@ private:
   void syncSensorState();
 
   void updateTrainPositions();
-  bool updateVehiclePosition(VehicleState::Face& face,
+  bool updateVehiclePosition(Vehicle *vehicle, bool frontFace,
                              const float speed, bool isFirst_,
                              Train &train_, bool &trainRemoved, float &outRemaining);
+
+  void maybeAddVehicleSegment(Vehicle *vehicle, size_t segmentIdx);
+  void maybeRemoveVehicleSegment(Vehicle *vehicle, size_t segmentIdx);
+
   void updateSensors();
 
   bool isStraight(const TrackSegment& segment);
@@ -686,6 +684,8 @@ private:
   static void loadTrackObjects(const nlohmann::json &track,
                                StaticData &data, StateData &stateData,
                                TrackSegment &segment);
+
+  void loadTrains(const nlohmann::json& world);
 
   void updateTrainNextSignal(Train *train, bool next);
   bool checkNextSignal(Train *train);
