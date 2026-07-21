@@ -2677,19 +2677,22 @@ void SimulatorView::trainAddedRemoved(bool add, size_t trainIdx)
 void SimulatorView::userAskRemoveTrain(size_t trainIdx)
 {
   {
-    assert(m_trainToBeRemovedIdx == Simulator::invalidIndex);
-
     std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
     Simulator::Train *train = m_simulator->getTrainAt(trainIdx);
     if(!train)
       return;
 
+    assert(m_trainToBeRemovedIdx == Simulator::invalidIndex);
     m_trainToBeRemovedIdx = trainIdx;
   }
 
   const int ret = QMessageBox::question(this, tr("Remove Train?"), tr("Remove Current Train?"));
   if(ret != QMessageBox::Yes && m_trainToBeRemovedIdx != Simulator::invalidAddress)
+  {
+    std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
+    m_trainToBeRemovedIdx = Simulator::invalidIndex;
     return;
+  }
 
   {
     std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
