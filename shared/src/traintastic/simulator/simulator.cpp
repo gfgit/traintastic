@@ -382,6 +382,7 @@ Simulator::Simulator(const nlohmann::json& world)
   , m_socketUDP{m_ioContext}
   , m_signalBlinkStateTimer{m_ioContext}
   , m_syncSensorStateTimer{m_ioContext}
+  , m_garbageCollectTimer{m_ioContext}
 {
   loadTrains(world);
 }
@@ -500,6 +501,7 @@ void Simulator::start(bool discoverable)
       handShake();
       //blinkSignals();
       syncSensorState();
+      garbageCollectSegmentState();
 
       m_ioContext.run();
     });
@@ -526,6 +528,7 @@ void Simulator::stop()
   m_handShakeTimer.cancel();
   m_signalBlinkStateTimer.cancel();
   m_syncSensorStateTimer.cancel();
+  m_garbageCollectTimer.cancel();
   if(m_thread.joinable())
   {
     m_thread.join();
@@ -1493,6 +1496,32 @@ void Simulator::syncSensorState()
   }
 }
 
+void Simulator::garbageCollectSegmentState()
+{
+  m_garbageCollectTimer.expires_after(garbageCollectRate);
+  m_garbageCollectTimer.async_wait(
+      [this](std::error_code ec)
+      {
+        if(!ec)
+        {
+          garbageCollectSegmentState();
+        }
+      });
+
+  std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+
+  // We do it here to free some memory and speed up searches
+  // do not do it at every vehicle change as it slows ticks too much
+  auto it = m_stateData.segmentVehicles.begin();
+  while(it != m_stateData.segmentVehicles.end())
+  {
+    if(it->second.vehicles.empty())
+      it = m_stateData.segmentVehicles.erase(it);
+    else
+      it++;
+  }
+}
+
 void Simulator::updateTrainPositions()
 {
   if(staticData.trackSegments.empty()) [[unlikely]]
@@ -2088,9 +2117,6 @@ void Simulator::maybeRemoveVehicleSegment(Vehicle *vehicle, size_t segmentIdx)
   auto it2 = seg.vehicles.find(vehicle);
   if(it2 != seg.vehicles.end())
     seg.vehicles.erase(it2);
-
-  if(seg.vehicles.empty())
-    m_stateData.segmentVehicles.erase(it);
 }
 
 void Simulator::updateSensors()
