@@ -2327,10 +2327,14 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
   }
   else if(result == remTrain && foundTrain)
   {
-    std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
-    size_t trainToRemove = m_trainUnderMouseIdx;
-    m_trainUnderMouseIdx = Simulator::invalidIndex;
-    foundTrain = false;
+    size_t trainToRemove = Simulator::invalidIndex;
+    {
+      std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
+      trainToRemove = m_trainUnderMouseIdx;
+      m_trainUnderMouseIdx = Simulator::invalidIndex;
+      foundTrain = false;
+      // Release mutex before calling userAskRemoveTrain()
+    }
 
     if(trainToRemove != Simulator::invalidIndex)
     {
