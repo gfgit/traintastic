@@ -2121,9 +2121,9 @@ void SimulatorView::mousePressEvent(QMouseEvent* e)
   {
     m_leftClickMousePos = e->pos();
   }
-  else if(e->button() == Qt::MiddleButton || (e->button() == Qt::RightButton && !e->modifiers().testFlag(Qt::AltModifier)))
+  else if(e->button() == Qt::MiddleButton || (e->button() == Qt::RightButton && e->modifiers().testFlag(Qt::AltModifier)))
   {
-    // Allow both middle click and right click but without Alt because it's used by context menu
+    // Allow both middle click and right click with Alt because without it's used by context menu
     if(e->modifiers() & Qt::ControlModifier)
     {
       setRotation(0); // Reset rotation
@@ -2140,7 +2140,8 @@ void SimulatorView::mousePressEvent(QMouseEvent* e)
 
 void SimulatorView::mouseMoveEvent(QMouseEvent* e)
 {
-  if((e->buttons() & Qt::MiddleButton || e->buttons() & Qt::RightButton) && e->modifiers() == Qt::NoModifier)
+  if((e->buttons() & Qt::MiddleButton && e->modifiers() == Qt::NoModifier)
+      || (e->buttons() & Qt::RightButton && e->modifiers() == Qt::AltModifier))
   {
     m_zoomFit = false;
 
@@ -2241,8 +2242,8 @@ void SimulatorView::timerEvent(QTimerEvent *e)
 
 void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
 {
-  if(e->modifiers() != Qt::AltModifier)
-    return; // Keep right click without Ctrl for panning
+  if(e->modifiers() == Qt::AltModifier)
+    return; // Keep right click with Alt for panning
 
   const Simulator::Point point = mapToSim(e->pos());
   const size_t idx = getSegmentAt(point, m_simulator->staticData);
