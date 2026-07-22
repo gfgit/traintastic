@@ -1908,48 +1908,80 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
     {
       // We are train head, check other trains for collision
 
-      auto it = m_stateData.segmentVehicles.find(face.segmentIndex);
-      const SegmentVehicles &segVec = it->second;
-
-      for(Vehicle *otherVehicle : segVec.vehicles)
+      auto scanSegment = [&](Train *activeTrain, size_t faceSegmentIndex,
+                             bool goForward, float startDistance, float endDistance)
       {
-        if(otherVehicle->activeTrain == vehicle->activeTrain)
-          continue; // Same train, skip
+        auto it = m_stateData.segmentVehicles.find(faceSegmentIndex);
+        if(it == m_stateData.segmentVehicles.end())
+          return;
 
-        auto faceHelper = [&](const VehicleState::Face &otherFace)
+        const SegmentVehicles &segVec = it->second;
+
+        for(Vehicle *otherVehicle : segVec.vehicles)
         {
-          if(dirFwd && otherFace.distance > face.distance && (otherFace.distance - staticData.trainCouplingLength) < distance)
-          {
-            stop = true;
-            float remDist = std::max(face.distance, otherFace.distance - staticData.trainCouplingLength) - face.distance - 0.0001;
-            if(remDist < outRemaining)
-              outRemaining = remDist;
-          }
-          else if(!dirFwd && otherFace.distance < face.distance && (otherFace.distance + staticData.trainCouplingLength) > distance)
-          {
-            stop = true;
-            float remDist = face.distance - std::min(face.distance, otherFace.distance + staticData.trainCouplingLength) - 0.0001;
-            if(remDist < outRemaining)
-              outRemaining = remDist;
-          }
-        };
+          if(otherVehicle->activeTrain == activeTrain)
+            continue; // Same train, skip
 
-        if(otherVehicle->state.front.segmentIndex == face.segmentIndex)
+          auto faceHelper = [&](const VehicleState::Face &otherFace)
+          {
+            if(goForward && otherFace.distance > startDistance && (otherFace.distance - staticData.trainCouplingLength) < endDistance)
+            {
+              stop = true;
+              float remDist = std::max(startDistance, otherFace.distance - staticData.trainCouplingLength) - startDistance - 0.0001;
+              if(remDist < outRemaining)
+                outRemaining = remDist;
+            }
+            else if(!goForward && otherFace.distance < startDistance && (otherFace.distance + staticData.trainCouplingLength) > endDistance)
+            {
+              stop = true;
+              float remDist = startDistance - std::min(startDistance, otherFace.distance + staticData.trainCouplingLength) - 0.0001;
+              if(remDist < outRemaining)
+                outRemaining = remDist;
+            }
+          };
+
+          if(otherVehicle->state.front.segmentIndex == faceSegmentIndex)
             faceHelper(otherVehicle->state.front);
 
-        if(otherVehicle->state.rear.segmentIndex == face.segmentIndex)
-          faceHelper(otherVehicle->state.rear);
-      }
+          if(otherVehicle->state.rear.segmentIndex == faceSegmentIndex)
+            faceHelper(otherVehicle->state.rear);
+        }
+      };
 
-      if(!stop || outRemaining > staticData.trainCouplingLength)
+      scanSegment(vehicle->activeTrain, face.segmentIndex, dirFwd, face.distance, distance);
+
+      auto scanNextHelper = [&](bool goForward, size_t otherSegmentIdx, float searchDist, float startDistance)
       {
+        while(searchDist > 0.0)
+        {
+          const auto nextSegmentIndex = getNextSegmentIndex(staticData.trackSegments[otherSegmentIdx], goForward, m_stateData);
+          if(nextSegmentIndex == invalidIndex)
+            break;
+
+          const auto& nextSegment = staticData.trackSegments[nextSegmentIndex];
+          goForward = nextSegment.nextSegmentIndex[0] == otherSegmentIdx;
+
+          const float segLength = getSegmentLength(nextSegment, m_stateData);
+          scanSegment(vehicle->activeTrain, nextSegmentIndex,
+                      goForward, goForward ? -startDistance : (segLength + startDistance), goForward ? searchDist : (segLength - searchDist));
+
+          searchDist -= segLength;
+          startDistance += segLength;
+          otherSegmentIdx = nextSegmentIndex;
+        }
+      };
+
+      if(!stop)
+      {
+        // When near end of segment, scan adjacent segment too!
+        // TODO: it leaves bigger distance, maybe outRemaining too low?
         if(dirFwd && (distance + staticData.trainCouplingLength) > segmentLength)
         {
-          // TODO: search next segments
+          scanNextHelper(dirFwd, faceSegmentIndexBefore, (distance + staticData.trainCouplingLength) - segmentLength, segmentLength - face.distance);
         }
-        else if(!dirFwd && (distance + staticData.trainCouplingLength) < 0)
+        else if(!dirFwd && (distance - staticData.trainCouplingLength) < 0)
         {
-
+          scanNextHelper(dirFwd, faceSegmentIndexBefore,  -(distance - staticData.trainCouplingLength), face.distance);
         }
       }
     }
@@ -3135,6 +3167,8 @@ Simulator::StaticData Simulator::load(const nlohmann::json& world, StateData& st
   data.defaultCenterPos.x = world.value("default_center_x", data.defaultCenterPos.x);
   data.defaultCenterPos.y = world.value("default_center_y", data.defaultCenterPos.y);
   data.defaultViewScale = world.value("default_zoom", data.defaultViewScale);
+
+  data.trainCouplingLength = 5;
 
   loadTrackplan(world, data, stateData);
 
