@@ -1950,7 +1950,7 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
 
       scanSegment(vehicle->activeTrain, face.segmentIndex, dirFwd, face.distance, distance);
 
-      auto scanNextHelper = [&](bool goForward, size_t otherSegmentIdx, float searchDist, float startDistance)
+      auto scanNextHelper = [&](bool goForward, size_t otherSegmentIdx, float searchDist, float startDistance, float endDistance)
       {
         while(searchDist > 0.0)
         {
@@ -1963,10 +1963,11 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
 
           const float segLength = getSegmentLength(nextSegment, m_stateData);
           scanSegment(vehicle->activeTrain, nextSegmentIndex,
-                      goForward, goForward ? -startDistance : (segLength + startDistance), goForward ? searchDist : (segLength - searchDist));
+                      goForward, goForward ? -startDistance : (segLength + startDistance), goForward ? -endDistance : (segLength + endDistance));
 
           searchDist -= segLength;
           startDistance += segLength;
+          endDistance += segLength;
           otherSegmentIdx = nextSegmentIndex;
         }
       };
@@ -1977,11 +1978,15 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
         // TODO: it leaves bigger distance, maybe outRemaining too low?
         if(dirFwd && (distance + staticData.trainCouplingLength) > segmentLength)
         {
-          scanNextHelper(dirFwd, faceSegmentIndexBefore, (distance + staticData.trainCouplingLength) - segmentLength, segmentLength - face.distance);
+          scanNextHelper(dirFwd, faceSegmentIndexBefore,
+                         (distance + staticData.trainCouplingLength) - segmentLength,
+                         segmentLength - face.distance, segmentLength - distance);
         }
         else if(!dirFwd && (distance - staticData.trainCouplingLength) < 0)
         {
-          scanNextHelper(dirFwd, faceSegmentIndexBefore,  -(distance - staticData.trainCouplingLength), face.distance);
+          scanNextHelper(dirFwd, faceSegmentIndexBefore,
+                         -(distance - staticData.trainCouplingLength),
+                         face.distance, distance);
         }
       }
     }
