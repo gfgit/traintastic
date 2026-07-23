@@ -1907,6 +1907,13 @@ void SimulatorView::drawTrains(QPainter *painter)
       }
     }
 
+    // TODO: just for debug
+    const QRectF frontRect(length / 2.5, -trainWidth / 4.0,
+                           trainWidth / 2.0, trainWidth / 2.0);
+    painter->fillRect(frontRect,
+                      (train && train->isHeadOrTail(vehicle) && train->getHead().vehicle == vehicle) ?
+                          Qt::magenta : Qt::cyan);
+
     painter->setTransform(trasf);
   }
 }
@@ -2301,7 +2308,7 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
         auto findNearVehicleToCouple = [&](bool isTrainHead) -> bool
         {
           const Simulator::Train::VehicleItem &item = isTrainHead ? vehicle->activeTrain->vehicles.front() : vehicle->activeTrain->vehicles.back();
-          Simulator::VehicleState::Face &coupleFace = ((item.reversed == vehicle->activeTrain->state.reverse) == isTrainHead) ?
+          Simulator::VehicleState::Face &coupleFace = (item.reversed != isTrainHead) ?
                                                          vehicle->state.front :
                                                          vehicle->state.rear;
 
@@ -2310,7 +2317,7 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
           const float halfCouplingLength = m_simulator->staticData.trainCouplingLength / 2.0f;
 
           float newDist = coupleFace.distance;
-          if((coupleFace.segmentDirectionInverted == vehicle->activeTrain->state.reverse) == isTrainHead)
+          if(coupleFace.segmentDirectionInverted != isTrainHead)
             newDist += (halfCouplingLength + 0.01);
           else
             newDist += (-halfCouplingLength - 0.01);
@@ -2339,6 +2346,12 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
           canCoupleRear = findNearVehicleToCouple(false);
         else
           canSplitRear = true;
+
+        if(vehicle->activeTrain->state.reverse)
+        {
+          std::swap(canCoupleFwd, canCoupleRear);
+          std::swap(canSplitFwd, canSplitRear);
+        }
       }
 
       foundTrain = true;
@@ -2449,7 +2462,10 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
 
       if(trainToCouple)
       {
-        m_simulator->coupleTrain(trainToCouple, (result == coupleFwdAct));
+        bool fwd = result == coupleFwdAct;
+        if(trainToCouple->state.reverse)
+          fwd = !fwd;
+        m_simulator->coupleTrain(trainToCouple, fwd);
       }
     }
     else if(result == splitFwdAct || result == splitRearAct)
@@ -2463,7 +2479,10 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
       if(trainToSplit)
       {
         size_t newTrainIdx = Simulator::invalidIndex;
-        m_simulator->splitTrain(trainToSplit, m_trainUnderMouseVehicleIdx, (result == splitFwdAct), newTrainIdx);
+        bool fwd = result == splitFwdAct;
+        if(trainToSplit->state.reverse)
+          fwd = !fwd;
+        m_simulator->splitTrain(trainToSplit, m_trainUnderMouseVehicleIdx, fwd, newTrainIdx);
       }
     }
   }

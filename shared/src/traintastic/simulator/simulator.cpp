@@ -4274,9 +4274,6 @@ bool Simulator::coupleTrain(Train *train, bool fwd)
   if(!train->state.isManualAndStopped() || train->vehicles.empty())
     return false; // Train must be Manual and stopped
 
-  if(train->state.reverse)
-    fwd = !fwd;
-
   const Train::VehicleItem itemToCouple = fwd ? train->vehicles.front() : train->vehicles.back(); // Deep copy, vehicles could realloc on resize
   const VehicleState::Face &faceToCouple = (itemToCouple.reversed != fwd) ? itemToCouple.vehicle->state.front : itemToCouple.vehicle->state.rear;
 
@@ -4319,21 +4316,21 @@ bool Simulator::coupleTrain(Train *train, bool fwd)
       if(segmentIdx == sourceVehicles.front().vehicle->state.rear.segmentIndex)
       {
         found = true;
-        flipList = true;
         reverse = goForward == sourceVehicles.front().vehicle->state.rear.segmentDirectionInverted;
         break;
       }
-      if(segmentIdx == sourceVehicles.front().vehicle->state.front.segmentIndex)
+      if(segmentIdx == sourceVehicles.back().vehicle->state.front.segmentIndex)
       {
         found = true;
         flipList = true;
-        reverse = goForward == vehiclesToAdd.front().vehicle->state.front.segmentDirectionInverted;
+        reverse = goForward == sourceVehicles.front().vehicle->state.front.segmentDirectionInverted;
         break;
       }
-      if(segmentIdx == vehiclesToAdd.front().vehicle->state.rear.segmentIndex)
+      if(segmentIdx == sourceVehicles.back().vehicle->state.rear.segmentIndex)
       {
         found = true;
-        reverse = goForward == vehiclesToAdd.front().vehicle->state.rear.segmentDirectionInverted;
+        flipList = true;
+        reverse = goForward == sourceVehicles.front().vehicle->state.rear.segmentDirectionInverted;
         break;
       }
 
@@ -4347,11 +4344,14 @@ bool Simulator::coupleTrain(Train *train, bool fwd)
       segmentIdx = nextSegmentIdx;
     }
 
+    if(!found)
+      return false;
+
     if(!fwd)
-    {
-      flipList = !flipList;
       reverse = !reverse;
-    }
+
+    if(fwd == reverse)
+      flipList = !flipList;
 
     vehiclesToAdd = std::move(sourceVehicles);
     for(Train::VehicleItem &item : vehiclesToAdd)
@@ -4361,16 +4361,11 @@ bool Simulator::coupleTrain(Train *train, bool fwd)
         item.reversed = !item.reversed;
     }
 
-    if(!flipList)
+    if(flipList)
       std::reverse(vehiclesToAdd.begin(), vehiclesToAdd.end());
 
     train->length += trainToRemove->length;
     trainToRemove->length = 0.0f;
-
-    if(!found)
-    {
-      // TODO: Manually reposition
-    }
   }
   else
   {
@@ -4404,17 +4399,15 @@ bool Simulator::coupleTrain(Train *train, bool fwd)
       segmentIdx = nextSegmentIdx;
     }
 
+    if(!found)
+      return false;
+
     if(!fwd)
       reverse = !reverse;
 
     otherVehicle->activeTrain = train;
     vehiclesToAdd.push_back({otherVehicle, reverse});
     train->length += otherVehicle->length;
-
-    if(!found)
-    {
-      // TODO: Manually reposition
-    }
   }
 
   train->length += staticData.trainCouplingLength;
