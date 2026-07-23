@@ -459,6 +459,14 @@ public:
 
     SignalCache nextSignal, prevSignal;
     bool isOnStationStop = false;
+
+    inline bool isManualAndStopped() const
+    {
+      if(mode != Mode::Manual)
+        return false;
+
+      return speed == 0.0f && targetSpeed == 0.0f;
+    }
   };
 
   struct Train;
@@ -619,6 +627,7 @@ public:
   Vehicle *getVehicleNear(size_t segmentIdx, float pos, float maxDistance);
 
   bool splitTrain(Train *trainToSplit, const size_t vehicleIdx, const bool fwd, size_t &idxOut);
+  bool coupleTrain(Train *train, bool fwd);
 
   void liftRestrictions(bool val)
   {

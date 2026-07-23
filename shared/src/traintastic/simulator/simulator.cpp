@@ -4166,7 +4166,7 @@ Simulator::Vehicle *Simulator::getVehicleNear(size_t segmentIdx, float pos, floa
 
 bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const bool fwd, size_t &idxOut)
 {
-  if(trainToSplit->state.mode != TrainState::Mode::Manual || trainToSplit->state.speed != 0.0f)
+  if(!trainToSplit->state.isManualAndStopped())
     return false; // Train must be Manual and stopped
 
   if(trainToSplit->vehicles.size() <= 1 || vehicleIdx >= trainToSplit->vehicles.size())
@@ -4190,6 +4190,7 @@ bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const b
   remainingTrain->address = trainToSplit->address; // TODO: unique
   remainingTrain->speedMax = trainToSplit->speedMax;
   remainingTrain->state.mode = TrainState::Mode::Manual;
+  remainingTrain->state.reverse = !trainToSplit->state.reverse; // Invert direction to make it clear it was split
 
   if(fwd)
   {
@@ -4216,6 +4217,8 @@ bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const b
     trainToSplit->vehicles.erase(trainToSplit->vehicles.begin() + (vehicleIdx + 1), trainToSplit->vehicles.end());
   }
 
+  trainToSplit->vehicles.shrink_to_fit();
+
   // Recalculate length
   bool first = true;
   trainToSplit->length = 0.0f;
@@ -4237,6 +4240,166 @@ bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const b
   idxOut = std::distance(m_stateData.trains.begin(), pair.first);
 
   onTrainAddedRemoved(true, idxOut);
+
+  return true;
+}
+
+bool Simulator::coupleTrain(Train *train, bool fwd)
+{
+  if(!train->state.isManualAndStopped() || train->vehicles.empty())
+    return false; // Train must be Manual and stopped
+
+  if(train->state.reverse)
+    fwd = !fwd;
+
+  const Train::VehicleItem itemToCouple = fwd ? train->vehicles.front() : train->vehicles.back(); // Deep copy, vehicles could realloc on resize
+  const VehicleState::Face &faceToCouple = (itemToCouple.reversed != fwd) ? itemToCouple.vehicle->state.front : itemToCouple.vehicle->state.rear;
+
+  // Look for a vehicle at coupling distance from us
+  // Use half coupling distance + small offset to not get ourselves as result
+  const float halfCouplingLength = staticData.trainCouplingLength / 2.0f;
+
+  float newDist = faceToCouple.distance;
+  if(faceToCouple.segmentDirectionInverted != fwd)
+    newDist += (halfCouplingLength + 0.01);
+  else
+    newDist += (-halfCouplingLength - 0.01);
+
+  Simulator::Vehicle *otherVehicle = getVehicleNear(faceToCouple.segmentIndex, newDist, halfCouplingLength);
+  if(!otherVehicle || otherVehicle->activeTrain == train)
+    return false;
+
+  Train *trainToRemove = otherVehicle->activeTrain;
+  if(trainToRemove && !trainToRemove->state.isManualAndStopped())
+    return false;
+
+  std::vector<Train::VehicleItem> vehiclesToAdd;
+  if(trainToRemove)
+  {
+    std::vector<Train::VehicleItem> &sourceVehicles = trainToRemove->vehicles;
+    size_t segmentIdx = faceToCouple.segmentIndex;
+    bool goForward = faceToCouple.segmentDirectionInverted != fwd;
+    bool found = false;
+    bool reverse = false;
+    bool flipList = false;
+
+    for(int i = 0; i < 1000; i++)
+    {
+      if(segmentIdx == sourceVehicles.front().vehicle->state.front.segmentIndex)
+      {
+        found = true;
+        reverse = goForward == sourceVehicles.front().vehicle->state.front.segmentDirectionInverted;
+        break;
+      }
+      if(segmentIdx == sourceVehicles.front().vehicle->state.rear.segmentIndex)
+      {
+        found = true;
+        flipList = true;
+        reverse = goForward == sourceVehicles.front().vehicle->state.rear.segmentDirectionInverted;
+        break;
+      }
+      if(segmentIdx == sourceVehicles.front().vehicle->state.front.segmentIndex)
+      {
+        found = true;
+        flipList = true;
+        reverse = goForward == vehiclesToAdd.front().vehicle->state.front.segmentDirectionInverted;
+        break;
+      }
+      if(segmentIdx == vehiclesToAdd.front().vehicle->state.rear.segmentIndex)
+      {
+        found = true;
+        reverse = goForward == vehiclesToAdd.front().vehicle->state.rear.segmentDirectionInverted;
+        break;
+      }
+
+      const auto &segment = staticData.trackSegments.at(segmentIdx);
+      size_t nextSegmentIdx = getNextSegmentIndex(segment, goForward, m_stateData);
+      if(segmentIdx == invalidIndex)
+        break;
+
+      const auto &nextSegment = staticData.trackSegments.at(nextSegmentIdx);
+      goForward = nextSegment.nextSegmentIndex[0] == segmentIdx;
+      segmentIdx = nextSegmentIdx;
+    }
+
+    if(!fwd)
+    {
+      flipList = !flipList;
+      reverse = !reverse;
+    }
+
+    vehiclesToAdd = std::move(sourceVehicles);
+    for(Train::VehicleItem &item : vehiclesToAdd)
+    {
+      item.vehicle->activeTrain = train;
+      if(reverse)
+        item.reversed = !item.reversed;
+    }
+
+    if(flipList)
+      std::reverse(vehiclesToAdd.begin(), vehiclesToAdd.end());
+
+    train->length += trainToRemove->length;
+    trainToRemove->length = 0.0f;
+
+    if(!found)
+    {
+      // TODO: Manually reposition
+    }
+  }
+  else
+  {
+    size_t segmentIdx = faceToCouple.segmentIndex;
+    bool goForward = faceToCouple.segmentDirectionInverted != fwd;
+    bool found = false;
+    bool reverse = false;
+
+    for(int i = 0; i < 1000; i++)
+    {
+      if(segmentIdx == otherVehicle->state.front.segmentIndex)
+      {
+        found = true;
+        reverse = goForward == otherVehicle->state.front.segmentDirectionInverted;
+        break;
+      }
+      if(segmentIdx == otherVehicle->state.rear.segmentIndex)
+      {
+        found = true;
+        reverse = goForward == otherVehicle->state.rear.segmentDirectionInverted;
+        break;
+      }
+
+      const auto &segment = staticData.trackSegments.at(segmentIdx);
+      size_t nextSegmentIdx = getNextSegmentIndex(segment, goForward, m_stateData);
+      if(segmentIdx == invalidIndex)
+        break;
+
+      const auto &nextSegment = staticData.trackSegments.at(nextSegmentIdx);
+      goForward = nextSegment.nextSegmentIndex[0] == segmentIdx;
+      segmentIdx = nextSegmentIdx;
+    }
+
+    if(!fwd)
+      reverse = !reverse;
+
+    otherVehicle->activeTrain = train;
+    vehiclesToAdd.push_back({otherVehicle, reverse});
+    train->length += otherVehicle->length;
+
+    if(!found)
+    {
+      // TODO: Manually reposition
+    }
+  }
+
+  train->length += staticData.trainCouplingLength;
+
+  if(fwd)
+    train->vehicles.insert(train->vehicles.begin(), vehiclesToAdd.begin(), vehiclesToAdd.end());
+  else
+    train->vehicles.insert(train->vehicles.end(), vehiclesToAdd.begin(), vehiclesToAdd.end());
+
+  removeTrain(trainToRemove->name, false);
 
   return true;
 }

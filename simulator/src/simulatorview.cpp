@@ -2283,9 +2283,7 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
       m_trainUnderMouseVehicleIdx = Simulator::invalidIndex;
 
       trainName = QString::fromStdString(vehicle->activeTrain->name);
-      isManualModeStopped = vehicle->activeTrain->state.mode == Simulator::TrainState::Mode::Manual;
-      if(isManualModeStopped)
-        isManualModeStopped = vehicle->activeTrain->state.speed == 0.0f;
+      isManualModeStopped = vehicle->activeTrain->state.isManualAndStopped();
 
       size_t vehicleIdx = 0;
       for(const Simulator::Train::VehicleItem& item : vehicle->activeTrain->vehicles)
@@ -2329,11 +2327,7 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
           if(vehicle->activeTrain == otherVehicle->activeTrain)
             return false;
 
-          // Check if other train is also in Manual mode and stopped
-          if(otherVehicle->activeTrain->state.mode != Simulator::TrainState::Mode::Manual)
-            return false;
-
-          return otherVehicle->activeTrain->state.speed == 0.0f;
+          return otherVehicle->activeTrain->state.isManualAndStopped();
         };
 
         if(vehicle == vehicle->activeTrain->vehicles.front().vehicle)
