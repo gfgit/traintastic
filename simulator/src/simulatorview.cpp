@@ -2439,7 +2439,20 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
   }
   else if(foundTrain && isManualModeStopped)
   {
-    if(result == splitFwdAct || result == splitRearAct)
+    if(result == coupleFwdAct || result == coupleRearAct)
+    {
+      std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
+
+      Simulator::Train *trainToCouple = m_simulator->getTrainAt(m_trainUnderMouseIdx);
+      m_trainUnderMouseIdx = Simulator::invalidIndex;
+      foundTrain = false;
+
+      if(trainToCouple)
+      {
+        m_simulator->coupleTrain(trainToCouple, (result == coupleFwdAct));
+      }
+    }
+    else if(result == splitFwdAct || result == splitRearAct)
     {
       std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
 
