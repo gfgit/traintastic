@@ -600,6 +600,7 @@ void Simulator::setTrainDirection(Train *train, bool reverse)
     train->state.speedOrDirectionChanged = true;
     train->state.nextSignal.dirty = true;
     train->state.prevSignal.dirty = true;
+    train->state.skipCollisionDetection = false; // Check again in opposite direction
   }
 }
 
@@ -1598,74 +1599,74 @@ void Simulator::updateTrainPositions()
     float outRemaining = 0.0f;
     float totalTravelled = 0.0f;
 
-    do
-    {
-      float tickPosDelta = speed;
-      if(outRemaining > 0.0f && speed != 0.0f)
+      do
       {
-        // This is second round, travel just remaining distance to stop
-        if(speed > 0.0f)
-          tickPosDelta = outRemaining;
-        else
-          tickPosDelta = outRemaining;
-      }
-
-      bool isFirst = true;
-
-      if(!trainState.reverse)
-      {
-        for(auto& vehicleItem : train->vehicles)
+        float tickPosDelta = speed;
+        if(outRemaining > 0.0f && speed != 0.0f)
         {
-          if(!updateHelper(vehicleItem, tickPosDelta, trainState.reverse, isFirst, *train, trainRemoved, outRemaining))
-          {
-            if(trainRemoved)
-              break;
-
-            setTrainSpeed(train, 0.0f, true);
-            if(isFirst)
-              wasStopped = true;
-
-            break;
-          }
-
-          if(isFirst)
-            isFirst = false;
+          // This is second round, travel just remaining distance to stop
+          if(speed > 0.0f)
+            tickPosDelta = outRemaining;
+          else
+            tickPosDelta = outRemaining;
         }
-      }
-      else // reverse
-      {
-        for(auto& vehicleItem : train->vehicles | std::views::reverse)
+
+        bool isFirst = true;
+
+        if(!trainState.reverse)
         {
-          if(!updateHelper(vehicleItem, tickPosDelta, trainState.reverse, isFirst, *train, trainRemoved, outRemaining))
+          for(auto& vehicleItem : train->vehicles)
           {
-            if(trainRemoved)
+            if(!updateHelper(vehicleItem, tickPosDelta, trainState.reverse, isFirst, *train, trainRemoved, outRemaining))
+            {
+              if(trainRemoved)
+                break;
+
+              setTrainSpeed(train, 0.0f, true);
+              if(isFirst)
+                wasStopped = true;
+
               break;
+            }
 
-            setTrainSpeed(train, 0.0f, true);
             if(isFirst)
-              wasStopped = true;
-
-            break;
+              isFirst = false;
           }
-
-          if(isFirst)
-            isFirst = false;
         }
+        else // reverse
+        {
+          for(auto& vehicleItem : train->vehicles | std::views::reverse)
+          {
+            if(!updateHelper(vehicleItem, tickPosDelta, trainState.reverse, isFirst, *train, trainRemoved, outRemaining))
+            {
+              if(trainRemoved)
+                break;
+
+              setTrainSpeed(train, 0.0f, true);
+              if(isFirst)
+                wasStopped = true;
+
+              break;
+            }
+
+            if(isFirst)
+              isFirst = false;
+          }
+        }
+
+        if(!wasStopped)
+          totalTravelled += tickPosDelta;
       }
+      while(!trainRemoved && outRemaining > 0.0f && speed != 0.0f);
 
-      if(!wasStopped)
-        totalTravelled += tickPosDelta;
-    }
-    while(!trainRemoved && outRemaining > 0.0f && speed != 0.0f);
-
-    if(trainRemoved)
-    {
-      destroyTrain(it->second, true);
-      const int trainIdx = std::distance(m_stateData.trains.begin(), it);
-      it = m_stateData.trains.erase(it);
-      onTrainAddedRemoved(false, trainIdx);
-      continue;
-    }
+      if(trainRemoved)
+      {
+        destroyTrain(it->second, true);
+        const int trainIdx = std::distance(m_stateData.trains.begin(), it);
+        it = m_stateData.trains.erase(it);
+        onTrainAddedRemoved(false, trainIdx);
+        continue;
+      }
 
     if(!wasStopped)
     {
@@ -1916,18 +1917,21 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
       // We are train head, check other trains for collision
 
       auto scanSegment = [&](Train *activeTrain, size_t faceSegmentIndex,
-                             bool goForward, float startDistance, float endDistance)
+                             bool goForward, float startDistance, float endDistance) -> bool
       {
         auto it = m_stateData.segmentVehicles.find(faceSegmentIndex);
         if(it == m_stateData.segmentVehicles.end())
-          return;
+          return false;
 
         const SegmentVehicles &segVec = it->second;
+        bool otherTrainExists = false;
 
         for(Vehicle *otherVehicle : segVec.vehicles)
         {
           if(otherVehicle->activeTrain == activeTrain)
             continue; // Same train, skip
+
+          otherTrainExists = true;
 
           auto faceHelper = [&](const VehicleState::Face &otherFace)
           {
@@ -1953,9 +1957,15 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
           if(otherVehicle->state.rear.segmentIndex == faceSegmentIndex)
             faceHelper(otherVehicle->state.rear);
         }
+
+        return otherTrainExists;
       };
 
-      scanSegment(vehicle->activeTrain, face.segmentIndex, dirFwd, face.distance, distance);
+      if(!train_.state.skipCollisionDetection)
+      {
+        if(!scanSegment(vehicle->activeTrain, face.segmentIndex, dirFwd, face.distance, distance))
+          train_.state.skipCollisionDetection = true; // We are the only train in segment, skip further checks
+      }
 
       auto scanNextHelper = [&](bool goForward, size_t otherSegmentIdx, float searchDist, float startDistance, float endDistance)
       {
@@ -2003,6 +2013,9 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
     // it will infinitely jump vehicle face from one to another.
     if(distance > segmentLength || (distance == segmentLength && speed != 0))
     {
+      if(isFirst_)
+        train_.state.skipCollisionDetection = false; // Check new segment
+
       const auto nextSegmentIndex = getNextSegmentIndex(segment, true, m_stateData);
       if(nextSegmentIndex == invalidIndex)
       {
@@ -2070,6 +2083,9 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
     }
     else if(distance < 0)
     {
+      if(isFirst_)
+        train_.state.skipCollisionDetection = false; // Check new segment
+
       const auto nextSegmentIndex = getNextSegmentIndex(segment, false, m_stateData);
       if(nextSegmentIndex == invalidIndex)
       {
@@ -2188,6 +2204,15 @@ void Simulator::maybeAddVehicleSegment(Vehicle *vehicle, size_t segmentIdx)
   SegmentVehicles &seg = it->second;
   if(seg.vehicles.contains(vehicle))
     return;
+
+  for(Vehicle *other : seg.vehicles)
+  {
+    if(!other->activeTrain || other->activeTrain == vehicle->activeTrain)
+      continue;
+
+    // Notify other trains we are in same segment so they need to check again
+    other->activeTrain->state.skipCollisionDetection = false;
+  }
 
   seg.vehicles.insert(vehicle);
 }
@@ -4190,7 +4215,7 @@ bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const b
   remainingTrain->address = trainToSplit->address; // TODO: unique
   remainingTrain->speedMax = trainToSplit->speedMax;
   remainingTrain->state.mode = TrainState::Mode::Manual;
-  remainingTrain->state.reverse = !trainToSplit->state.reverse; // Invert direction to make it clear it was split
+  remainingTrain->state.reverse = trainToSplit->state.reverse;
 
   if(fwd)
   {
@@ -4336,7 +4361,7 @@ bool Simulator::coupleTrain(Train *train, bool fwd)
         item.reversed = !item.reversed;
     }
 
-    if(flipList)
+    if(!flipList)
       std::reverse(vehiclesToAdd.begin(), vehiclesToAdd.end());
 
     train->length += trainToRemove->length;

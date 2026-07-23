@@ -432,6 +432,7 @@ public:
     float waitToStart_ms = 0;
     bool reverse = false;
     bool speedOrDirectionChanged = false;
+    bool skipCollisionDetection = false;
 
     // TODO: make adjustable
     static constexpr int SecondsWaitFromStandstill = 8;
