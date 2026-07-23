@@ -618,6 +618,8 @@ public:
 
   Vehicle *getVehicleNear(size_t segmentIdx, float pos, float maxDistance);
 
+  bool splitTrain(Train *trainToSplit, const size_t vehicleIdx, const bool fwd, size_t &idxOut);
+
   void liftRestrictions(bool val)
   {
     for(auto it : m_stateData.mainSignals)

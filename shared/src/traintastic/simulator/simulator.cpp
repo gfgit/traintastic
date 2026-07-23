@@ -31,6 +31,8 @@
 
 static std::mt19937 rng = std::mt19937(std::random_device{}());
 
+constexpr static float ADJ_MARGIN = 0.000000001;
+
 template <typename T>
 inline bool vec_contains(const std::vector<T>& vec, const T& item)
 {
@@ -1888,7 +1890,7 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
 
           if(stop)
           {
-            outRemaining = std::abs(face.distance - obj.position) - 0.0001;
+            outRemaining = std::abs(face.distance - obj.position) - ADJ_MARGIN;
           }
           break;
         }
@@ -1900,6 +1902,11 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
         if(objHelper(obj, face.distance, distance,
                      train_, false, isFirst_, stop, trainRemoved))
           continue;
+
+        if(stop)
+        {
+          outRemaining = std::abs(face.distance - obj.position);
+        }
         break;
       }
     }
@@ -1926,17 +1933,17 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
           {
             if(goForward && otherFace.distance > startDistance && (otherFace.distance - staticData.trainCouplingLength) < endDistance)
             {
-              stop = true;
-              float remDist = std::max(startDistance, otherFace.distance - staticData.trainCouplingLength) - startDistance - 0.0001;
-              if(remDist < outRemaining)
+              float remDist = std::max(startDistance, otherFace.distance - staticData.trainCouplingLength) - startDistance - ADJ_MARGIN;
+              if(!stop || remDist < outRemaining)
                 outRemaining = remDist;
+              stop = true;
             }
             else if(!goForward && otherFace.distance < startDistance && (otherFace.distance + staticData.trainCouplingLength) > endDistance)
             {
-              stop = true;
-              float remDist = startDistance - std::min(startDistance, otherFace.distance + staticData.trainCouplingLength) - 0.0001;
-              if(remDist < outRemaining)
+              float remDist = startDistance - std::min(startDistance, otherFace.distance + staticData.trainCouplingLength) - ADJ_MARGIN;
+              if(!stop || remDist < outRemaining)
                 outRemaining = remDist;
+              stop = true;
             }
           };
 
@@ -1972,22 +1979,18 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
         }
       };
 
-      if(!stop)
+      // When near end of segment, scan adjacent segment too!
+      if(dirFwd && (distance + staticData.trainCouplingLength) > segmentLength)
       {
-        // When near end of segment, scan adjacent segment too!
-        // TODO: it leaves bigger distance, maybe outRemaining too low?
-        if(dirFwd && (distance + staticData.trainCouplingLength) > segmentLength)
-        {
-          scanNextHelper(dirFwd, faceSegmentIndexBefore,
-                         (distance + staticData.trainCouplingLength) - segmentLength,
-                         segmentLength - face.distance, segmentLength - distance);
-        }
-        else if(!dirFwd && (distance - staticData.trainCouplingLength) < 0)
-        {
-          scanNextHelper(dirFwd, faceSegmentIndexBefore,
-                         -(distance - staticData.trainCouplingLength),
-                         face.distance, distance);
-        }
+        scanNextHelper(dirFwd, faceSegmentIndexBefore,
+                       (distance + staticData.trainCouplingLength) - segmentLength,
+                       segmentLength - face.distance, segmentLength - distance);
+      }
+      else if(!dirFwd && (distance - staticData.trainCouplingLength) < 0)
+      {
+        scanNextHelper(dirFwd, faceSegmentIndexBefore,
+                       -(distance - staticData.trainCouplingLength),
+                       face.distance, distance);
       }
     }
 
@@ -2003,7 +2006,7 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
       const auto nextSegmentIndex = getNextSegmentIndex(segment, true, m_stateData);
       if(nextSegmentIndex == invalidIndex)
       {
-        outRemaining = segmentLength - face.distance - 0.0001;
+        outRemaining = segmentLength - face.distance - ADJ_MARGIN;
         return false; // no next segment
       }
 
@@ -2031,7 +2034,7 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
             == TurnoutState::State::Unknown)
         {
           // Turnout is in unknown position, stop train
-          outRemaining = segmentLength - face.distance - 0.0001;
+          outRemaining = segmentLength - face.distance - ADJ_MARGIN;
           return false;
         }
       }
@@ -4158,4 +4161,82 @@ Simulator::Vehicle *Simulator::getVehicleNear(size_t segmentIdx, float pos, floa
   }
 
   return bestVehicle;
+}
+
+
+bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const bool fwd, size_t &idxOut)
+{
+  if(trainToSplit->state.mode != TrainState::Mode::Manual || trainToSplit->state.speed != 0.0f)
+    return false; // Train must be Manual and stopped
+
+  if(trainToSplit->vehicles.size() <= 1 || vehicleIdx >= trainToSplit->vehicles.size())
+    return false; // Train must have more than 1 vehicle and valid vehicle selected
+
+  if((vehicleIdx == 0 && fwd) || (vehicleIdx == (trainToSplit->vehicles.size() - 1) && !fwd))
+    return false; // Cannot split before first or after last vehicle
+
+  std::unique_ptr<Train> remainingTrain(new Train);
+
+  // Find unique name
+  size_t nameNum = 1;
+  remainingTrain->name = trainToSplit->name + '_';
+  while(m_stateData.trains.contains(remainingTrain->name))
+  {
+    remainingTrain->name = trainToSplit->name + '_' + std::to_string(nameNum);
+    nameNum++;
+  }
+
+  remainingTrain->protocol = trainToSplit->protocol;
+  remainingTrain->address = trainToSplit->address; // TODO: unique
+  remainingTrain->speedMax = trainToSplit->speedMax;
+  remainingTrain->state.mode = TrainState::Mode::Manual;
+
+  if(fwd)
+  {
+    remainingTrain->vehicles.reserve(vehicleIdx);
+
+    for(size_t i = 0; i < vehicleIdx; i++)
+    {
+      remainingTrain->vehicles.push_back(trainToSplit->vehicles.at(i));
+      remainingTrain->vehicles.back().vehicle->activeTrain = remainingTrain.get();
+    }
+
+    trainToSplit->vehicles.erase(trainToSplit->vehicles.begin(), trainToSplit->vehicles.begin() + vehicleIdx);
+  }
+  else
+  {
+    remainingTrain->vehicles.reserve(trainToSplit->vehicles.size() - (vehicleIdx + 1));
+
+    for(size_t i = vehicleIdx + 1; i < trainToSplit->vehicles.size(); i++)
+    {
+      remainingTrain->vehicles.push_back(trainToSplit->vehicles.at(i));
+      remainingTrain->vehicles.back().vehicle->activeTrain = remainingTrain.get();
+    }
+
+    trainToSplit->vehicles.erase(trainToSplit->vehicles.begin() + (vehicleIdx + 1), trainToSplit->vehicles.end());
+  }
+
+  // Recalculate length
+  bool first = true;
+  trainToSplit->length = 0.0f;
+  for(const auto& item : trainToSplit->vehicles)
+  {
+    trainToSplit->length += item.vehicle->length + (first ? 0.0f : staticData.trainCouplingLength);
+    first = false;
+  }
+
+  first = true;
+  remainingTrain->length = 0.0f;
+  for(const auto& item : remainingTrain->vehicles)
+  {
+    remainingTrain->length += item.vehicle->length + (first ? 0.0f : staticData.trainCouplingLength);
+    first = false;
+  }
+
+  auto pair = m_stateData.trains.insert({remainingTrain->name, remainingTrain.release()});
+  idxOut = std::distance(m_stateData.trains.begin(), pair.first);
+
+  onTrainAddedRemoved(true, idxOut);
+
+  return true;
 }

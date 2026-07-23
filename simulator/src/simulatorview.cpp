@@ -2268,7 +2268,11 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
 
   QString trainName;
   bool foundTrain = false;
-  bool isManualMode = false;
+  bool isManualModeStopped = false;
+  bool canCoupleFwd = false;
+  bool canCoupleRear = false;
+  bool canSplitFwd = false;
+  bool canSplitRear = false;
   {
     std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
 
@@ -2279,7 +2283,9 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
       m_trainUnderMouseVehicleIdx = Simulator::invalidIndex;
 
       trainName = QString::fromStdString(vehicle->activeTrain->name);
-      isManualMode = vehicle->activeTrain->state.mode == Simulator::TrainState::Mode::Manual;
+      isManualModeStopped = vehicle->activeTrain->state.mode == Simulator::TrainState::Mode::Manual;
+      if(isManualModeStopped)
+        isManualModeStopped = vehicle->activeTrain->state.speed == 0.0f;
 
       size_t vehicleIdx = 0;
       for(const Simulator::Train::VehicleItem& item : vehicle->activeTrain->vehicles)
@@ -2290,6 +2296,55 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
           break;
         }
         vehicleIdx++;
+      }
+
+      if(isManualModeStopped && !vehicle->activeTrain->vehicles.empty())
+      {
+        auto findNearVehicleToCouple = [&](bool isTrainHead) -> bool
+        {
+          const Simulator::Train::VehicleItem &item = isTrainHead ? vehicle->activeTrain->vehicles.front() : vehicle->activeTrain->vehicles.back();
+          Simulator::VehicleState::Face &coupleFace = ((item.reversed == vehicle->activeTrain->state.reverse) == isTrainHead) ?
+                                                         vehicle->state.front :
+                                                         vehicle->state.rear;
+
+          // Look for a vehicle at coupling distance from us
+          // Use half coupling distance + small offset to not get ourselves as result
+          const float halfCouplingLength = m_simulator->staticData.trainCouplingLength / 2.0f;
+
+          float newDist = coupleFace.distance;
+          if((coupleFace.segmentDirectionInverted == vehicle->activeTrain->state.reverse) == isTrainHead)
+            newDist += (halfCouplingLength + 0.01);
+          else
+            newDist += (-halfCouplingLength - 0.01);
+
+          Simulator::Vehicle *otherVehicle = m_simulator->getVehicleNear(coupleFace.segmentIndex, newDist, halfCouplingLength);
+          if(!otherVehicle)
+            return false;
+
+          // TODO: check if distance is trainCouplingLength
+
+          if(!otherVehicle->activeTrain)
+            return true;
+
+          if(vehicle->activeTrain == otherVehicle->activeTrain)
+            return false;
+
+          // Check if other train is also in Manual mode and stopped
+          if(otherVehicle->activeTrain->state.mode != Simulator::TrainState::Mode::Manual)
+            return false;
+
+          return otherVehicle->activeTrain->state.speed == 0.0f;
+        };
+
+        if(vehicle == vehicle->activeTrain->vehicles.front().vehicle)
+          canCoupleFwd = findNearVehicleToCouple(true);
+        else
+          canSplitFwd = true;
+
+        if(vehicle == vehicle->activeTrain->vehicles.back().vehicle)
+          canCoupleRear = findNearVehicleToCouple(false);
+        else
+          canSplitRear = true;
       }
 
       foundTrain = true;
@@ -2316,9 +2371,31 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
   QAction *activateTrain = m->addAction(tr("Set Train Active"));
   activateTrain->setVisible(foundTrain);
 
-  if(foundTrain && isManualMode)
+  QAction *coupleFwdAct = nullptr;
+  QAction *coupleRearAct = nullptr;
+  QAction *splitFwdAct = nullptr;
+  QAction *splitRearAct = nullptr;
+
+  if(foundTrain && isManualModeStopped)
   {
-    // TODO: coupling
+    if(canCoupleFwd || canCoupleRear || canSplitFwd || canSplitRear)
+      m->addSeparator();
+
+    coupleFwdAct = m->addAction(tr("Couple forward"));
+    coupleFwdAct->setVisible(canCoupleFwd);
+    coupleFwdAct->setEnabled(canCoupleFwd);
+
+    coupleRearAct = m->addAction(tr("Couple rear"));
+    coupleRearAct->setVisible(canCoupleRear);
+    coupleRearAct->setEnabled(canCoupleRear);
+
+    splitFwdAct = m->addAction(tr("Split forward"));
+    splitFwdAct->setVisible(canSplitFwd);
+    splitFwdAct->setEnabled(canSplitFwd);
+
+    splitRearAct = m->addAction(tr("Split rear"));
+    splitRearAct->setVisible(canSplitRear);
+    splitRearAct->setEnabled(canSplitRear);
   }
 
   const QAction *result = m->exec(e->globalPos());
@@ -2365,6 +2442,23 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
     m_trainUnderMouseIdx = Simulator::invalidIndex;
     foundTrain = false;
     update();
+  }
+  else if(foundTrain && isManualModeStopped)
+  {
+    if(result == splitFwdAct || result == splitRearAct)
+    {
+      std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
+
+      Simulator::Train *trainToSplit = m_simulator->getTrainAt(m_trainUnderMouseIdx);
+      m_trainUnderMouseIdx = Simulator::invalidIndex;
+      foundTrain = false;
+
+      if(trainToSplit)
+      {
+        size_t newTrainIdx = Simulator::invalidIndex;
+        m_simulator->splitTrain(trainToSplit, m_trainUnderMouseVehicleIdx, (result == splitFwdAct), newTrainIdx);
+      }
+    }
   }
 
   if(foundTrain)
