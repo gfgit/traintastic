@@ -1570,34 +1570,37 @@ void Simulator::updateTrainPositions()
       trainState.speedOrDirectionChanged = false;
     }
 
-    updateTrainNextSignal(train, true);
-    if(train->state.isOnStationStop)
-      updateTrainNextSignal(train, false);
-
-    checkNextSignal(train);
-
-    auto updateHelper = [this](Simulator::Train::VehicleItem& item, float speed,
-        bool reverse, bool isFirst,
-        Train &train_, bool &trainRemoved, float &outRemaining) -> bool
-    {
-      if(reverse)
-        speed = -speed;
-
-      if(item.reversed == reverse)
-        return updateVehiclePosition(item.vehicle, true, speed, isFirst, train_, trainRemoved, outRemaining) &&
-            updateVehiclePosition(item.vehicle, false, speed, false, train_, trainRemoved, outRemaining);
-      else
-        return updateVehiclePosition(item.vehicle, false, speed, isFirst, train_, trainRemoved, outRemaining) &&
-            updateVehiclePosition(item.vehicle, true, speed, false, train_, trainRemoved, outRemaining);
-    };
-
-    const float speed = m_stateData.powerOn ? trainState.speed * m_stateData.trainSpeedFactor : 0.0f;
-
     bool wasStopped = false;
-    bool trainRemoved = false;
-
-    float outRemaining = 0.0f;
     float totalTravelled = 0.0f;
+
+    // Update only if moving or first time to place vehicles on tracks
+    if(train->state.speed != 0.0f || (!train->vehicles.empty() && !train->vehicles.front().vehicle->state.front.position.isFinite()))
+    {
+      updateTrainNextSignal(train, true);
+      if(train->state.isOnStationStop)
+        updateTrainNextSignal(train, false);
+
+      checkNextSignal(train);
+
+      auto updateHelper = [this](Simulator::Train::VehicleItem& item, float speed,
+                                 bool reverse, bool isFirst,
+                                 Train &train_, bool &trainRemoved, float &outRemaining) -> bool
+      {
+        if(reverse)
+          speed = -speed;
+
+        if(item.reversed == reverse)
+          return updateVehiclePosition(item.vehicle, true, speed, isFirst, train_, trainRemoved, outRemaining) &&
+                 updateVehiclePosition(item.vehicle, false, speed, false, train_, trainRemoved, outRemaining);
+        else
+          return updateVehiclePosition(item.vehicle, false, speed, isFirst, train_, trainRemoved, outRemaining) &&
+                 updateVehiclePosition(item.vehicle, true, speed, false, train_, trainRemoved, outRemaining);
+      };
+
+      const float speed = m_stateData.powerOn ? trainState.speed * m_stateData.trainSpeedFactor : 0.0f;
+
+      bool trainRemoved = false;
+      float outRemaining = 0.0f;
 
       do
       {
@@ -1667,6 +1670,7 @@ void Simulator::updateTrainPositions()
         onTrainAddedRemoved(false, trainIdx);
         continue;
       }
+    }
 
     if(!wasStopped)
     {
