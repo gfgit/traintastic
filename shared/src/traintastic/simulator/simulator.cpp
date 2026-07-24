@@ -4297,12 +4297,12 @@ bool Simulator::coupleTrain(Train *train, bool fwd)
   if(trainToRemove && !trainToRemove->state.isManualAndStopped())
     return false;
 
+  bool goForward = faceToCouple.segmentDirectionInverted != fwd;
   std::vector<Train::VehicleItem> vehiclesToAdd;
   if(trainToRemove)
   {
     std::vector<Train::VehicleItem> &sourceVehicles = trainToRemove->vehicles;
     size_t segmentIdx = faceToCouple.segmentIndex;
-    bool goForward = faceToCouple.segmentDirectionInverted != fwd;
     bool found = false;
     bool flipList = false;
 
@@ -4335,6 +4335,9 @@ bool Simulator::coupleTrain(Train *train, bool fwd)
               && segmentIdx == otherHead.vehicle->state.rear.segmentIndex)
           {
             flipList = (otherHead.vehicle->state.rear.distance < otherHead.vehicle->state.front.distance);
+
+            if(!goForward)
+              flipList = !flipList;
           }
           else
           {
@@ -4406,19 +4409,19 @@ bool Simulator::coupleTrain(Train *train, bool fwd)
   else
   {
     size_t segmentIdx = faceToCouple.segmentIndex;
-    bool goForward = faceToCouple.segmentDirectionInverted != fwd;
     bool found = false;
     bool reverse = false;
 
     for(int i = 0; i < 1000; i++)
     {
-      if(segmentIdx == otherVehicle->state.front.segmentIndex)
+      if(segmentIdx == otherVehicle->state.front.segmentIndex
+          && segmentIdx == otherVehicle->state.rear.segmentIndex)
       {
         found = true;
         reverse = goForward == otherVehicle->state.front.segmentDirectionInverted;
         break;
       }
-      if(segmentIdx == otherVehicle->state.rear.segmentIndex)
+      else if(segmentIdx == otherVehicle->state.front.segmentIndex || segmentIdx == otherVehicle->state.rear.segmentIndex)
       {
         found = true;
         reverse = goForward == otherVehicle->state.rear.segmentDirectionInverted;
@@ -4438,7 +4441,7 @@ bool Simulator::coupleTrain(Train *train, bool fwd)
     if(!found)
       return false;
 
-    if(!fwd)
+    if(fwd)
       reverse = !reverse;
 
     otherVehicle->activeTrain = train;
