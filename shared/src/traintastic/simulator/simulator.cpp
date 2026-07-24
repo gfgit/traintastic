@@ -31,7 +31,7 @@
 
 static std::mt19937 rng = std::mt19937(std::random_device{}());
 
-constexpr static float ADJ_MARGIN = 0.000000001;
+constexpr static float ADJ_MARGIN = 0.000001;
 
 template <typename T>
 inline bool vec_contains(const std::vector<T>& vec, const T& item)
@@ -3201,8 +3201,6 @@ Simulator::StaticData Simulator::load(const nlohmann::json& world, StateData& st
   data.defaultCenterPos.y = world.value("default_center_y", data.defaultCenterPos.y);
   data.defaultViewScale = world.value("default_zoom", data.defaultViewScale);
 
-  data.trainCouplingLength = 5;
-
   loadTrackplan(world, data, stateData);
 
   if(auto vehicles = world.find("vehicles"); vehicles != world.end() && vehicles->is_array())
@@ -4302,35 +4300,67 @@ bool Simulator::coupleTrain(Train *train, bool fwd)
     size_t segmentIdx = faceToCouple.segmentIndex;
     bool goForward = faceToCouple.segmentDirectionInverted != fwd;
     bool found = false;
-    bool reverse = false;
     bool flipList = false;
 
     for(int i = 0; i < 1000; i++)
     {
-      if(segmentIdx == sourceVehicles.front().vehicle->state.front.segmentIndex)
+      const Train::VehicleItem &otherHead = sourceVehicles.front();
+      const Train::VehicleItem &otherTail = sourceVehicles.back();
+
+      bool hasHead = false;
+      bool hasTail = false;
+
+      if(segmentIdx == otherHead.vehicle->state.front.segmentIndex
+          || segmentIdx == otherHead.vehicle->state.rear.segmentIndex)
       {
+        hasHead = true;
+      }
+      if(segmentIdx == otherTail.vehicle->state.front.segmentIndex
+          || segmentIdx == otherTail.vehicle->state.rear.segmentIndex)
+      {
+        hasTail = true;
+      }
+
+      if(hasHead && hasTail)
+      {
+        // We must check which one is the nearest
+        if(sourceVehicles.size() == 1)
+        {
+          // Single vehicle, check which face is nearest
+          if(segmentIdx == otherHead.vehicle->state.front.segmentIndex
+              && segmentIdx == otherHead.vehicle->state.rear.segmentIndex)
+          {
+            flipList = (otherHead.vehicle->state.rear.distance < otherHead.vehicle->state.front.distance);
+          }
+          else
+          {
+            // If we find tail first, flip the list
+            flipList = (segmentIdx == otherHead.vehicle->state.rear.segmentIndex);
+            if(sourceVehicles.front().reversed)
+              flipList = !flipList;
+          }
+        }
+        else
+        {
+          // Multiple vehicles, check if head or tail is nearest
+          const float frontDist = std::min(otherHead.vehicle->state.front.distance,
+                                           otherHead.vehicle->state.rear.distance);
+          const float backDist  = std::min(otherTail.vehicle->state.front.distance,
+                                          otherTail.vehicle->state.rear.distance);
+          flipList = (backDist < frontDist);
+
+          if(!goForward)
+            flipList = !flipList;
+        }
+
         found = true;
-        reverse = goForward == sourceVehicles.front().vehicle->state.front.segmentDirectionInverted;
         break;
       }
-      if(segmentIdx == sourceVehicles.front().vehicle->state.rear.segmentIndex)
+      else if(hasHead || hasTail)
       {
+        // If we find tail first, flip the list
+        flipList = hasTail;
         found = true;
-        reverse = goForward == sourceVehicles.front().vehicle->state.rear.segmentDirectionInverted;
-        break;
-      }
-      if(segmentIdx == sourceVehicles.back().vehicle->state.front.segmentIndex)
-      {
-        found = true;
-        flipList = true;
-        reverse = goForward == sourceVehicles.front().vehicle->state.front.segmentDirectionInverted;
-        break;
-      }
-      if(segmentIdx == sourceVehicles.back().vehicle->state.rear.segmentIndex)
-      {
-        found = true;
-        flipList = true;
-        reverse = goForward == sourceVehicles.front().vehicle->state.rear.segmentDirectionInverted;
         break;
       }
 
@@ -4347,18 +4377,20 @@ bool Simulator::coupleTrain(Train *train, bool fwd)
     if(!found)
       return false;
 
-    if(!fwd)
-      reverse = !reverse;
-
-    if(fwd == reverse)
+    if(fwd)
       flipList = !flipList;
 
     vehiclesToAdd = std::move(sourceVehicles);
     for(Train::VehicleItem &item : vehiclesToAdd)
     {
       item.vehicle->activeTrain = train;
-      if(reverse)
+      if(flipList)
+      {
+        // When flipping list, also flip each vehicle and flit its segment orientation
         item.reversed = !item.reversed;
+        item.vehicle->state.front.segmentDirectionInverted = !item.vehicle->state.front.segmentDirectionInverted;
+        item.vehicle->state.rear.segmentDirectionInverted = !item.vehicle->state.rear.segmentDirectionInverted;
+      }
     }
 
     if(flipList)
@@ -4417,7 +4449,8 @@ bool Simulator::coupleTrain(Train *train, bool fwd)
   else
     train->vehicles.insert(train->vehicles.end(), vehiclesToAdd.begin(), vehiclesToAdd.end());
 
-  removeTrain(trainToRemove->name, false);
+  if(trainToRemove)
+    removeTrain(trainToRemove->name, false);
 
   return true;
 }

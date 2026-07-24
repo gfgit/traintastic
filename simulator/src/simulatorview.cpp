@@ -1856,7 +1856,7 @@ void SimulatorView::drawTrains(QPainter *painter)
 
       if(trainTail.vehicle == vehicle)
       {
-        lightRect.moveCenter(trainHead.reversed ? backPt : frontPt);
+        lightRect.moveCenter(trainTail.reversed ? backPt : frontPt);
         const bool forwardLight = train->state.reverse;
         painter->setBrush(forwardLight ? frontLightBrush : rearLightBrush);
         painter->drawEllipse(lightRect);
@@ -1906,13 +1906,6 @@ void SimulatorView::drawTrains(QPainter *painter)
         painter->drawRect(adjVehicleRect);
       }
     }
-
-    // TODO: just for debug
-    const QRectF frontRect(length / 2.5, -trainWidth / 4.0,
-                           trainWidth / 2.0, trainWidth / 2.0);
-    painter->fillRect(frontRect,
-                      (train && train->isHeadOrTail(vehicle) && train->getHead().vehicle == vehicle) ?
-                          Qt::magenta : Qt::cyan);
 
     painter->setTransform(trasf);
   }
