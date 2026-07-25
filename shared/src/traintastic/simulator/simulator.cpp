@@ -4362,9 +4362,10 @@ bool Simulator::coupleTrain(Train *train, bool fwd)
           {
             // If we find tail first, flip the list
             flipList = (segmentIdx == otherHead.vehicle->state.rear.segmentIndex);
-            if(sourceVehicles.front().reversed)
-              flipList = !flipList;
           }
+
+          if(otherHead.reversed)
+            flipList = !flipList;
         }
         else
         {
@@ -4429,22 +4430,24 @@ bool Simulator::coupleTrain(Train *train, bool fwd)
   {
     size_t segmentIdx = faceToCouple.segmentIndex;
     bool found = false;
-    bool reverse = false;
+    bool flipList = false;
 
     for(int i = 0; i < 1000; i++)
     {
+      // Single vehicle, check which face is nearest
       if(segmentIdx == otherVehicle->state.front.segmentIndex
           && segmentIdx == otherVehicle->state.rear.segmentIndex)
       {
-        found = true;
-        reverse = goForward == otherVehicle->state.front.segmentDirectionInverted;
-        break;
+        flipList = (otherVehicle->state.rear.distance < otherVehicle->state.front.distance);
+
+        if(!goForward)
+          flipList = !flipList;
       }
-      else if(segmentIdx == otherVehicle->state.front.segmentIndex || segmentIdx == otherVehicle->state.rear.segmentIndex)
+      else if(segmentIdx == otherVehicle->state.front.segmentIndex
+              || segmentIdx == otherVehicle->state.rear.segmentIndex)
       {
-        found = true;
-        reverse = goForward == otherVehicle->state.rear.segmentDirectionInverted;
-        break;
+        // If we find tail first, flip the list
+        flipList = (segmentIdx == otherVehicle->state.rear.segmentIndex);
       }
 
       const auto &segment = staticData.trackSegments.at(segmentIdx);
@@ -4461,10 +4464,16 @@ bool Simulator::coupleTrain(Train *train, bool fwd)
       return false;
 
     if(fwd)
-      reverse = !reverse;
+      flipList = !flipList;
+
+    if(flipList)
+    {
+      otherVehicle->state.front.segmentDirectionInverted = !otherVehicle->state.front.segmentDirectionInverted;
+      otherVehicle->state.rear.segmentDirectionInverted = !otherVehicle->state.rear.segmentDirectionInverted;
+    }
 
     otherVehicle->activeTrain = train;
-    vehiclesToAdd.push_back({otherVehicle, reverse});
+    vehiclesToAdd.push_back({otherVehicle, flipList});
     train->length += otherVehicle->length;
   }
 
