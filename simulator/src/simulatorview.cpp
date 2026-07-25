@@ -1845,6 +1845,8 @@ void SimulatorView::drawTrains(QPainter *painter)
   QPen stationStopTrainPen(Qt::black, 1);
   stationStopTrainPen.setCosmetic(true);
 
+  QPen couplingPen(Qt::black, 0.2);
+
   painter->setPen(Qt::NoPen);
 
   const QRectF lightGlowRect(0, 0, trainWidth * 1.2, trainWidth * 1.2);
@@ -1865,6 +1867,8 @@ void SimulatorView::drawTrains(QPainter *painter)
     vehicleUnderMouse = trainUnderMouse->vehicles.at(m_trainUnderMouseVehicleIdx).vehicle;
   }
 
+  const float trainCouplingLength = m_simulator->staticData.trainCouplingLength;
+
   for(auto it : m_stateData.vehicles)
   {
     const Simulator::Vehicle* vehicle = it.second;
@@ -1879,39 +1883,56 @@ void SimulatorView::drawTrains(QPainter *painter)
     painter->translate(center.x, center.y);
     painter->rotate(qRadiansToDegrees(angle));
 
-    if(train && train->isPowered && train->isHeadOrTail(vehicle))
+    if(train)
     {
-      // On head and tail, draw light glow
       const Simulator::Train::VehicleItem trainHead = train->getHead();
       const Simulator::Train::VehicleItem trainTail = train->getTail();
 
-      const QPointF frontPt(-length / 2.0, 0);
-      const QPointF backPt(length / 2.0,   0);
+      const QPointF frontPt(-(length + trainCouplingLength) / 2.0, 0);
+      const QPointF backPt((length + trainCouplingLength) / 2.0,   0);
 
-      QRectF lightRect = lightGlowRect;
-      painter->setPen(Qt::NoPen);
-
-      // If train is composed of only one vehicle, it's both head and tail!
-      if(trainHead.vehicle == vehicle)
+      if(train->isPowered && train->isHeadOrTail(vehicle))
       {
-        lightRect.moveCenter(!trainHead.reversed ? backPt : frontPt);
-        const bool forwardLight = !train->state.reverse;
-        painter->setBrush(forwardLight ? frontLightBrush : rearLightBrush);
-        painter->drawEllipse(lightRect);
+        // On head and tail, draw light glow, but only if powered
+        QRectF lightRect = lightGlowRect;
+        painter->setPen(Qt::NoPen);
+
+        // If train is composed of only one vehicle, it's both head and tail!
+        if(trainHead.vehicle == vehicle)
+        {
+          lightRect.moveCenter(!trainHead.reversed ? backPt : frontPt);
+          const bool forwardLight = !train->state.reverse;
+          painter->setBrush(forwardLight ? frontLightBrush : rearLightBrush);
+          painter->drawEllipse(lightRect);
+        }
+
+        if(trainTail.vehicle == vehicle)
+        {
+          lightRect.moveCenter(trainTail.reversed ? backPt : frontPt);
+          const bool forwardLight = train->state.reverse;
+          painter->setBrush(forwardLight ? frontLightBrush : rearLightBrush);
+          painter->drawEllipse(lightRect);
+        }
       }
 
-      if(trainTail.vehicle == vehicle)
+      if(train->vehicles.size() > 1)
       {
-        lightRect.moveCenter(trainTail.reversed ? backPt : frontPt);
-        const bool forwardLight = train->state.reverse;
-        painter->setBrush(forwardLight ? frontLightBrush : rearLightBrush);
-        painter->drawEllipse(lightRect);
+        painter->setPen(couplingPen);
+        painter->setBrush(Qt::NoBrush);
+        if(trainHead.vehicle != vehicle)
+        {
+          // Not head, draw front coupling
+          painter->drawLine(QLineF(QPointF(0.0, 0.0),
+                                   !trainTail.reversed ? backPt : frontPt));
+        }
+        if(trainTail.vehicle != vehicle)
+        {
+          // Not tail, draw rear coupling
+          painter->drawLine(QLineF(QPointF(0.0, 0.0),
+                                   !trainHead.reversed ? frontPt : backPt));
+        }
       }
     }
-
-    const auto& color = colors[static_cast<size_t>(vehicle->color)];
-    const int alpha = (vehicle != vehicleUnderMouse && vehicle->activeTrain && vehicle->activeTrain == trainUnderMouse) ? 130 : 255;
-    painter->setBrush(QColor(color.red * 255, color.green * 255, color.blue * 255, alpha));
 
     Simulator::TrainState::Mode mode = Simulator::TrainState::Mode::Manual;
     if(train)
@@ -1920,48 +1941,65 @@ void SimulatorView::drawTrains(QPainter *painter)
     if(vehicle == vehicleUnderMouse)
       painter->setPen(vehicleUnderMousePen);
     else if(activeTrain && activeTrain == train)
-      painter->setPen(activeTrainPen);
-     else if(mode != Simulator::TrainState::Mode::Manual)
-      painter->setPen(autoTrainBorderPenLow);
+    {
+      if(mode != Simulator::TrainState::Mode::Manual)
+        painter->setPen(autoTrainBorderPenLow);
+      else
+        painter->setPen(activeTrainPen);
+    }
     else
       painter->setPen(Qt::NoPen);
 
     const QRectF vehicleRect(-length / 2.0, -trainWidth / 2.0,
                              length, trainWidth);
-    painter->drawRect(vehicleRect);
+    const QRectF vehicleRectAdj = vehicleRect.adjusted(-trainCouplingLength * 0.4, 0,
+                                                       trainCouplingLength * 0.4, 0);
 
-    if(vehicle != vehicleUnderMouse)
+    if(vehicle->typeIdx == VehiclesModel::invalidIndex)
+    {
+      // Draw simple rectangle
+      const auto& color = colors[static_cast<size_t>(vehicle->color)];
+      painter->setBrush(QColor(color.red * 255, color.green * 255, color.blue * 255));
+      painter->drawRect(vehicleRect);
+    }
+    else if(activeTrain && activeTrain == train)
+    {
+      painter->setBrush(Qt::NoBrush);
+      painter->drawRect(vehicleRectAdj);
+    }
+
+    if(vehicle != vehicleUnderMouse && activeTrain && activeTrain == train)
     {
       painter->setBrush(Qt::NoBrush);
 
       if(mode == Simulator::TrainState::Mode::Automatic)
       {
         painter->setPen(autoTrainBorderPenTop);
-        painter->drawRect(vehicleRect);
+        painter->drawRect(vehicleRectAdj);
       }
       else if(mode == Simulator::TrainState::Mode::SemiAutomatic)
       {
         painter->setPen(semiautoTrainBorderPenTop);
-        painter->drawRect(vehicleRect);
+        painter->drawRect(vehicleRectAdj);
       }
 
-      if(activeTrain && activeTrain == train && activeTrain->state.isOnStationStop)
+      if(activeTrain->state.isOnStationStop)
       {
-        const QRectF adjVehicleRect = vehicleRect.adjusted(1, 1, -1, -1);
+        const QRectF stationStopRect = vehicleRect.adjusted(1, 1, -1, -1);
         painter->setPen(stationStopTrainPen);
-        painter->drawRect(adjVehicleRect);
+        painter->drawRect(stationStopRect);
       }
+    }
 
-      if(vehicle->typeIdx != VehiclesModel::invalidIndex)
+    if(vehicle->typeIdx != VehiclesModel::invalidIndex)
+    {
+      const VehiclesModel::VehicleType vehicleType = mVehicleTypesModel->getTypeAt(vehicle->typeIdx);
+      if(!vehicleType.mPixmap.isNull())
       {
-        const VehiclesModel::VehicleType vehicleType = mVehicleTypesModel->getTypeAt(vehicle->typeIdx);
-        if(!vehicleType.mPixmap.isNull())
-        {
-          QRectF pxR;
-          pxR.setSize(QSizeF(vehicleType.mPixmap.size()) / 10.0f);
-          pxR.moveCenter(vehicleRect.center());
-          painter->drawPixmap(pxR, vehicleType.mPixmap, QRectF());
-        }
+        QRectF pxR;
+        pxR.setSize(QSizeF(vehicleType.mPixmap.size()) / 10.0f);
+        pxR.moveCenter(vehicleRect.center());
+        painter->drawPixmap(pxR, vehicleType.mPixmap, QRectF());
       }
     }
 
