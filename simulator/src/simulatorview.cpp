@@ -667,6 +667,8 @@ void SimulatorView::setSimulator(std::shared_ptr<Simulator> value,
               maxSpeed = vehicleType.maxSpeedKmh;
           }
         }
+        else
+          isPowered = true; // Custom vehicles are always powered for tests
 
         train->isPowered = isPowered;
         train->speedMax = maxSpeed;
