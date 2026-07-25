@@ -1935,29 +1935,28 @@ void SimulatorView::drawTrains(QPainter *painter)
     if(train)
       mode = train->state.mode;
 
-    if(vehicle == vehicleUnderMouse)
-      painter->setPen(vehicleUnderMousePen);
-    else if(activeTrain && activeTrain == train)
-      painter->setPen(activeTrainPen);
-    else
-      painter->setPen(Qt::NoPen);
-
     const QRectF vehicleRect(-length / 2.0, -trainWidth / 2.0,
                              length, trainWidth);
-    const QRectF vehicleRectAdj = vehicleRect.adjusted(-trainCouplingLength * 0.4, 0,
-                                                       trainCouplingLength * 0.4, 0);
+    const QRectF vehicleRectAdj = vehicleRect.adjusted(-trainCouplingLength * 0.4, -0.2,
+                                                       trainCouplingLength * 0.4, 0.2);
+
+    painter->setPen(Qt::NoPen);
+
+    if(vehicle == vehicleUnderMouse)
+    {
+      painter->fillRect(vehicleRectAdj, Qt::darkYellow);
+    }
+    else if(activeTrain && activeTrain == train)
+    {
+      painter->fillRect(vehicleRectAdj, Qt::white);
+    }
 
     if(vehicle->typeIdx == VehiclesModel::invalidIndex)
     {
       // Draw simple rectangle
       const auto& color = colors[static_cast<size_t>(vehicle->color)];
-      painter->setBrush(QColor(color.red * 255, color.green * 255, color.blue * 255));
-      painter->drawRect(vehicleRect);
-    }
-    else if((activeTrain && activeTrain == train) || vehicle == vehicleUnderMouse)
-    {
-      painter->setBrush(Qt::NoBrush);
-      painter->drawRect(vehicleRectAdj);
+      painter->fillRect(vehicleRect,
+                        QColor(color.red * 255, color.green * 255, color.blue * 255));
     }
 
     if(vehicle != vehicleUnderMouse && activeTrain && activeTrain == train)
@@ -1985,6 +1984,7 @@ void SimulatorView::drawTrains(QPainter *painter)
 
     if(vehicle->typeIdx != VehiclesModel::invalidIndex)
     {
+      // Draw vehicle pixmap
       const VehiclesModel::VehicleType vehicleType = mVehicleTypesModel->getTypeAt(vehicle->typeIdx);
       if(!vehicleType.mPixmap.isNull())
       {
