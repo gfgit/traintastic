@@ -1,0 +1,149 @@
+#include "vehiclelistmodel.h"
+
+VehicleListModel::VehicleListModel(VehiclesModel *vehiclesModel, QObject *parent)
+  : QAbstractTableModel(parent)
+  , mVehiclesModel(vehiclesModel)
+{
+}
+
+QVariant VehicleListModel::headerData(int section, Qt::Orientation orientation, int role) const
+{
+  if(orientation == Qt::Horizontal && role == Qt::DisplayRole)
+  {
+    switch (section)
+    {
+    case VehicleName:
+      return tr("Vehicle");
+    case Reverse:
+      return tr("Reverse");
+    default:
+      break;
+    }
+  }
+
+  return QAbstractTableModel::headerData(section, orientation, role);
+}
+
+int VehicleListModel::rowCount(const QModelIndex &p) const
+{
+  return p.isValid() ? 0 : mVehicles.size();
+}
+
+int VehicleListModel::columnCount(const QModelIndex &p) const
+{
+  return p.isValid() ? 0 : NCols;
+}
+
+QVariant VehicleListModel::data(const QModelIndex &idx, int role) const
+{
+  if (!idx.isValid() || idx.row() >= mVehicles.size() || idx.column() >= NCols)
+    return QVariant();
+
+  const Vehicle &vehicle = mVehicles.at(idx.row());
+
+  switch(idx.column())
+  {
+  case VehicleName:
+  {
+    if(role == Qt::DisplayRole)
+    {
+      if(vehicle.vehicleTypeIndex == VehiclesModel::invalidIndex)
+        return QString();
+
+      return mVehiclesModel->getTypeAt(vehicle.vehicleTypeIndex).name;
+    }
+    else if(role == Qt::ToolTipRole)
+    {
+      if(vehicle.vehicleTypeIndex == VehiclesModel::invalidIndex)
+        return QString();
+
+      return mVehiclesModel->data(mVehiclesModel->index(vehicle.vehicleTypeIndex, 0), Qt::ToolTipRole);
+    }
+    break;
+  }
+  case Reverse:
+  {
+    if(role == Qt::CheckStateRole)
+      return vehicle.reverse ? Qt::Checked : Qt::Unchecked;
+    break;
+  }
+  default:
+    break;
+  }
+
+  return QVariant();
+}
+
+bool VehicleListModel::setData(const QModelIndex &idx, const QVariant &value, int role)
+{
+  if (!idx.isValid() || idx.row() >= mVehicles.size() || idx.column() >= NCols)
+    return false;
+
+  Vehicle &vehicle = mVehicles[idx.row()];
+
+  if(idx.column() == Reverse)
+  {
+    vehicle.reverse = value.value<Qt::CheckState>() == Qt::Checked;
+    emit dataChanged(idx, idx, {role});
+    return true;
+  }
+
+  return false;
+}
+
+Qt::ItemFlags VehicleListModel::flags(const QModelIndex &idx) const
+{
+  if (!idx.isValid() || idx.row() >= mVehicles.size() || idx.column() >= NCols)
+    return Qt::NoItemFlags;
+
+  Qt::ItemFlags f = QAbstractItemModel::flags(idx) | Qt::ItemIsEditable;
+  if(idx.column() == Reverse)
+    f.setFlag(Qt::ItemIsUserCheckable);
+  return f;
+}
+
+void VehicleListModel::setVehicleAt(int row, size_t vehicleTypeIdx)
+{
+  if(row < 0 || row >= mVehicles.size())
+    return;
+
+  Vehicle &vehicle = mVehicles[row];
+  vehicle.vehicleTypeIndex = vehicleTypeIdx;
+
+  emit dataChanged(index(row, 0), index(row, 0));
+}
+
+void VehicleListModel::addVehicle(int row)
+{
+  row = qBound(0, row, mVehicles.size()); // Allow row = size to append
+
+  if(row < 0)
+    row = 0;
+  if(row >= mVehicles.size())
+    row = mVehicles.size();
+
+  beginInsertRows(QModelIndex(), row, row);
+  mVehicles.insert(row, {});
+  endInsertRows();
+}
+
+void VehicleListModel::removeVehicle(int row)
+{
+  row = qBound(0, row, mVehicles.size() - 1);
+
+  beginRemoveRows(QModelIndex(), row, row);
+  mVehicles.removeAt(row);
+  endRemoveRows();
+}
+
+void VehicleListModel::setVehicles(const QVector<Vehicle> &newVehicles)
+{
+  beginResetModel();
+  mVehicles = newVehicles;
+  endResetModel();
+}
+
+QVector<VehicleListModel::Vehicle> VehicleListModel::vehicles() const
+{
+  return mVehicles;
+}

@@ -70,7 +70,9 @@ QVariant TrainsModel::data(const QModelIndex &idx, int role) const
     return QVariant();
 }
 
-bool TrainsModel::addTrain(const QString &name, Color c, size_t numWagons, size_t segmentIdx, const float startPos, QString *errOut)
+bool TrainsModel::addTrain(const QString &name,
+                           const std::vector<Simulator::Train::VehicleItem> &vehicles,
+                           size_t segmentIdx, const float startPos, QString *errOut)
 {
     if(!mSimulator)
         return false;
@@ -95,32 +97,16 @@ bool TrainsModel::addTrain(const QString &name, Color c, size_t numWagons, size_
         return false;
     }
 
-    std::string baseName = name.toStdString() + ".";
-
-    std::vector<Simulator::Train::VehicleItem> vehicles;
-    for(size_t i = 0; i < numWagons; i++)
-    {
-        Simulator::Train::VehicleItem item;
-        item.vehicle = mSimulator->addVehicle(baseName + std::to_string(i), 20.0f, c);
-        item.reversed = false;
-        vehicles.push_back(item);
-    }
-
     size_t trainIdx = 0;
     if(!mSimulator->addTrain(name.toStdString(), DecoderProtocol::DCCShort, 3,
                              vehicles, segmentIdx, trainIdx, startPos))
     {
-        for(const auto &item : vehicles)
-        {
-            mSimulator->removeVehicle(item.vehicle);
-        }
-
         *errOut = tr("Train is too long");
         return false;
     }
 
     beginResetModel();
-    mTrains.insert(name, Train{name, c, 0.0});
+    mTrains.insert(name, Train{name, 0.0});
     endResetModel();
 
     emit setCurrentTrain(trainIdx);
@@ -159,11 +145,14 @@ void TrainsModel::setSimulator(Simulator *sim)
             if(it.second->state.reverse)
                 train.speedKmH = -train.speedKmH;
 
-            train.color = it.second->vehicles.front().vehicle->color;
-
             mTrains.insert(train.name, train);
         }
     }
 
     endResetModel();
+}
+
+Simulator *TrainsModel::simulator() const
+{
+    return mSimulator;
 }

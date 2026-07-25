@@ -608,6 +608,9 @@ void Simulator::setTrainSpeed(Train *train, float speed, bool immediate)
 {
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
+  if(!train->isPowered)
+    speed = 0.0f;
+
   speed = std::clamp(speed, 0.0f, train->speedMax);
   if(immediate && train->state.speed != speed)
   {
@@ -638,6 +641,9 @@ void Simulator::setTrainSpeed(Train *train, float speed, bool immediate)
 void Simulator::setTrainMode(Train *train, TrainState::Mode mode)
 {
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+
+  if(!train->isPowered)
+    mode = TrainState::Mode::Manual;
 
   if(train->state.mode != mode)
   {
@@ -3566,6 +3572,11 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
   if(train->speedMax < 0.0001)
     train->speedMax = defaultSpeedTickRate * staticData.worldScale;
 
+  if(trainSetupCB)
+  {
+    trainSetupCB(train.get());
+  }
+
   auto pair = m_stateData.trains.insert({train->name, train.release()});
   idxOut = std::distance(m_stateData.trains.begin(), pair.first);
 
@@ -3589,13 +3600,14 @@ bool Simulator::removeTrain(const std::string_view &name, bool removeWagons)
     return true;
 }
 
-Simulator::Vehicle *Simulator::addVehicle(const std::string_view &baseName, float length, Color color)
+Simulator::Vehicle *Simulator::addVehicle(const std::string_view &baseName, float length, Color color, size_t typeIdx)
 {    
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
     Vehicle *vehicle = new Vehicle;
     vehicle->length = length;
     vehicle->color = color;
+    vehicle->typeIdx = typeIdx;
 
     size_t num = 0;
     vehicle->name = baseName;
@@ -3655,6 +3667,7 @@ bool Simulator::removeVehicle(Vehicle *vehicle)
     }
 
     m_stateData.vehicles.erase(it);
+    delete vehicle;
     return true;
 }
 
@@ -4263,6 +4276,12 @@ bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const b
     first = false;
   }
 
+  if(trainSetupCB)
+  {
+    trainSetupCB(trainToSplit);
+    trainSetupCB(remainingTrain.get());
+  }
+
   auto pair = m_stateData.trains.insert({remainingTrain->name, remainingTrain.release()});
   idxOut = std::distance(m_stateData.trains.begin(), pair.first);
 
@@ -4458,6 +4477,11 @@ bool Simulator::coupleTrain(Train *train, bool fwd)
 
   if(trainToRemove)
     removeTrain(trainToRemove->name, false);
+
+  if(trainSetupCB)
+  {
+    trainSetupCB(train);
+  }
 
   return true;
 }

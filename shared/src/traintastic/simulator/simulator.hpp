@@ -493,6 +493,7 @@ public:
     float length;
     Train *activeTrain = nullptr;
     VehicleState state;
+    size_t typeIdx = invalidIndex;
   };
 
   struct Train
@@ -508,6 +509,7 @@ public:
     std::vector<VehicleItem> vehicles;
     float length = 0.0f;
     float speedMax = 0.0f;
+    bool isPowered = false;
     DecoderProtocol protocol = DecoderProtocol::None;
     uint16_t address = invalidAddress;
     TrainState state;
@@ -622,7 +624,8 @@ public:
   bool removeTrain(const std::string_view& name, bool removeWagons);
   void destroyTrain(Train *train, bool removeWagons);
 
-  Vehicle *addVehicle(const std::string_view &baseName, float length, Color color);
+  Vehicle *addVehicle(const std::string_view &baseName, float length,
+                      Color color, size_t typeIdx = invalidIndex);
   bool removeVehicle(Vehicle *vehicle);
 
   Vehicle *getVehicleNear(size_t segmentIdx, float pos, float maxDistance);
@@ -638,6 +641,9 @@ public:
       s->maxSpeed = val ? 150 : 0;
     }
   }
+
+  using TrainSetupCB = std::function<void(Train *)>;
+  inline void setTrainSetupCB(const TrainSetupCB& cb) { trainSetupCB = cb; }
 
 private:
   friend struct TrainState;
@@ -672,6 +678,8 @@ private:
 
   size_t lastConnectionId = 0;
   std::list<std::shared_ptr<SimulatorConnection>> m_connections;
+
+  TrainSetupCB trainSetupCB;
 
   void accept();
   void doReceive();

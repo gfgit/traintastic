@@ -34,6 +34,7 @@
 class QHelpEvent;
 
 class TrainsModel;
+class VehiclesModel;
 
 class SimulatorView
   : public QWidget
@@ -51,6 +52,8 @@ public:
   void loadExtraImages(const nlohmann::json &world,
                        const QString &imagesFile,
                        QStringList &namesOut);
+
+  void loadVehicleTypes(const QString& fileName);
 
   bool showTrackOccupancy() const
   {
@@ -98,6 +101,11 @@ public:
 
   float trainSpeedFactor() const;
   void setTrainSpeedFactor(float val);
+
+  inline VehiclesModel *vehicleTypesModel() const
+  {
+    return mVehicleTypesModel;
+  }
 
 signals:
   void tickActiveChanged(float value);
@@ -154,6 +162,7 @@ private:
 
   // Trains
   TrainsModel *mTrainsModel = nullptr;
+  VehiclesModel *mVehicleTypesModel = nullptr;
 
   // View
   QTransform m_transform;

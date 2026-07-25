@@ -6,6 +6,7 @@
 #include <QMap>
 
 #include <traintastic/enum/color.hpp>
+#include <traintastic/simulator/simulator.hpp>
 
 class Simulator;
 
@@ -32,12 +33,16 @@ public:
 
     QVariant data(const QModelIndex &idx, int role = Qt::DisplayRole) const override;
 
-    bool addTrain(const QString& name, Color c, size_t numWagons, size_t segmentIdx, const float startPos,
+    bool addTrain(const QString& name,
+                  const std::vector<Simulator::Train::VehicleItem> &vehicles,
+                  size_t segmentIdx, const float startPos,
                   QString *errOut);
 
     bool removeTrain(const QString& name);
 
     void setSimulator(Simulator *sim);
+
+    Simulator *simulator() const;
 
 signals:
     void setCurrentTrain(size_t trainIdx);
@@ -48,7 +53,6 @@ private:
     struct Train
     {
         QString name;
-        Color color;
         double speedKmH;
     };
 

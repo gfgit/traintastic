@@ -23,7 +23,11 @@ add_executable(traintastic-simulator
   src/mainwindow.cpp
   src/simulatorview.cpp
   src/trainsmodel.cpp
+  src/vehiclesmodel.h src/vehiclesmodel.cpp
+  src/vehiclelistmodel.h src/vehiclelistmodel.cpp
+  src/vehicleslistdelegate.h src/vehicleslistdelegate.cpp
   src/addtraindialog.h src/addtraindialog.cpp
+
   ../shared/src/traintastic/simulator/simulator.cpp
   ../shared/src/traintastic/simulator/simulatorconnection.cpp
   ../shared/src/traintastic/utils/standardpaths.cpp
@@ -54,12 +58,14 @@ target_include_directories(traintastic-simulator SYSTEM PRIVATE ${Boost_INCLUDE_
 target_link_libraries(traintastic-simulator PRIVATE ${Boost_LIBRARIES})
 
 find_package(Qt6 REQUIRED COMPONENTS Core Widgets Xml Network)
+find_package(Qt6 REQUIRED COMPONENTS Core)
 message(STATUS "Found Qt ${Qt6Core_VERSION}")
 target_link_libraries(traintastic-simulator PRIVATE Qt6::Core Qt6::Widgets Qt6::Xml Qt6::Network)
 
 if(WIN32)
   target_compile_definitions(traintastic-simulator PRIVATE WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x1000)
   target_link_libraries(traintastic-simulator PRIVATE wsock32)
+  target_link_libraries(traintastic-simulator PRIVATE Qt6::Core)
   target_sources(traintastic-simulator PRIVATE ../shared/gfx/appicon.rc src/version.rc)
   set_property(TARGET traintastic-simulator PROPERTY WIN32_EXECUTABLE true)
 endif()

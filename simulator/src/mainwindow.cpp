@@ -270,10 +270,19 @@ void MainWindow::load(const QString& filename, bool zoomToDefault)
   {
     try
     {
-      m_view->setSimulator(std::make_shared<Simulator>(nlohmann::json::parse(file.readAll().toStdString(),
-                                                                             nullptr,
-                                                                             true, true)),
+      auto world = nlohmann::json::parse(file.readAll().toStdString(),
+                                              nullptr,
+                                              true, true);
+
+      m_view->setSimulator(std::make_shared<Simulator>(world),
                            mLocalOnly, mDiscoverable);
+
+      QDir dir = QFileInfo(filename).absoluteDir();
+      QString vehiclesFileName = QString::fromStdString(world.value<std::string>("vehicles_file", {}));
+      if(!vehiclesFileName.isEmpty() && dir.exists())
+        vehiclesFileName = dir.absoluteFilePath(vehiclesFileName);
+
+      m_view->loadVehicleTypes(vehiclesFileName);
     }
     catch(std::exception &e)
     {

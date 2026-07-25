@@ -41,6 +41,7 @@
 #include <QVector>
 
 #include "trainsmodel.h"
+#include "vehiclesmodel.h"
 
 #include "addtraindialog.h"
 
@@ -554,6 +555,8 @@ SimulatorView::SimulatorView(QWidget* parent)
   connect(mTrainsModel, &TrainsModel::setCurrentTrain,
           this, &SimulatorView::doSetCurrentTrainIndex);
 
+  mVehicleTypesModel = new VehiclesModel(this);
+
   // Dark gray background
   QPalette p = palette();
   p.setColor(QPalette::Window, QColor(70, 70, 70));
@@ -643,6 +646,32 @@ void SimulatorView::setSimulator(std::shared_ptr<Simulator> value,
       // Simulator::updateView(m_simulator->staticData.view,
       //            {item.ref.origin.x - imgSize.height() * sinRotation + imgSize.width() * cosRotation, item.ref.origin.y + imgSize.height() * cosRotation + imgSize.width() * sinRotation}); // bottom right
     }
+
+    m_simulator->setTrainSetupCB([this](Simulator::Train *train)
+    {
+      bool isPowered = false;
+      bool maxSpeedSet = false;
+      float maxSpeed = 150.0f;
+
+      for(const Simulator::Train::VehicleItem &item : train->vehicles)
+      {
+        if(item.vehicle->typeIdx != VehiclesModel::invalidIndex)
+        {
+          const VehiclesModel::VehicleType vehicleType = mVehicleTypesModel->getTypeAt(item.vehicle->typeIdx);
+          if(!vehicleType.name.isEmpty())
+          {
+            if(vehicleType.isPowered)
+              isPowered = true;
+
+            if(!maxSpeedSet || vehicleType.maxSpeedKmh < maxSpeed)
+              maxSpeed = vehicleType.maxSpeedKmh;
+          }
+        }
+
+        train->isPowered = isPowered;
+        train->speedMax = maxSpeed;
+      }
+    });
   }
 
   update();
@@ -704,6 +733,23 @@ void SimulatorView::loadExtraImages(const nlohmann::json& world,
   }
 
   update();
+}
+
+void SimulatorView::loadVehicleTypes(const QString &fileName)
+{
+  QFile vehiclesFile(fileName);
+  if(vehiclesFile.open(QIODeviceBase::ReadOnly))
+  {
+    auto vehiclesJson = nlohmann::json::parse(vehiclesFile.readAll().toStdString(),
+                                              nullptr,
+                                              true, true);
+    if(auto vehicleTypes = vehiclesJson.find("vehicles"); vehicleTypes != vehiclesJson.end() && vehicleTypes->is_array())
+    {
+      mVehicleTypesModel->loadVehicles(fileName, *vehicleTypes);
+    }
+
+    // TODO: full train compositions
+  }
 }
 
 void SimulatorView::zoomIn()
@@ -1803,8 +1849,8 @@ void SimulatorView::drawTrains(QPainter *painter)
 
   const QRectF lightGlowRect(0, 0, trainWidth * 1.2, trainWidth * 1.2);
 
-  const QBrush frontLightBrush(qRgba(254, 243, 144, 120));
-  const QBrush rearLightBrush (qRgba(255,  70,   70, 120));
+  const QBrush frontLightBrush(qRgba(254, 243, 144, 90));
+  const QBrush rearLightBrush (qRgba(255,  70,   70, 90));
 
   // We need to access simulator data
   std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
@@ -1833,7 +1879,7 @@ void SimulatorView::drawTrains(QPainter *painter)
     painter->translate(center.x, center.y);
     painter->rotate(qRadiansToDegrees(angle));
 
-    if(train && train->isHeadOrTail(vehicle))
+    if(train && train->isPowered && train->isHeadOrTail(vehicle))
     {
       // On head and tail, draw light glow
       const Simulator::Train::VehicleItem trainHead = train->getHead();
@@ -1904,6 +1950,18 @@ void SimulatorView::drawTrains(QPainter *painter)
         const QRectF adjVehicleRect = vehicleRect.adjusted(1, 1, -1, -1);
         painter->setPen(stationStopTrainPen);
         painter->drawRect(adjVehicleRect);
+      }
+
+      if(vehicle->typeIdx != VehiclesModel::invalidIndex)
+      {
+        const VehiclesModel::VehicleType vehicleType = mVehicleTypesModel->getTypeAt(vehicle->typeIdx);
+        if(!vehicleType.mPixmap.isNull())
+        {
+          QRectF pxR;
+          pxR.setSize(QSizeF(vehicleType.mPixmap.size()) / 10.0f);
+          pxR.moveCenter(vehicleRect.center());
+          painter->drawPixmap(pxR, vehicleType.mPixmap, QRectF());
+        }
       }
     }
 
@@ -2775,7 +2833,7 @@ void SimulatorView::showAddTrainDialog(size_t segmentIndex, const Simulator::Poi
   const QString segName = QString::fromStdString(segment.m_id);
 
   QPointer<AddTrainDialog> dlg = new AddTrainDialog(segmentIndex, startPos, segName,
-                                                    mTrainsModel, this);
+                                                    mTrainsModel, mVehicleTypesModel, this);
   dlg->exec();
   delete dlg;
 }
