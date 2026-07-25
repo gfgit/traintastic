@@ -1830,10 +1830,7 @@ void SimulatorView::drawTrains(QPainter *painter)
   QPen activeTrainPen(Qt::white, 0.4);
 
   QPen vehicleUnderMousePen = activeTrainPen;
-  vehicleUnderMousePen.setColor(Qt::darkCyan);
-
-  QPen autoTrainBorderPenLow = activeTrainPen;
-  autoTrainBorderPenLow.setColor(Qt::darkGray);
+  vehicleUnderMousePen.setColor(Qt::darkYellow);
 
   QPen autoTrainBorderPenTop = activeTrainPen;
   autoTrainBorderPenTop.setColor(Qt::red);
@@ -1941,12 +1938,7 @@ void SimulatorView::drawTrains(QPainter *painter)
     if(vehicle == vehicleUnderMouse)
       painter->setPen(vehicleUnderMousePen);
     else if(activeTrain && activeTrain == train)
-    {
-      if(mode != Simulator::TrainState::Mode::Manual)
-        painter->setPen(autoTrainBorderPenLow);
-      else
-        painter->setPen(activeTrainPen);
-    }
+      painter->setPen(activeTrainPen);
     else
       painter->setPen(Qt::NoPen);
 
@@ -1962,7 +1954,7 @@ void SimulatorView::drawTrains(QPainter *painter)
       painter->setBrush(QColor(color.red * 255, color.green * 255, color.blue * 255));
       painter->drawRect(vehicleRect);
     }
-    else if(activeTrain && activeTrain == train)
+    else if((activeTrain && activeTrain == train) || vehicle == vehicleUnderMouse)
     {
       painter->setBrush(Qt::NoBrush);
       painter->drawRect(vehicleRectAdj);
