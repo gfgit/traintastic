@@ -93,6 +93,11 @@ AddTrainDialog::AddTrainDialog(size_t segmentIndex, const float startPos,
 
     setMode(Mode::CustomTrain);
 
+    connect(modeCombo, &QComboBox::activated, this, [this](int idx)
+    {
+        setMode(Mode(idx));
+    });
+
     connect(addVehicleAfter, &QPushButton::clicked, this, [this]()
     {
         int row = customTrainView->currentIndex().row();
