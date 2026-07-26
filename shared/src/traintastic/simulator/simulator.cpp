@@ -1359,6 +1359,8 @@ void Simulator::tick()
       }
     });
 
+  onTick();
+
   {
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
     const auto start = std::chrono::high_resolution_clock::now();
@@ -1368,8 +1370,6 @@ void Simulator::tick()
     m_stateData.tickActive = duration.count() / 1e6f;
     m_stateData.tickLoad = static_cast<float>(100 * duration.count()) / static_cast<float>(std::chrono::duration_cast<std::chrono::microseconds>(tickRate).count());
   }
-
-  onTick();
 }
 
 void Simulator::handShake()
