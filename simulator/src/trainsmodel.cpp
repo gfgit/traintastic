@@ -79,6 +79,12 @@ bool TrainsModel::addTrain(const QString &name,
 
     std::lock_guard<std::recursive_mutex> lock(mSimulator->stateMutex());
 
+    if(name.isEmpty())
+    {
+        *errOut = tr("Name is empty!");
+        return false;
+    }
+
     if(mSimulator->trainExists(name.toStdString()))
     {
         *errOut = tr("Name already in use!");
@@ -88,12 +94,6 @@ bool TrainsModel::addTrain(const QString &name,
     if(segmentIdx >= mSimulator->staticData.trackSegments.size())
     {
         *errOut = tr("Segment does not exist!");
-        return false;
-    }
-
-    if(mSimulator->segmentOccupied(segmentIdx))
-    {
-        *errOut = tr("Segment already occupied");
         return false;
     }
 
