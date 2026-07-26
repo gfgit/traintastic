@@ -36,6 +36,7 @@ public:
     bool addTrain(const QString& name,
                   const std::vector<Simulator::Train::VehicleItem> &vehicles,
                   size_t segmentIdx, const float startPos, bool invert,
+                  Simulator::TrainPlacement placement,
                   QString *errOut);
 
     bool removeTrain(const QString& name);

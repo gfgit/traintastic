@@ -72,7 +72,7 @@ QVariant TrainsModel::data(const QModelIndex &idx, int role) const
 
 bool TrainsModel::addTrain(const QString &name,
                            const std::vector<Simulator::Train::VehicleItem> &vehicles,
-                           size_t segmentIdx, const float startPos, bool invert, QString *errOut)
+                           size_t segmentIdx, const float startPos, bool invert, Simulator::TrainPlacement placement, QString *errOut)
 {
     if(!mSimulator)
         return false;
@@ -99,7 +99,7 @@ bool TrainsModel::addTrain(const QString &name,
 
     size_t trainIdx = 0;
     if(!mSimulator->addTrain(name.toStdString(), DecoderProtocol::DCCShort, 3,
-                             vehicles, segmentIdx, trainIdx, startPos))
+                             vehicles, segmentIdx, trainIdx, startPos, placement))
     {
         *errOut = tr("Train is too long");
         return false;

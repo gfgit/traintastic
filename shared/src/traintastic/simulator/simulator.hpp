@@ -616,10 +616,17 @@ public:
 
   inline std::recursive_mutex& stateMutex() { return m_stateMutex; }
 
+  enum class TrainPlacement
+  {
+    PlaceCenter = 0,
+    PlaceStart = 1,
+    PlaceEnd = 2
+  };
+
   bool addTrain(const std::string_view& name,
                 DecoderProtocol proto, uint16_t addr,
                 const std::vector<Train::VehicleItem> &vehicles, size_t segmentIndex,
-                size_t &idxOut, const float startPos = -1.0);
+                size_t &idxOut, float startPos = -1.0, TrainPlacement placement = TrainPlacement::PlaceCenter);
 
   bool removeTrain(const std::string_view& name, bool removeWagons);
   void destroyTrain(Train *train, bool removeWagons);
@@ -628,10 +635,12 @@ public:
                       Color color, size_t typeIdx = invalidIndex);
   bool removeVehicle(Vehicle *vehicle);
 
-  Vehicle *getVehicleNear(size_t segmentIdx, float pos, float maxDistance);
+  Vehicle *getVehicleNear(size_t segmentIdx, float pos, float maxDistance,
+                          bool canGoForward = true, bool canGoBackwards = true,
+                          float *outDistance = nullptr);
 
   bool splitTrain(Train *trainToSplit, const size_t vehicleIdx, const bool fwd, size_t &idxOut);
-  bool coupleTrain(Train *train, bool fwd);
+  bool coupleTrain(Train *train, bool fwd, size_t &removedTrainIdxOut);
 
   void liftRestrictions(bool val)
   {

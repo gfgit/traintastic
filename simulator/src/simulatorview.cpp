@@ -2550,7 +2550,18 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
         bool fwd = result == coupleFwdAct;
         if(trainToCouple->state.reverse)
           fwd = !fwd;
-        m_simulator->coupleTrain(trainToCouple, fwd);
+
+        // NOTE: this might remove active train, if so set active train to trainToCouple
+        const size_t oldActiveTrain = m_trainIndex;
+        size_t removedTrainIdx = Simulator::invalidIndex;
+        if(m_simulator->coupleTrain(trainToCouple, fwd, removedTrainIdx))
+        {
+          if(oldActiveTrain == removedTrainIdx)
+          {
+            // We removed active train, set it again
+            m_trainIndex = m_simulator->getTrainIndex(trainToCouple);
+          }
+        }
       }
     }
     else if(result == splitFwdAct || result == splitRearAct)

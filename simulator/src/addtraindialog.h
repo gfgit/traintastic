@@ -50,6 +50,7 @@ private:
     QLineEdit *mTrainEdit;
 
     QComboBox *modeCombo;
+    QComboBox *placementCombo;
 
     QComboBox *trainCombo;
 

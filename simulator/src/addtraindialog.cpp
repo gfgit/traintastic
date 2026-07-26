@@ -51,6 +51,15 @@ AddTrainDialog::AddTrainDialog(size_t segmentIndex, const float startPos,
     modeCombo->addItem(tr("Custom Vehicle"), CustomVehicle);
     mainLay->addRow(tr("Mode:"), modeCombo);
 
+    placementCombo = new QComboBox;
+    placementCombo->addItem(tr("Center"), int(Simulator::TrainPlacement::PlaceCenter));
+    placementCombo->addItem(tr("Start"),  int(Simulator::TrainPlacement::PlaceStart));
+    placementCombo->addItem(tr("End"),    int(Simulator::TrainPlacement::PlaceEnd));
+    mainLay->addRow(tr("Placement:"), placementCombo);
+
+    invertTrainCB = new QCheckBox(tr("Invert Train"));
+    mainLay->addRow(invertTrainCB);
+
     trainCombo = new QComboBox;
     trainCombo->setModel(mTrainTypesListModel);
     trainCombo->setCurrentIndex(0);
@@ -84,9 +93,6 @@ AddTrainDialog::AddTrainDialog(size_t segmentIndex, const float startPos,
     customLengthSpin->setRange(1.0, 50.0);
     customLengthSpin->setValue(20.0);
     mainLay->addRow(tr("Custom length:"), customLengthSpin);
-
-    invertTrainCB = new QCheckBox(tr("Invert Train"));
-    mainLay->addRow(invertTrainCB);
 
     QDialogButtonBox *butBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
                                                     Qt::Horizontal);
@@ -137,7 +143,7 @@ AddTrainDialog::AddTrainDialog(size_t segmentIndex, const float startPos,
         mVehiclesListModel->removeVehicle(row);
     });
 
-    setMinimumSize(450, 300);
+    setMinimumSize(450, 500);
     setWindowTitle(tr("Add Train"));
 
     std::string baseName = "treno_";
@@ -157,10 +163,16 @@ void AddTrainDialog::setMode(Mode newMode)
     {
         if(trainCombo->currentIndex() >= 0)
         {
+            // Set custom train to pre-made train
             auto train = mTrainTypesListModel->getTrainAt(trainCombo->currentIndex());
             if(!train.vehicles.isEmpty())
                 mVehiclesListModel->setVehicles(train.vehicles);
         }
+    }
+    else if(mode == Mode::CustomVehicle && newMode == Mode::CustomTrain)
+    {
+        // Clear custom train
+        mVehiclesListModel->setVehicles({});
     }
 
     mode = newMode;
@@ -251,11 +263,23 @@ void AddTrainDialog::done(int result)
         if(invertTrainCB->isChecked())
             invert = !invert;
 
+        Simulator::TrainPlacement placement = Simulator::TrainPlacement(placementCombo->currentData().toInt());
+        if(!mSegmentInverted)
+        {
+            // Swap placement
+            if(placement == Simulator::TrainPlacement::PlaceStart)
+                placement = Simulator::TrainPlacement::PlaceEnd;
+            else if(placement == Simulator::TrainPlacement::PlaceEnd)
+                placement = Simulator::TrainPlacement::PlaceStart;
+        }
+
+        std::lock_guard<std::recursive_mutex> lock(mTrainsModel->simulator()->stateMutex());
+
         QString errStr;
         if(!mTrainsModel->addTrain(mTrainEdit->text(),
                                    vehicles,
                                    mSegmentIndex, mStartPos,
-                                   !invert,
+                                   !invert, placement,
                                    &errStr))
         {
             for(const auto &item : vehicles)

@@ -3332,7 +3332,8 @@ Simulator::StaticData Simulator::load(const nlohmann::json& world, StateData& st
 }
 
 bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, uint16_t addr,
-                         const std::vector<Train::VehicleItem> &vehicles, size_t segmentIndex, size_t &idxOut, const float startPos)
+                         const std::vector<Train::VehicleItem> &vehicles, size_t segmentIndex,
+                         size_t &idxOut, float startPos, TrainPlacement placement)
 {
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
@@ -3359,7 +3360,6 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
     return false;
 
   float segmentLength = 0.0f;
-  float trainCenterPos = 0.0f;
 
   {
     const auto& segment = staticData.trackSegments[segmentIndex];
@@ -3367,9 +3367,8 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
       return false;
     segmentLength = getSegmentLength(segment, m_stateData);
 
-    trainCenterPos = startPos;
-    if(trainCenterPos < 0.0f || trainCenterPos >= segmentLength)
-      trainCenterPos = segmentLength / 2.0;
+    if(startPos < 0.0f || startPos >= segmentLength)
+      startPos = segmentLength / 2.0;
   }
 
   const float placingMargin = std::max(0.1, staticData.trainCouplingLength / 2.0);
@@ -3446,22 +3445,61 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
     }
   }
 
-  const float totalAvaliableLength = segmentLength + extraLength[0] + extraLength[1];
+  // Extra length is calculated from adjacent segment start
+  // Convert it to distance from startPos
+  extraLength[0] += startPos;
+  extraLength[1] += segmentLength - startPos;
+
+  // Now check if there are vehicles backwards
+  float otherVehicleDistance = 0.0f;
+  Vehicle *otherVehicle = getVehicleNear(segmentIndex, startPos, train->length + placingMargin,
+                                         false, true, &otherVehicleDistance);
+  if(otherVehicle)
+  {
+    otherVehicleDistance -= placingMargin;
+    if(otherVehicleDistance < extraLength[0])
+      extraLength[0] = otherVehicleDistance;
+  }
+
+  // And check if there are vehicles forward
+  otherVehicle = getVehicleNear(segmentIndex, startPos, train->length + placingMargin,
+                                         true, false, &otherVehicleDistance);
+  if(otherVehicle)
+  {
+    otherVehicleDistance -= placingMargin;
+    if(otherVehicleDistance < extraLength[1])
+      extraLength[1] = otherVehicleDistance;
+  }
+
+  const float totalAvaliableLength = extraLength[0] + extraLength[1];
   if(totalAvaliableLength < (train->length + 2 * placingMargin))
     return false;
 
-  float trainStartPos = trainCenterPos - train->length / 2.0;
-  if(trainStartPos < 0.0 && (trainStartPos + extraLength[0]) <= 0.0)
+  float trainStartPos = 0.0f;
+  switch (placement)
   {
-    trainStartPos = -extraLength[0] + placingMargin;
-    trainCenterPos = trainStartPos + train->length / 2.0;
+  case TrainPlacement::PlaceCenter:
+    trainStartPos = startPos - train->length / 2.0 - placingMargin;
+    break;
+  case TrainPlacement::PlaceStart:
+    trainStartPos = startPos - train->length - placingMargin;
+    break;
+  case TrainPlacement::PlaceEnd:
+    trainStartPos = startPos + placingMargin;
+    break;
+  default:
+    break;
+  }
+
+  if(trainStartPos < (startPos - extraLength[0]))
+  {
+    trainStartPos = startPos - extraLength[0] + placingMargin;
   }
 
   float trainEndPos = trainStartPos + train->length;
-  if(trainEndPos >= segmentLength && (trainEndPos - segmentLength) > extraLength[1])
+  if(trainEndPos >= (startPos + extraLength[1]))
   {
-    trainEndPos = segmentLength + extraLength[1] - placingMargin;
-    trainCenterPos = trainEndPos - train->length / 2.0;
+    trainEndPos = startPos + extraLength[1] - placingMargin;
     trainStartPos = trainEndPos - train->length;
   }
 
@@ -4026,7 +4064,13 @@ Simulator::Vehicle *Simulator::getVehicleNearHelper(size_t segmentIdx, float pos
       if(posA <= pos && pos <= posB)
         return vehicle;
 
-      float distance = std::min(std::abs(posA - pos), std::abs(posB - pos));
+      if(!canGoBackwards && posA < pos && posB < pos)
+        continue;
+
+      if(!canGoForward && posA > pos && posB > pos)
+        continue;
+
+      const float distance = std::min(std::abs(posA - pos), std::abs(posB - pos));
       if(distance < maxDistance && (!bestVehicle || distance < bestDistance))
       {
         bestVehicle = vehicle;
@@ -4129,7 +4173,10 @@ Simulator::Vehicle *Simulator::getVehicleNearHelper(size_t segmentIdx, float pos
   return bestVehicle;
 }
 
-Simulator::Vehicle *Simulator::getVehicleNear(size_t segmentIdx, float pos, float maxDistance)
+Simulator::Vehicle *Simulator::getVehicleNear(size_t segmentIdx,
+                                              float pos, float maxDistance,
+                                              bool canGoForward, bool canGoBackwards,
+                                              float *outDistance)
 {
   if(segmentIdx == invalidIndex)
     return nullptr;
@@ -4137,9 +4184,13 @@ Simulator::Vehicle *Simulator::getVehicleNear(size_t segmentIdx, float pos, floa
   Vehicle *bestVehicle = nullptr;
   float bestDistance = 0.0;
 
-  bestVehicle = getVehicleNearHelper(segmentIdx, pos, maxDistance, true, true, bestVehicle, bestDistance);
+  bestVehicle = getVehicleNearHelper(segmentIdx, pos, maxDistance, canGoForward, canGoBackwards, bestVehicle, bestDistance);
   if(bestVehicle && bestDistance == 0.0)
+  {
+    if(outDistance)
+      *outDistance = bestDistance;
     return bestVehicle;
+  }
 
   const TrackSegment &segment = staticData.trackSegments.at(segmentIdx);
   const float segLength = getSegmentLength(segment, m_stateData);
@@ -4183,29 +4234,41 @@ Simulator::Vehicle *Simulator::getVehicleNear(size_t segmentIdx, float pos, floa
         originalPos  = nextSegmentLength - originalPos;
       }
 
-      bestVehicle = getVehicleNearHelper(nextSegIdx, originalPos, maxDistance, goForward, !goForward, bestVehicle, bestDistance);
-      if(bestVehicle && bestDistance == 0.0)
-        return;
+      auto otherVehicle = getVehicleNearHelper(nextSegIdx, originalPos, maxDistance, goForward, !goForward, bestVehicle, bestDistance);
+      if(otherVehicle)
+      {
+        bestVehicle = otherVehicle;
+        if(bestDistance == 0.0)
+          return;
+      }
     }
   };
 
-  if((pos - maxDistance) < 0)
+  if(canGoBackwards && (pos - maxDistance) < 0)
   {
     helper(false, segmentIdx, pos, pos - maxDistance);
     if(bestVehicle && bestDistance == 0.0)
+    {
+      if(outDistance)
+        *outDistance = bestDistance;
       return bestVehicle;
+    }
   }
 
-  if((pos + maxDistance) > segLength)
+  if(canGoForward && (pos + maxDistance) > segLength)
   {
     helper(true, segmentIdx, pos, pos + maxDistance);
     if(bestVehicle && bestDistance == 0.0)
+    {
+      if(outDistance)
+        *outDistance = bestDistance;
       return bestVehicle;
+    }
   }
-
+  if(bestVehicle && outDistance)
+    *outDistance = bestDistance;
   return bestVehicle;
 }
-
 
 bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const bool fwd, size_t &idxOut)
 {
@@ -4293,7 +4356,7 @@ bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const b
   return true;
 }
 
-bool Simulator::coupleTrain(Train *train, bool fwd)
+bool Simulator::coupleTrain(Train *train, bool fwd, size_t& removedTrainIdxOut)
 {
   if(!train->state.isManualAndStopped() || train->vehicles.empty())
     return false; // Train must be Manual and stopped
@@ -4488,7 +4551,10 @@ bool Simulator::coupleTrain(Train *train, bool fwd)
     train->vehicles.insert(train->vehicles.end(), vehiclesToAdd.begin(), vehiclesToAdd.end());
 
   if(trainToRemove)
+  {
+    removedTrainIdxOut = getTrainIndex(trainToRemove);
     removeTrain(trainToRemove->name, false);
+  }
 
   if(trainSetupCB)
   {
