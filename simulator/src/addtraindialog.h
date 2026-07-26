@@ -9,6 +9,7 @@ class QLineEdit;
 class QDoubleSpinBox;
 class QComboBox;
 class QTableView;
+class QCheckBox;
 
 class TrainsModel;
 class VehicleTypesModel;
@@ -25,6 +26,7 @@ public:
                    TrainsModel *trainsModel,
                    VehicleTypesModel *vehiclesModel,
                    TrainTypeListModel *trainTypesModel,
+                   bool segmentInverted,
                    QWidget *parent = nullptr);
 
     enum Mode
@@ -56,6 +58,8 @@ private:
 
     QDoubleSpinBox *customLengthSpin;
 
+    QCheckBox *invertTrainCB;
+
     TrainsModel *mTrainsModel = nullptr;
     VehicleTypesModel *mVehiclesModel = nullptr;
     TrainVehicleListModel *mVehiclesListModel = nullptr;
@@ -64,6 +68,7 @@ private:
     Mode mode = Mode::CustomVehicle;
     size_t mSegmentIndex = 0;
     float mStartPos = 0.0f;
+    bool mSegmentInverted = false;
 };
 
 #endif // ADDTRAINDIALOG_H

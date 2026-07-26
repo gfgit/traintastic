@@ -6,6 +6,7 @@
 #include <QComboBox>
 #include <QTableView>
 #include <QPushButton>
+#include <QCheckBox>
 
 #include <QFormLayout>
 #include <QVBoxLayout>
@@ -24,6 +25,7 @@ AddTrainDialog::AddTrainDialog(size_t segmentIndex, const float startPos,
                                TrainsModel *trainsModel,
                                VehicleTypesModel *vehiclesModel,
                                TrainTypeListModel *trainTypesModel,
+                               bool segmentInverted,
                                QWidget *parent)
     : QDialog{parent}
     , mTrainsModel(trainsModel)
@@ -31,6 +33,7 @@ AddTrainDialog::AddTrainDialog(size_t segmentIndex, const float startPos,
     , mTrainTypesListModel(trainTypesModel)
     , mSegmentIndex(segmentIndex)
     , mStartPos(startPos)
+    , mSegmentInverted(segmentInverted)
 {
     mVehiclesListModel = new TrainVehicleListModel(mVehiclesModel, this);
 
@@ -81,6 +84,9 @@ AddTrainDialog::AddTrainDialog(size_t segmentIndex, const float startPos,
     customLengthSpin->setRange(1.0, 50.0);
     customLengthSpin->setValue(20.0);
     mainLay->addRow(tr("Custom length:"), customLengthSpin);
+
+    invertTrainCB = new QCheckBox(tr("Invert Train"));
+    mainLay->addRow(invertTrainCB);
 
     QDialogButtonBox *butBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
                                                     Qt::Horizontal);
@@ -213,6 +219,20 @@ std::vector<Simulator::Train::VehicleItem> AddTrainDialog::createTrain()
         result.push_back(item);
     }
 
+    bool invert = mSegmentInverted;
+    if(invertTrainCB->isChecked())
+        invert = !invert;
+
+    if(!invert)
+    {
+        // !invert, make first element go to the right
+        std::reverse(result.begin(), result.end());
+        for(auto &vehicle : result)
+        {
+            vehicle.reversed = !vehicle.reversed;
+        }
+    }
+
     return result;
 }
 
@@ -227,10 +247,15 @@ void AddTrainDialog::done(int result)
             return;
         }
 
+        bool invert = mSegmentInverted;
+        if(invertTrainCB->isChecked())
+            invert = !invert;
+
         QString errStr;
         if(!mTrainsModel->addTrain(mTrainEdit->text(),
                                    vehicles,
                                    mSegmentIndex, mStartPos,
+                                   !invert,
                                    &errStr))
         {
             for(const auto &item : vehicles)

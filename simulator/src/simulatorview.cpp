@@ -2134,20 +2134,7 @@ void SimulatorView::keyPressEvent(QKeyEvent* e)
         bool dir = (e->key() == Qt::Key_Left);
         std::pair<Simulator::Point, Simulator::Point> extents = m_simulator->getTrainExtents(train);
 
-        QTransform trasf;
-        trasf.rotate(m_rotation);
-        const std::pair<QPointF, QPointF> mappedExtents = {trasf.map(QPointF{extents.first.x, extents.first.y}),
-                                                           trasf.map(QPointF{extents.second.x, extents.second.y})};
-
-        bool inverted = false;
-        if(qAbs(mappedExtents.first.x() - mappedExtents.second.x()) < 10 && qAbs(mappedExtents.first.y() - mappedExtents.second.y()) >= 10)
-        {
-          if(mappedExtents.first.y() < mappedExtents.second.y())
-            inverted = true;
-        }
-        else if(mappedExtents.first.x() < mappedExtents.second.x())
-          inverted = true;
-
+        const bool inverted = isPointPairInvertedInView(extents.first, extents.second);
         if(inverted)
           dir = !dir;
         m_simulator->setTrainDirection(train, dir);
@@ -2509,7 +2496,10 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
       update();
     }
 
-    showAddTrainDialog(idx, point);
+    const auto &segment = m_simulator->staticData.trackSegments.at(idx);
+    const bool segmentInverted = isPointPairInvertedInView(segment.points[0], segment.points[1]);
+
+    showAddTrainDialog(idx, point, segmentInverted);
   }
   else if(result == remTrain && foundTrain)
   {
@@ -2612,6 +2602,25 @@ void SimulatorView::setTrainSpeedFactor(float val)
     return;
 
   m_simulator->setTrainSpeedFactor(val);
+}
+
+bool SimulatorView::isPointPairInvertedInView(const Simulator::Point &a, const Simulator::Point &b) const
+{
+  QTransform trasf;
+  trasf.rotate(m_rotation);
+  const std::pair<QPointF, QPointF> mappedExtents = {trasf.map(QPointF{a.x, a.y}),
+                                                     trasf.map(QPointF{b.x, b.y})};
+
+  bool inverted = false;
+  if(qAbs(mappedExtents.first.x() - mappedExtents.second.x()) < 10 && qAbs(mappedExtents.first.y() - mappedExtents.second.y()) >= 10)
+  {
+    if(mappedExtents.first.y() < mappedExtents.second.y())
+      inverted = true;
+  }
+  else if(mappedExtents.first.x() < mappedExtents.second.x())
+    inverted = true;
+
+  return inverted;
 }
 
 bool SimulatorView::thinTracks() const
@@ -2860,7 +2869,7 @@ nlohmann::json SimulatorView::copySegmentData(size_t segmentIdx) const
   return obj;
 }
 
-void SimulatorView::showAddTrainDialog(size_t segmentIndex, const Simulator::Point& point)
+void SimulatorView::showAddTrainDialog(size_t segmentIndex, const Simulator::Point& point, bool segmentInverted)
 {
   if(segmentIndex == Simulator::invalidIndex || segmentIndex >= m_simulator->staticData.trackSegments.size())
     return;
@@ -2870,7 +2879,8 @@ void SimulatorView::showAddTrainDialog(size_t segmentIndex, const Simulator::Poi
   const QString segName = QString::fromStdString(segment.m_id);
 
   QPointer<AddTrainDialog> dlg = new AddTrainDialog(segmentIndex, startPos, segName,
-                                                    mTrainsModel, mVehicleTypesModel, mTrainTypesModel, this);
+                                                    mTrainsModel, mVehicleTypesModel, mTrainTypesModel,
+                                                    segmentInverted, this);
   dlg->exec();
   delete dlg;
 }

@@ -113,6 +113,8 @@ public:
     return mTrainTypesModel;
   }
 
+  bool isPointPairInvertedInView(const Simulator::Point& a, const Simulator::Point &b) const;
+
 signals:
   void tickActiveChanged(float value);
   void powerOnChanged(bool value);
@@ -214,7 +216,7 @@ private:
     segmentHoverTimer.stop();
   }
 
-  void showAddTrainDialog(size_t segmentIndex, const Simulator::Point &point);
+  void showAddTrainDialog(size_t segmentIndex, const Simulator::Point &point, bool segmentInverted);
 
 private slots:
   void tick();

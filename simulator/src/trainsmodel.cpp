@@ -72,7 +72,7 @@ QVariant TrainsModel::data(const QModelIndex &idx, int role) const
 
 bool TrainsModel::addTrain(const QString &name,
                            const std::vector<Simulator::Train::VehicleItem> &vehicles,
-                           size_t segmentIdx, const float startPos, QString *errOut)
+                           size_t segmentIdx, const float startPos, bool invert, QString *errOut)
 {
     if(!mSimulator)
         return false;
@@ -104,6 +104,9 @@ bool TrainsModel::addTrain(const QString &name,
         *errOut = tr("Train is too long");
         return false;
     }
+
+    if(invert)
+        mSimulator->setTrainDirection(mSimulator->getTrainAt(trainIdx), true);
 
     beginResetModel();
     mTrains.insert(name, Train{name, 0.0});
