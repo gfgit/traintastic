@@ -1892,8 +1892,8 @@ void SimulatorView::drawTrains(QPainter *painter)
       const Simulator::Train::VehicleItem trainHead = train->getHead();
       const Simulator::Train::VehicleItem trainTail = train->getTail();
 
-      const QPointF frontPt(-(length + trainCouplingLength) / 2.0, 0);
-      const QPointF backPt((length + trainCouplingLength) / 2.0,   0);
+      const QPointF frontPt((length + trainCouplingLength) / 2.0, 0);
+      const QPointF backPt(-(length + trainCouplingLength) / 2.0,   0);
 
       if(train->isPowered && train->isHeadOrTail(vehicle))
       {
@@ -1904,7 +1904,7 @@ void SimulatorView::drawTrains(QPainter *painter)
         // If train is composed of only one vehicle, it's both head and tail!
         if(trainHead.vehicle == vehicle)
         {
-          lightRect.moveCenter(!trainHead.reversed ? backPt : frontPt);
+          lightRect.moveCenter(trainHead.reversed ? backPt : frontPt);
           const bool forwardLight = !train->state.reverse;
           painter->setBrush(forwardLight ? frontLightBrush : rearLightBrush);
           painter->drawEllipse(lightRect);
@@ -1912,7 +1912,7 @@ void SimulatorView::drawTrains(QPainter *painter)
 
         if(trainTail.vehicle == vehicle)
         {
-          lightRect.moveCenter(trainTail.reversed ? backPt : frontPt);
+          lightRect.moveCenter(trainTail.reversed ? frontPt : backPt);
           const bool forwardLight = train->state.reverse;
           painter->setBrush(forwardLight ? frontLightBrush : rearLightBrush);
           painter->drawEllipse(lightRect);
@@ -1923,17 +1923,22 @@ void SimulatorView::drawTrains(QPainter *painter)
       {
         painter->setPen(couplingPen);
         painter->setBrush(Qt::NoBrush);
-        if(trainHead.vehicle != vehicle)
+
+        if(trainHead.vehicle != vehicle && trainTail.vehicle != vehicle)
         {
-          // Not head, draw front coupling
-          painter->drawLine(QLineF(QPointF(0.0, 0.0),
-                                   !trainTail.reversed ? backPt : frontPt));
+          // Neither head nor tail, draw front and rear coupling
+          painter->drawLine(QLineF(QPointF(0.0, 0.0), frontPt));
+          painter->drawLine(QLineF(QPointF(0.0, 0.0), backPt));
         }
-        if(trainTail.vehicle != vehicle)
+        else if(trainHead.vehicle == vehicle)
         {
-          // Not tail, draw rear coupling
-          painter->drawLine(QLineF(QPointF(0.0, 0.0),
-                                   !trainHead.reversed ? frontPt : backPt));
+          // Train head, draw rear coupling
+          painter->drawLine(QLineF(QPointF(0.0, 0.0), trainHead.reversed ? frontPt : backPt));
+        }
+        else if(trainTail.vehicle == vehicle)
+        {
+          // Train tail, draw front coupling
+          painter->drawLine(QLineF(QPointF(0.0, 0.0), trainTail.reversed ? backPt : frontPt));
         }
       }
     }
@@ -2441,11 +2446,13 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
   copySegData->setEnabled(!m_stateData.powerOn);
   copySegData->setVisible(!m_stateData.powerOn);
 
-  QAction *addTrain = m->addAction(tr("Add Train"));
-  addTrain->setVisible(!foundTrain);
-
+  // Add a disabled action with train name when found
+  // We could add a section instead but in Gtk+ environments it does not work well
   if(foundTrain)
-    m->addSection(trainName);
+    m->addAction(trainName)->setDisabled(true);
+
+  QAction *addTrain = m->addAction(tr("Add Train"));
+
 
   QAction *remTrain = m->addAction(tr("Remove Train"));
   remTrain->setVisible(foundTrain);
