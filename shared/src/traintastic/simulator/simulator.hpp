@@ -407,6 +407,8 @@ public:
 
   struct Spawn
   {
+    std::vector<size_t> allowList, blackList;
+
     uint16_t address = invalidAddress;
     size_t ownerConnectionId = invalidIndex;
     size_t segmentIndex = invalidIndex;
@@ -414,6 +416,7 @@ public:
     size_t maxWagons = 20;
     float wagonLength = 20.0f;
     float defaultSpeedKmH = 0.0f;
+    float posInSegment = 0.0f;
     bool forward = true;
 
     enum class State
@@ -711,12 +714,12 @@ private:
   bool isStraight(const TrackSegment& segment);
   bool isCurve(const TrackSegment& segment, size_t& curveIndex);
 
-  static StaticData load(const nlohmann::json& world, StateData& stateData);
+  static StaticData load(const nlohmann::json& world, StateData& stateData, TrainTypeInterface *iface);
   static void loadTrackplan(const nlohmann::json &world,
-                            StaticData &data, StateData &stateData);
+                            StaticData &data, StateData &stateData, TrainTypeInterface *iface);
   static void loadTrackObjects(const nlohmann::json &track,
                                StaticData &data, StateData &stateData,
-                               TrackSegment &segment);
+                               TrackSegment &segment, TrainTypeInterface *iface);
 
   void loadTrains(const nlohmann::json& world);
 

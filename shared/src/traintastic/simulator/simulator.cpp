@@ -377,7 +377,7 @@ void clearTrainSignalCache(Simulator::StateData &data, Simulator::Train *train, 
 }
 
 Simulator::Simulator(const nlohmann::json& world, TrainTypeInterface *iface)
-  : staticData(load(world, m_stateData))
+  : staticData(load(world, m_stateData, iface))
   , m_tickTimer{m_ioContext}
   , m_handShakeTimer{m_ioContext}
   , m_acceptor{m_ioContext}
@@ -1185,8 +1185,12 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
                     vehicles.front().reversed = !vehicles.front().reversed;
                 }
 
-                std::uniform_int_distribution<size_t> invertTrain(0, 1);
-                if(reversible && invertTrain(rng) == 1)
+                std::uniform_int_distribution<size_t> invertTrain(0, 10);
+                bool shouldInvert = reversible && invertTrain(rng) > 5;
+                if(!s->forward)
+                  shouldInvert = !shouldInvert;
+
+                if(shouldInvert)
                 {
                   std::reverse(vehicles.begin(), vehicles.end());
                   for(auto &vehicle : vehicles)
@@ -1217,9 +1221,13 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
               }
             }
 
+            TrainPlacement placement = TrainPlacement::PlaceEnd;
+            if(!s->forward)
+              placement = TrainPlacement::PlaceStart;
+
             size_t unusedTrainIdx = 0;
             if(addTrain(baseName + std::to_string(count), DecoderProtocol::DCCLong, 3,
-                        vehicles, s->segmentIndex, unusedTrainIdx))
+                        vehicles, s->segmentIndex, unusedTrainIdx, s->posInSegment, placement))
             {
               // DONE!
               Train *train = m_stateData.trains.at(trainName);
@@ -2445,7 +2453,8 @@ bool Simulator::isCurve(const TrackSegment& segment, size_t& curveIndex)
   return false;
 }
 
-void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, StateData &stateData, TrackSegment &segment)
+void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, StateData &stateData,
+                                 TrackSegment &segment, TrainTypeInterface *iface)
 {
     // Objects:
     if(auto trackObjects = track.find("objects"); trackObjects != track.end() && trackObjects->is_array())
@@ -2702,6 +2711,13 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                   spawn->maxWagons = item.value("max_wagons", spawn->maxWagons);
                   spawn->wagonLength = item.value("wagons_length", spawn->wagonLength);
                   spawn->defaultSpeedKmH = item.value("speed", spawn->defaultSpeedKmH);
+
+                  if(auto allowList = item.find("allow_list"); allowList != item.end() && allowList->is_array())
+                    spawn->allowList = iface->convertTypeList(*allowList);
+
+                  if(auto blackList = item.find("black_list"); blackList != item.end() && blackList->is_array())
+                    spawn->blackList = iface->convertTypeList(*blackList);
+
                   stateData.spawns.insert({spawn->address, spawn});
 
                   spawn->state = Spawn::State::Inactive;
@@ -2734,6 +2750,7 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                   // Post init
                   Spawn *spawn = stateData.spawns.at(trackObj.sensorIndex);
                   spawn->forward = trackObj.allowedDirection == TrackSegment::Object::AllowedDirections::Forward;
+                  spawn->posInSegment = trackObj.position;
                 }
 
                 segment.objects.push_back(trackObj);
@@ -2749,7 +2766,7 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
     }
 }
 
-void Simulator::loadTrackplan(const nlohmann::json& world, StaticData &data, StateData& stateData)
+void Simulator::loadTrackplan(const nlohmann::json& world, StaticData &data, StateData& stateData, TrainTypeInterface *iface)
 {
     if(auto trackPlan = world.find("trackplan"); trackPlan != world.end() && trackPlan->is_array())
     {
@@ -3143,7 +3160,7 @@ void Simulator::loadTrackplan(const nlohmann::json& world, StaticData &data, Sta
                   segment.sensor.index = it->second;
             }
 
-            loadTrackObjects(obj, data, stateData, segment);
+            loadTrackObjects(obj, data, stateData, segment, iface);
 
             if(fromSegmentIndex != invalidIndex)
             {
@@ -3232,7 +3249,7 @@ void Simulator::loadTrackplan(const nlohmann::json& world, StaticData &data, Sta
     }
 }
 
-Simulator::StaticData Simulator::load(const nlohmann::json& world, StateData& stateData)
+Simulator::StaticData Simulator::load(const nlohmann::json& world, StateData& stateData, TrainTypeInterface *iface)
 {
   StaticData data;
 
@@ -3248,7 +3265,7 @@ Simulator::StaticData Simulator::load(const nlohmann::json& world, StateData& st
   data.defaultCenterPos.y = world.value("default_center_y", data.defaultCenterPos.y);
   data.defaultViewScale = world.value("default_zoom", data.defaultViewScale);
 
-  loadTrackplan(world, data, stateData);
+  loadTrackplan(world, data, stateData, iface);
 
   if(auto vehicles = world.find("vehicles"); vehicles != world.end() && vehicles->is_array())
   {

@@ -74,7 +74,7 @@ void TrainTypeListModel::loadTrainTypes(const nlohmann::json &trains)
       continue;
 
     item.reversible = train.value<bool>("reversible", item.reversible);
-    item.locomotiveReversible = train.value<size_t>("reversible", item.locomotiveReversible);
+    item.locomotiveReversible = train.value<size_t>("loco_reversible", item.locomotiveReversible);
     if(item.locomotiveReversible > 2)
       item.locomotiveReversible = 2;
 
