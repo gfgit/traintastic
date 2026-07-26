@@ -3575,6 +3575,9 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
   if(trainSetupCB)
   {
     trainSetupCB(train.get());
+
+    if(!train->isPowered)
+      train->state.mode = TrainState::Mode::Manual;
   }
 
   auto pair = m_stateData.trains.insert({train->name, train.release()});
