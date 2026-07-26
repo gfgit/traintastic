@@ -11,8 +11,9 @@ class QComboBox;
 class QTableView;
 
 class TrainsModel;
-class VehiclesModel;
-class VehicleListModel;
+class VehicleTypesModel;
+class TrainTypeListModel;
+class TrainVehicleListModel;
 
 class QFormLayout;
 
@@ -21,7 +22,9 @@ class AddTrainDialog : public QDialog
     Q_OBJECT
 public:
     AddTrainDialog(size_t segmentIndex, const float startPos, const QString &segName,
-                   TrainsModel *trainsModel, VehiclesModel *vehiclesModel,
+                   TrainsModel *trainsModel,
+                   VehicleTypesModel *vehiclesModel,
+                   TrainTypeListModel *trainTypesModel,
                    QWidget *parent = nullptr);
 
     enum Mode
@@ -32,8 +35,7 @@ public:
     };
 
 private:
-    void setMode(Mode mode);
-
+    void setMode(Mode newMode);
 
     std::vector<Simulator::Train::VehicleItem> createTrain();
 
@@ -55,8 +57,11 @@ private:
     QDoubleSpinBox *customLengthSpin;
 
     TrainsModel *mTrainsModel = nullptr;
-    VehiclesModel *mVehiclesModel = nullptr;
-    VehicleListModel *mVehiclesListModel = nullptr;
+    VehicleTypesModel *mVehiclesModel = nullptr;
+    TrainVehicleListModel *mVehiclesListModel = nullptr;
+    TrainTypeListModel *mTrainTypesListModel = nullptr;
+
+    Mode mode = Mode::CustomVehicle;
     size_t mSegmentIndex = 0;
     float mStartPos = 0.0f;
 };

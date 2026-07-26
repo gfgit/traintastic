@@ -15,20 +15,24 @@
 #include <QMessageBox>
 
 #include "trainsmodel.h"
-#include "vehiclelistmodel.h"
+#include "trainvehiclelistmodel.h"
 #include "vehicleslistdelegate.h"
+#include "traintypelistmodel.h"
 
 AddTrainDialog::AddTrainDialog(size_t segmentIndex, const float startPos,
                                const QString& segName,
-                               TrainsModel *trainsModel, VehiclesModel *vehiclesModel,
+                               TrainsModel *trainsModel,
+                               VehicleTypesModel *vehiclesModel,
+                               TrainTypeListModel *trainTypesModel,
                                QWidget *parent)
     : QDialog{parent}
     , mTrainsModel(trainsModel)
     , mVehiclesModel(vehiclesModel)
+    , mTrainTypesListModel(trainTypesModel)
     , mSegmentIndex(segmentIndex)
     , mStartPos(startPos)
 {
-    mVehiclesListModel = new VehicleListModel(mVehiclesModel, this);
+    mVehiclesListModel = new TrainVehicleListModel(mVehiclesModel, this);
 
     mainLay = new QFormLayout(this);
 
@@ -45,6 +49,8 @@ AddTrainDialog::AddTrainDialog(size_t segmentIndex, const float startPos,
     mainLay->addRow(tr("Mode:"), modeCombo);
 
     trainCombo = new QComboBox;
+    trainCombo->setModel(mTrainTypesListModel);
+    trainCombo->setCurrentIndex(0);
     mainLay->addRow(tr("Train:"), trainCombo);
 
     customTrainWidget = new QWidget;
@@ -129,8 +135,20 @@ AddTrainDialog::AddTrainDialog(size_t segmentIndex, const float startPos,
     setWindowTitle(tr("Add Train"));
 }
 
-void AddTrainDialog::setMode(Mode mode)
+void AddTrainDialog::setMode(Mode newMode)
 {
+    if(mode == Mode::PreMadeTrain && newMode == Mode::CustomTrain)
+    {
+        if(trainCombo->currentIndex() >= 0)
+        {
+            auto train = mTrainTypesListModel->getTrainAt(trainCombo->currentIndex());
+            if(!train.vehicles.isEmpty())
+                mVehiclesListModel->setVehicles(train.vehicles);
+        }
+    }
+
+    mode = newMode;
+
     mainLay->setRowVisible(trainCombo, mode == Mode::PreMadeTrain);
     mainLay->setRowVisible(customTrainWidget, mode == Mode::CustomTrain);
     mainLay->setRowVisible(customLengthSpin, mode == Mode::CustomVehicle);
@@ -140,7 +158,7 @@ void AddTrainDialog::setMode(Mode mode)
 
 std::vector<Simulator::Train::VehicleItem> AddTrainDialog::createTrain()
 {
-    if(modeCombo->currentIndex() == Mode::CustomVehicle)
+    if(mode == Mode::CustomVehicle)
     {
         Simulator::Train::VehicleItem item;
         item.vehicle = mTrainsModel->simulator()->addVehicle(mTrainEdit->text().toStdString(),
@@ -149,11 +167,18 @@ std::vector<Simulator::Train::VehicleItem> AddTrainDialog::createTrain()
         return {item};
     }
 
-    QVector<VehicleListModel::Vehicle> vehicles = mVehiclesListModel->vehicles();
+    QVector<TrainVehicleListModel::Vehicle> vehicles;
 
-    if(modeCombo->currentIndex() == Mode::PreMadeTrain)
+    if(mode == Mode::PreMadeTrain)
     {
-        // TODO: fill list or also use it in table as default start
+        if(trainCombo->currentIndex() == -1)
+            return {};
+
+        vehicles = mTrainTypesListModel->getTrainAt(trainCombo->currentIndex()).vehicles;
+    }
+    else
+    {
+        vehicles = mVehiclesListModel->vehicles();
     }
 
     std::vector<Simulator::Train::VehicleItem> result;
@@ -162,12 +187,12 @@ std::vector<Simulator::Train::VehicleItem> AddTrainDialog::createTrain()
     for(const auto &vehicle : vehicles)
     {
         Simulator::Train::VehicleItem item;
-        item.reversed = vehicle.reverse;
+        item.reversed = vehicle.reversed;
 
-        if(vehicle.vehicleTypeIndex == VehiclesModel::invalidIndex)
+        if(vehicle.vehicleTypeIndex == VehicleTypesModel::invalidIndex)
             continue;
 
-        VehiclesModel::VehicleType vehicleType = mVehiclesModel->getTypeAt(vehicle.vehicleTypeIndex);
+        VehicleTypesModel::VehicleType vehicleType = mVehiclesModel->getTypeAt(vehicle.vehicleTypeIndex);
         if(vehicleType.name.isEmpty())
             continue;
 

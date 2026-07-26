@@ -1,12 +1,12 @@
-#include "vehiclelistmodel.h"
+#include "trainvehiclelistmodel.h"
 
-VehicleListModel::VehicleListModel(VehiclesModel *vehiclesModel, QObject *parent)
+TrainVehicleListModel::TrainVehicleListModel(VehicleTypesModel *vehiclesModel, QObject *parent)
   : QAbstractTableModel(parent)
   , mVehiclesModel(vehiclesModel)
 {
 }
 
-QVariant VehicleListModel::headerData(int section, Qt::Orientation orientation, int role) const
+QVariant TrainVehicleListModel::headerData(int section, Qt::Orientation orientation, int role) const
 {
   if(orientation == Qt::Horizontal && role == Qt::DisplayRole)
   {
@@ -24,17 +24,17 @@ QVariant VehicleListModel::headerData(int section, Qt::Orientation orientation, 
   return QAbstractTableModel::headerData(section, orientation, role);
 }
 
-int VehicleListModel::rowCount(const QModelIndex &p) const
+int TrainVehicleListModel::rowCount(const QModelIndex &p) const
 {
   return p.isValid() ? 0 : mVehicles.size();
 }
 
-int VehicleListModel::columnCount(const QModelIndex &p) const
+int TrainVehicleListModel::columnCount(const QModelIndex &p) const
 {
   return p.isValid() ? 0 : NCols;
 }
 
-QVariant VehicleListModel::data(const QModelIndex &idx, int role) const
+QVariant TrainVehicleListModel::data(const QModelIndex &idx, int role) const
 {
   if (!idx.isValid() || idx.row() >= mVehicles.size() || idx.column() >= NCols)
     return QVariant();
@@ -47,14 +47,14 @@ QVariant VehicleListModel::data(const QModelIndex &idx, int role) const
   {
     if(role == Qt::DisplayRole)
     {
-      if(vehicle.vehicleTypeIndex == VehiclesModel::invalidIndex)
+      if(vehicle.vehicleTypeIndex == VehicleTypesModel::invalidIndex)
         return QString();
 
       return mVehiclesModel->getTypeAt(vehicle.vehicleTypeIndex).name;
     }
     else if(role == Qt::ToolTipRole)
     {
-      if(vehicle.vehicleTypeIndex == VehiclesModel::invalidIndex)
+      if(vehicle.vehicleTypeIndex == VehicleTypesModel::invalidIndex)
         return QString();
 
       return mVehiclesModel->data(mVehiclesModel->index(vehicle.vehicleTypeIndex, 0), Qt::ToolTipRole);
@@ -64,7 +64,7 @@ QVariant VehicleListModel::data(const QModelIndex &idx, int role) const
   case Reverse:
   {
     if(role == Qt::CheckStateRole)
-      return vehicle.reverse ? Qt::Checked : Qt::Unchecked;
+      return vehicle.reversed ? Qt::Checked : Qt::Unchecked;
     break;
   }
   default:
@@ -74,7 +74,7 @@ QVariant VehicleListModel::data(const QModelIndex &idx, int role) const
   return QVariant();
 }
 
-bool VehicleListModel::setData(const QModelIndex &idx, const QVariant &value, int role)
+bool TrainVehicleListModel::setData(const QModelIndex &idx, const QVariant &value, int role)
 {
   if (!idx.isValid() || idx.row() >= mVehicles.size() || idx.column() >= NCols)
     return false;
@@ -83,7 +83,7 @@ bool VehicleListModel::setData(const QModelIndex &idx, const QVariant &value, in
 
   if(idx.column() == Reverse)
   {
-    vehicle.reverse = value.value<Qt::CheckState>() == Qt::Checked;
+    vehicle.reversed = value.value<Qt::CheckState>() == Qt::Checked;
     emit dataChanged(idx, idx, {role});
     return true;
   }
@@ -91,7 +91,7 @@ bool VehicleListModel::setData(const QModelIndex &idx, const QVariant &value, in
   return false;
 }
 
-Qt::ItemFlags VehicleListModel::flags(const QModelIndex &idx) const
+Qt::ItemFlags TrainVehicleListModel::flags(const QModelIndex &idx) const
 {
   if (!idx.isValid() || idx.row() >= mVehicles.size() || idx.column() >= NCols)
     return Qt::NoItemFlags;
@@ -102,7 +102,7 @@ Qt::ItemFlags VehicleListModel::flags(const QModelIndex &idx) const
   return f;
 }
 
-void VehicleListModel::setVehicleAt(int row, size_t vehicleTypeIdx)
+void TrainVehicleListModel::setVehicleAt(int row, size_t vehicleTypeIdx)
 {
   if(row < 0 || row >= mVehicles.size())
     return;
@@ -113,7 +113,7 @@ void VehicleListModel::setVehicleAt(int row, size_t vehicleTypeIdx)
   emit dataChanged(index(row, 0), index(row, 0));
 }
 
-void VehicleListModel::addVehicle(int row)
+void TrainVehicleListModel::addVehicle(int row)
 {
   row = qBound(0, row, mVehicles.size()); // Allow row = size to append
 
@@ -127,7 +127,7 @@ void VehicleListModel::addVehicle(int row)
   endInsertRows();
 }
 
-void VehicleListModel::removeVehicle(int row)
+void TrainVehicleListModel::removeVehicle(int row)
 {
   row = qBound(0, row, mVehicles.size() - 1);
 
@@ -136,14 +136,14 @@ void VehicleListModel::removeVehicle(int row)
   endRemoveRows();
 }
 
-void VehicleListModel::setVehicles(const QVector<Vehicle> &newVehicles)
+void TrainVehicleListModel::setVehicles(const QVector<Vehicle> &newVehicles)
 {
   beginResetModel();
   mVehicles = newVehicles;
   endResetModel();
 }
 
-QVector<VehicleListModel::Vehicle> VehicleListModel::vehicles() const
+QVector<TrainVehicleListModel::Vehicle> TrainVehicleListModel::vehicles() const
 {
   return mVehicles;
 }

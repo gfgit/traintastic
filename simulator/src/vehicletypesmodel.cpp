@@ -1,20 +1,20 @@
-#include "vehiclesmodel.h"
+#include "vehicletypesmodel.h"
 
 #include <QFont>
 #include <QFileInfo>
 #include <QDir>
 
-VehiclesModel::VehiclesModel(QObject *parent)
+VehicleTypesModel::VehicleTypesModel(QObject *parent)
   : QAbstractListModel(parent)
 {
 }
 
-int VehiclesModel::rowCount(const QModelIndex &p) const
+int VehicleTypesModel::rowCount(const QModelIndex &p) const
 {
   return p.isValid() ? 0 : mVehicleTypes.size();
 }
 
-QVariant VehiclesModel::data(const QModelIndex &idx, int role) const
+QVariant VehicleTypesModel::data(const QModelIndex &idx, int role) const
 {
   if (!idx.isValid() || idx.row() >= mVehicleTypes.size() || idx.column() != 0)
     return QVariant();
@@ -57,7 +57,7 @@ QVariant VehiclesModel::data(const QModelIndex &idx, int role) const
   return QVariant();
 }
 
-size_t VehiclesModel::getTypeIdxByName(const QString &name) const
+size_t VehicleTypesModel::getTypeIdxByName(const QString &name) const
 {
   for(size_t i = 0; i < size_t(mVehicleTypes.size()); i++)
   {
@@ -67,7 +67,7 @@ size_t VehiclesModel::getTypeIdxByName(const QString &name) const
   return invalidIndex;
 }
 
-void VehiclesModel::loadVehicles(const QString &baseFile, const nlohmann::json &vehicles)
+void VehicleTypesModel::loadVehicles(const QString &baseFile, const nlohmann::json &vehicles)
 {
   beginResetModel();
 

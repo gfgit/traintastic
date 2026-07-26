@@ -1,11 +1,11 @@
-#ifndef VEHICLELISTMODEL_H
-#define VEHICLELISTMODEL_H
+#ifndef TRAINVEHICLELISTMODEL_H
+#define TRAINVEHICLELISTMODEL_H
 
 #include <QAbstractTableModel>
 
-#include "vehiclesmodel.h"
+#include "vehicletypesmodel.h"
 
-class VehicleListModel : public QAbstractTableModel
+class TrainVehicleListModel : public QAbstractTableModel
 {
   Q_OBJECT
 
@@ -19,11 +19,11 @@ public:
 
   struct Vehicle
   {
-    size_t vehicleTypeIndex = VehiclesModel::invalidIndex;
-    bool reverse = false;
+    size_t vehicleTypeIndex = VehicleTypesModel::invalidIndex;
+    bool reversed = false;
   };
 
-  VehicleListModel(VehiclesModel *vehiclesModel, QObject *parent = nullptr);
+  TrainVehicleListModel(VehicleTypesModel *vehiclesModel, QObject *parent = nullptr);
 
   // Header:
   QVariant headerData(int section, Qt::Orientation orientation, int role = Qt::DisplayRole) const override;
@@ -57,7 +57,7 @@ public:
 private:
   QVector<Vehicle> mVehicles;
 
-  VehiclesModel *mVehiclesModel = nullptr;
+  VehicleTypesModel *mVehiclesModel = nullptr;
 };
 
-#endif // VEHICLELISTMODEL_H
+#endif // TRAINVEHICLELISTMODEL_H

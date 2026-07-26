@@ -1,11 +1,11 @@
 #include "vehicleslistdelegate.h"
 
-#include "vehiclelistmodel.h"
-#include "vehiclesmodel.h"
+#include "trainvehiclelistmodel.h"
+#include "vehicletypesmodel.h"
 
 #include <QComboBox>
 
-VehiclesListDelegate::VehiclesListDelegate(VehiclesModel *m, QObject *parent)
+VehiclesListDelegate::VehiclesListDelegate(VehicleTypesModel *m, QObject *parent)
   : QStyledItemDelegate{parent}
   , mVehiclesModel(m)
 {
@@ -16,7 +16,7 @@ QWidget *VehiclesListDelegate::createEditor(QWidget *parent,
                                             const QStyleOptionViewItem &option,
                                             const QModelIndex &index) const
 {
-  if(index.column() == VehicleListModel::VehicleName)
+  if(index.column() == TrainVehicleListModel::VehicleName)
   {
     QComboBox *modelCombo = new QComboBox(parent);
     modelCombo->setModel(mVehiclesModel);
@@ -28,13 +28,13 @@ QWidget *VehiclesListDelegate::createEditor(QWidget *parent,
 
 void VehiclesListDelegate::setEditorData(QWidget *editor, const QModelIndex &index) const
 {
-  if(index.column() == VehicleListModel::VehicleName)
+  if(index.column() == TrainVehicleListModel::VehicleName)
   {
     QComboBox *modelCombo = static_cast<QComboBox *>(editor);
-    const VehicleListModel *m = static_cast<const VehicleListModel *>(index.model());
+    const TrainVehicleListModel *m = static_cast<const TrainVehicleListModel *>(index.model());
 
     size_t vehicleTypeIdx = m->getVehicleTypeAt(index.row());
-    if(vehicleTypeIdx == VehiclesModel::invalidIndex)
+    if(vehicleTypeIdx == VehicleTypesModel::invalidIndex)
       modelCombo->setCurrentIndex(-1);
     else
       modelCombo->setCurrentIndex(vehicleTypeIdx);
@@ -46,13 +46,13 @@ void VehiclesListDelegate::setEditorData(QWidget *editor, const QModelIndex &ind
 
 void VehiclesListDelegate::setModelData(QWidget *editor, QAbstractItemModel *model, const QModelIndex &index) const
 {
-  if(index.column() == VehicleListModel::VehicleName)
+  if(index.column() == TrainVehicleListModel::VehicleName)
   {
     QComboBox *modelCombo = static_cast<QComboBox *>(editor);
-    VehicleListModel *m = static_cast<VehicleListModel *>(model);
+    TrainVehicleListModel *m = static_cast<TrainVehicleListModel *>(model);
 
     if(modelCombo->currentIndex() == -1)
-      m->setVehicleAt(index.row(), VehiclesModel::invalidIndex);
+      m->setVehicleAt(index.row(), VehicleTypesModel::invalidIndex);
     else
       m->setVehicleAt(index.row(), modelCombo->currentIndex());
     return;

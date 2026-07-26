@@ -3,14 +3,14 @@
 
 #include <QStyledItemDelegate>
 
-class VehicleListModel;
-class VehiclesModel;
+class TrainVehicleListModel;
+class VehicleTypesModel;
 
 class VehiclesListDelegate : public QStyledItemDelegate
 {
   Q_OBJECT
 public:
-  VehiclesListDelegate(VehiclesModel *m, QObject *parent = nullptr);
+  VehiclesListDelegate(VehicleTypesModel *m, QObject *parent = nullptr);
 
   QWidget *createEditor(QWidget *parent,
                         const QStyleOptionViewItem &option,
@@ -24,7 +24,7 @@ public:
                     const QModelIndex &index) const override;
 
 private:
-  VehiclesModel *mVehiclesModel = nullptr;
+  VehicleTypesModel *mVehiclesModel = nullptr;
 };
 
 #endif // VEHICLESLISTDELEGATE_H

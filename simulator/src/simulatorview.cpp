@@ -41,7 +41,8 @@
 #include <QVector>
 
 #include "trainsmodel.h"
-#include "vehiclesmodel.h"
+#include "vehicletypesmodel.h"
+#include "traintypelistmodel.h"
 
 #include "addtraindialog.h"
 
@@ -555,7 +556,8 @@ SimulatorView::SimulatorView(QWidget* parent)
   connect(mTrainsModel, &TrainsModel::setCurrentTrain,
           this, &SimulatorView::doSetCurrentTrainIndex);
 
-  mVehicleTypesModel = new VehiclesModel(this);
+  mVehicleTypesModel = new VehicleTypesModel(this);
+  mTrainTypesModel = new TrainTypeListModel(mVehicleTypesModel, this);
 
   // Dark gray background
   QPalette p = palette();
@@ -655,9 +657,9 @@ void SimulatorView::setSimulator(std::shared_ptr<Simulator> value,
 
       for(const Simulator::Train::VehicleItem &item : train->vehicles)
       {
-        if(item.vehicle->typeIdx != VehiclesModel::invalidIndex)
+        if(item.vehicle->typeIdx != VehicleTypesModel::invalidIndex)
         {
-          const VehiclesModel::VehicleType vehicleType = mVehicleTypesModel->getTypeAt(item.vehicle->typeIdx);
+          const VehicleTypesModel::VehicleType vehicleType = mVehicleTypesModel->getTypeAt(item.vehicle->typeIdx);
           if(!vehicleType.name.isEmpty())
           {
             if(vehicleType.isPowered)
@@ -750,7 +752,10 @@ void SimulatorView::loadVehicleTypes(const QString &fileName)
       mVehicleTypesModel->loadVehicles(fileName, *vehicleTypes);
     }
 
-    // TODO: full train compositions
+    if(auto trainTypes = vehiclesJson.find("trains"); trainTypes != vehiclesJson.end() && trainTypes->is_array())
+    {
+      mTrainTypesModel->loadTrainTypes(*trainTypes);
+    }
   }
 }
 
@@ -1953,7 +1958,7 @@ void SimulatorView::drawTrains(QPainter *painter)
       painter->fillRect(vehicleRectAdj, Qt::white);
     }
 
-    if(vehicle->typeIdx == VehiclesModel::invalidIndex)
+    if(vehicle->typeIdx == VehicleTypesModel::invalidIndex)
     {
       // Draw simple rectangle
       const auto& color = colors[static_cast<size_t>(vehicle->color)];
@@ -1984,10 +1989,10 @@ void SimulatorView::drawTrains(QPainter *painter)
       }
     }
 
-    if(vehicle->typeIdx != VehiclesModel::invalidIndex)
+    if(vehicle->typeIdx != VehicleTypesModel::invalidIndex)
     {
       // Draw vehicle pixmap
-      const VehiclesModel::VehicleType vehicleType = mVehicleTypesModel->getTypeAt(vehicle->typeIdx);
+      const VehicleTypesModel::VehicleType vehicleType = mVehicleTypesModel->getTypeAt(vehicle->typeIdx);
       if(!vehicleType.mPixmap.isNull())
       {
         QRectF pxR;
@@ -2865,7 +2870,7 @@ void SimulatorView::showAddTrainDialog(size_t segmentIndex, const Simulator::Poi
   const QString segName = QString::fromStdString(segment.m_id);
 
   QPointer<AddTrainDialog> dlg = new AddTrainDialog(segmentIndex, startPos, segName,
-                                                    mTrainsModel, mVehicleTypesModel, this);
+                                                    mTrainsModel, mVehicleTypesModel, mTrainTypesModel, this);
   dlg->exec();
   delete dlg;
 }

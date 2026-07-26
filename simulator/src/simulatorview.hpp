@@ -34,7 +34,8 @@
 class QHelpEvent;
 
 class TrainsModel;
-class VehiclesModel;
+class VehicleTypesModel;
+class TrainTypeListModel;
 
 class SimulatorView
   : public QWidget
@@ -102,9 +103,14 @@ public:
   float trainSpeedFactor() const;
   void setTrainSpeedFactor(float val);
 
-  inline VehiclesModel *vehicleTypesModel() const
+  inline VehicleTypesModel *vehicleTypesModel() const
   {
     return mVehicleTypesModel;
+  }
+
+  inline TrainTypeListModel *trainTypesModel() const
+  {
+    return mTrainTypesModel;
   }
 
 signals:
@@ -162,7 +168,8 @@ private:
 
   // Trains
   TrainsModel *mTrainsModel = nullptr;
-  VehiclesModel *mVehicleTypesModel = nullptr;
+  VehicleTypesModel *mVehicleTypesModel = nullptr;
+  TrainTypeListModel *mTrainTypesModel = nullptr;
 
   // View
   QTransform m_transform;

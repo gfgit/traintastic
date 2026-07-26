@@ -1,5 +1,5 @@
-#ifndef VEHICLESMODEL_H
-#define VEHICLESMODEL_H
+#ifndef VEHICLETYPESMODEL_H
+#define VEHICLETYPESMODEL_H
 
 #include <QAbstractListModel>
 #include <QPixmap>
@@ -7,7 +7,7 @@
 
 #include <nlohmann/json.hpp>
 
-class VehiclesModel : public QAbstractListModel
+class VehicleTypesModel : public QAbstractListModel
 {
   Q_OBJECT
 
@@ -24,7 +24,7 @@ public:
   static constexpr float LengthAdjust = 2.0;
   static constexpr size_t invalidIndex = std::numeric_limits<size_t>::max();
 
-  explicit VehiclesModel(QObject *parent = nullptr);
+  explicit VehicleTypesModel(QObject *parent = nullptr);
 
   // Basic functionality:
   int rowCount(const QModelIndex &parent = QModelIndex()) const override;
@@ -44,4 +44,4 @@ private:
   QVector<VehicleType> mVehicleTypes;
 };
 
-#endif // VEHICLESMODEL_H
+#endif // VEHICLETYPESMODEL_H

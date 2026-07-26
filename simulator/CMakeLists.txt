@@ -23,14 +23,15 @@ add_executable(traintastic-simulator
   src/mainwindow.cpp
   src/simulatorview.cpp
   src/trainsmodel.cpp
-  src/vehiclesmodel.h src/vehiclesmodel.cpp
-  src/vehiclelistmodel.h src/vehiclelistmodel.cpp
+  src/vehicletypesmodel.h src/vehicletypesmodel.cpp
+  src/trainvehiclelistmodel.h src/trainvehiclelistmodel.cpp
   src/vehicleslistdelegate.h src/vehicleslistdelegate.cpp
   src/addtraindialog.h src/addtraindialog.cpp
 
   ../shared/src/traintastic/simulator/simulator.cpp
   ../shared/src/traintastic/simulator/simulatorconnection.cpp
   ../shared/src/traintastic/utils/standardpaths.cpp
+  src/traintypelistmodel.h src/traintypelistmodel.cpp
 )
 
 add_definitions(-DQT_DEPRECATED_WARNINGS)
