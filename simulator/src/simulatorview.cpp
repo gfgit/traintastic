@@ -1845,7 +1845,7 @@ void SimulatorView::drawTrains(QPainter *painter)
 
   const float trainCouplingLength = m_simulator->staticData.trainCouplingLength;
 
-  for(auto it : m_stateData.vehicles)
+  for(auto it : m_simulator->stateData().vehicles)
   {
     const Simulator::Vehicle* vehicle = it.second;
     const Simulator::Train *const train = vehicle->activeTrain;
@@ -2877,6 +2877,8 @@ void SimulatorView::showAddTrainDialog(size_t segmentIndex, const Simulator::Poi
 
 void SimulatorView::tick()
 {
+  std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
+
   m_stateDataPrevious.powerOn = m_stateData.powerOn;
   m_stateDataPrevious.trainSpeedFactor = m_stateData.trainSpeedFactor;
   m_stateData = m_simulator->stateData();
