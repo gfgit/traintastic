@@ -1163,7 +1163,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
             const std::string vehicleBaseName = trainName + ".";
 
             std::vector<Simulator::Train::VehicleItem> vehicles;
-            size_t trainTypeIdx = trainTypeInterface->getRandomTrainType({}, {});
+            size_t trainTypeIdx = trainTypeInterface->getRandomTrainType(s->allowList, s->blackList);
 
             if(trainTypeIdx != invalidIndex)
             {
