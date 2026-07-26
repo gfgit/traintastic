@@ -129,6 +129,8 @@ void TrainVehicleListModel::addVehicle(int row)
 
 void TrainVehicleListModel::removeVehicle(int row)
 {
+  if(mVehicles.isEmpty())
+    return;
   row = qBound(0, row, mVehicles.size() - 1);
 
   beginRemoveRows(QModelIndex(), row, row);
