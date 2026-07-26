@@ -264,7 +264,7 @@ void AddTrainDialog::done(int result)
             invert = !invert;
 
         Simulator::TrainPlacement placement = Simulator::TrainPlacement(placementCombo->currentData().toInt());
-        if(!mSegmentInverted)
+        if(!invert)
         {
             // Swap placement
             if(placement == Simulator::TrainPlacement::PlaceStart)
