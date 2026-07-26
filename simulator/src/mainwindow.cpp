@@ -31,6 +31,7 @@
 #include <QSpinBox>
 #include <QKeyEvent>
 #include "simulatorview.hpp"
+#include "traintypelistmodel.h"
 #include <version.hpp>
 #include <traintastic/copyright.hpp>
 #include <traintastic/utils/standardpaths.hpp>
@@ -274,15 +275,18 @@ void MainWindow::load(const QString& filename, bool zoomToDefault)
                                               nullptr,
                                               true, true);
 
-      m_view->setSimulator(std::make_shared<Simulator>(world),
-                           mLocalOnly, mDiscoverable);
-
+      // First load vehicle and train library
       QDir dir = QFileInfo(filename).absoluteDir();
       QString vehiclesFileName = QString::fromStdString(world.value<std::string>("vehicles_file", {}));
       if(!vehiclesFileName.isEmpty() && dir.exists())
         vehiclesFileName = dir.absoluteFilePath(vehiclesFileName);
 
       m_view->loadVehicleTypes(vehiclesFileName);
+
+      TrainTypeInterface *iface = m_view->trainTypesModel();
+
+      m_view->setSimulator(std::make_shared<Simulator>(world, iface),
+                           mLocalOnly, mDiscoverable);
     }
     catch(std::exception &e)
     {

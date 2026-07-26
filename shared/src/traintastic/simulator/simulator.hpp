@@ -48,6 +48,7 @@ namespace SimulatorProtocol {
 }
 
 class SimulatorConnection;
+class TrainTypeInterface;
 
 class Simulator : public std::enable_shared_from_this<Simulator>
 {
@@ -573,7 +574,7 @@ public:
   boost::signals2::signal<void()> onTick;
   boost::signals2::signal<void(bool add, size_t idx)> onTrainAddedRemoved;
 
-  explicit Simulator(const nlohmann::json& world);
+  Simulator(const nlohmann::json& world, TrainTypeInterface *iface);
   ~Simulator();
 
   static void updateView(Simulator::StaticData::View& view, Simulator::Point point);
@@ -651,9 +652,6 @@ public:
     }
   }
 
-  using TrainSetupCB = std::function<void(Train *)>;
-  inline void setTrainSetupCB(const TrainSetupCB& cb) { trainSetupCB = cb; }
-
 private:
   friend struct TrainState;
   constexpr static auto tickRate = std::chrono::milliseconds(1000 / 30);
@@ -688,7 +686,7 @@ private:
   size_t lastConnectionId = 0;
   std::list<std::shared_ptr<SimulatorConnection>> m_connections;
 
-  TrainSetupCB trainSetupCB;
+  TrainTypeInterface *trainTypeInterface = nullptr;
 
   void accept();
   void doReceive();
@@ -729,6 +727,27 @@ private:
                                            bool canGoForward, bool canGoBackwards,
                                            Vehicle *bestVehicle, float &bestDistance);
 };
+
+
+class TrainTypeInterface
+{
+public:
+  virtual ~TrainTypeInterface();
+
+  virtual std::vector<size_t> convertTypeList(const nlohmann::json &trains) = 0;
+
+  virtual size_t getMaxTypeIdx() = 0;
+
+  virtual size_t getRandomTrainType(const std::vector<size_t>& allowList,
+                                    const std::vector<size_t>& blackList) = 0;
+
+  virtual std::vector<Simulator::Train::VehicleItem> createTrainOfType(size_t typeIdx,
+                                                                       Simulator *simulator,
+                                                                       bool &canInvert, size_t &invertLoco) = 0;
+
+  virtual void setupTrainSpeedPowered(Simulator::Train *train) = 0;
+};
+
 
 inline size_t Simulator::getTrainIndex(Train *train) const
 {

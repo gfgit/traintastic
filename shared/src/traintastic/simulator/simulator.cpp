@@ -376,7 +376,7 @@ void clearTrainSignalCache(Simulator::StateData &data, Simulator::Train *train, 
   cache.turnouts.clear();
 }
 
-Simulator::Simulator(const nlohmann::json& world)
+Simulator::Simulator(const nlohmann::json& world, TrainTypeInterface *iface)
   : staticData(load(world, m_stateData))
   , m_tickTimer{m_ioContext}
   , m_handShakeTimer{m_ioContext}
@@ -385,6 +385,7 @@ Simulator::Simulator(const nlohmann::json& world)
   , m_signalBlinkStateTimer{m_ioContext}
   , m_syncSensorStateTimer{m_ioContext}
   , m_garbageCollectTimer{m_ioContext}
+  , trainTypeInterface(iface)
 {
   loadTrains(world);
 }
@@ -1161,23 +1162,59 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
             const std::string trainName = baseName + std::to_string(count);
             const std::string vehicleBaseName = trainName + ".";
 
-            std::uniform_int_distribution<size_t> dist(1, s->maxWagons);
-            size_t numWagons = dist(rng);
-
-            const auto& segment = staticData.trackSegments[s->segmentIndex];
-            const float segmentLength = getSegmentLength(segment, m_stateData);
-            const float avgLength = s->wagonLength + staticData.trainCouplingLength;
-            const size_t maxWagons = size_t(std::floor(segmentLength / avgLength));
-
-            numWagons = std::min(numWagons, maxWagons);
-
             std::vector<Simulator::Train::VehicleItem> vehicles;
-            for(size_t i = 0; i < numWagons; i++)
+            size_t trainTypeIdx = trainTypeInterface->getRandomTrainType({}, {});
+
+            if(trainTypeIdx != invalidIndex)
             {
-              Simulator::Train::VehicleItem item;
-              item.vehicle = addVehicle(vehicleBaseName + std::to_string(i), s->wagonLength, Color::Aqua);
-              item.reversed = false;
-              vehicles.push_back(item);
+              // Create composition
+              bool reversible = false;
+              size_t locoReversible = 0;
+              vehicles = trainTypeInterface->createTrainOfType(trainTypeIdx, this,
+                                                               reversible, locoReversible);
+              if(!vehicles.empty())
+              {
+                std::uniform_int_distribution<size_t> invertLoco(0, 3);
+                if(locoReversible != 0)
+                {
+                  size_t shouldInvert = invertLoco(rng);
+                  if(locoReversible == 1 && shouldInvert <= 1)
+                    shouldInvert = 0;
+
+                  if(shouldInvert >= 2)
+                    vehicles.front().reversed = !vehicles.front().reversed;
+                }
+
+                std::uniform_int_distribution<size_t> invertTrain(0, 1);
+                if(reversible && invertTrain(rng) == 1)
+                {
+                  std::reverse(vehicles.begin(), vehicles.end());
+                  for(auto &vehicle : vehicles)
+                    vehicle.reversed = !vehicle.reversed;
+                }
+              }
+            }
+
+            if(vehicles.empty())
+            {
+              // Create basic train
+              std::uniform_int_distribution<size_t> dist(1, s->maxWagons);
+              size_t numWagons = dist(rng);
+
+              const auto& segment = staticData.trackSegments[s->segmentIndex];
+              const float segmentLength = getSegmentLength(segment, m_stateData);
+              const float avgLength = s->wagonLength + staticData.trainCouplingLength;
+              const size_t maxWagons = size_t(std::floor(segmentLength / avgLength));
+
+              numWagons = std::min(numWagons, maxWagons);
+
+              for(size_t i = 0; i < numWagons; i++)
+              {
+                Simulator::Train::VehicleItem item;
+                item.vehicle = addVehicle(vehicleBaseName + std::to_string(i), s->wagonLength, Color::Aqua);
+                item.reversed = false;
+                vehicles.push_back(item);
+              }
             }
 
             size_t unusedTrainIdx = 0;
@@ -3610,9 +3647,9 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
   if(train->speedMax < 0.0001)
     train->speedMax = defaultSpeedTickRate * staticData.worldScale;
 
-  if(trainSetupCB)
+  if(trainTypeInterface)
   {
-    trainSetupCB(train.get());
+    trainTypeInterface->setupTrainSpeedPowered(train.get());
 
     if(!train->isPowered)
       train->state.mode = TrainState::Mode::Manual;
@@ -4342,10 +4379,10 @@ bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const b
     first = false;
   }
 
-  if(trainSetupCB)
+  if(trainTypeInterface)
   {
-    trainSetupCB(trainToSplit);
-    trainSetupCB(remainingTrain.get());
+    trainTypeInterface->setupTrainSpeedPowered(trainToSplit);
+    trainTypeInterface->setupTrainSpeedPowered(remainingTrain.get());
   }
 
   auto pair = m_stateData.trains.insert({remainingTrain->name, remainingTrain.release()});
@@ -4556,10 +4593,15 @@ bool Simulator::coupleTrain(Train *train, bool fwd, size_t& removedTrainIdxOut)
     removeTrain(trainToRemove->name, false);
   }
 
-  if(trainSetupCB)
+  if(trainTypeInterface)
   {
-    trainSetupCB(train);
+    trainTypeInterface->setupTrainSpeedPowered(train);
   }
 
   return true;
+}
+
+TrainTypeInterface::~TrainTypeInterface()
+{
+
 }

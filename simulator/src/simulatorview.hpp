@@ -148,7 +148,7 @@ private:
   static constexpr float zoomFactorOut = 0.9f;
 
   std::shared_ptr<Simulator> m_simulator;
-  Simulator::StateData m_stateData;
+  Simulator::StateData m_stateData; // TODO: remove
 
   struct Image
   {

@@ -648,34 +648,6 @@ void SimulatorView::setSimulator(std::shared_ptr<Simulator> value,
       // Simulator::updateView(m_simulator->staticData.view,
       //            {item.ref.origin.x - imgSize.height() * sinRotation + imgSize.width() * cosRotation, item.ref.origin.y + imgSize.height() * cosRotation + imgSize.width() * sinRotation}); // bottom right
     }
-
-    m_simulator->setTrainSetupCB([this](Simulator::Train *train)
-    {
-      bool isPowered = false;
-      bool maxSpeedSet = false;
-      float maxSpeed = 150.0f;
-
-      for(const Simulator::Train::VehicleItem &item : train->vehicles)
-      {
-        if(item.vehicle->typeIdx != VehicleTypesModel::invalidIndex)
-        {
-          const VehicleTypesModel::VehicleType vehicleType = mVehicleTypesModel->getTypeAt(item.vehicle->typeIdx);
-          if(!vehicleType.name.isEmpty())
-          {
-            if(vehicleType.isPowered)
-              isPowered = true;
-
-            if(!maxSpeedSet || vehicleType.maxSpeedKmh < maxSpeed)
-              maxSpeed = vehicleType.maxSpeedKmh;
-          }
-        }
-        else
-          isPowered = true; // Custom vehicles are always powered for tests
-
-        train->isPowered = isPowered;
-        train->speedMax = maxSpeed;
-      }
-    });
   }
 
   update();
