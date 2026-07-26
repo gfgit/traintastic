@@ -561,7 +561,7 @@ SimulatorView::SimulatorView(QWidget* parent)
 
   // Dark gray background
   QPalette p = palette();
-  p.setColor(QPalette::Window, QColor(70, 70, 70));
+  p.setColor(QPalette::Window, QColor(60, 60, 60));
   setPalette(p);
   setAutoFillBackground(true);
 }
