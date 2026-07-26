@@ -97,7 +97,7 @@ AddTrainDialog::AddTrainDialog(size_t segmentIndex, const float startPos,
     mLabel->setText(tr("Add Train on segment %1")
                     .arg(segName_));
 
-    setMode(Mode::CustomTrain);
+    setMode(Mode::PreMadeTrain);
 
     connect(modeCombo, &QComboBox::activated, this, [this](int idx)
     {
@@ -133,6 +133,16 @@ AddTrainDialog::AddTrainDialog(size_t segmentIndex, const float startPos,
 
     setMinimumSize(450, 300);
     setWindowTitle(tr("Add Train"));
+
+    std::string baseName = "treno_";
+    std::string resultName;
+    size_t counter = 0;
+    do
+    {
+        resultName = baseName + std::to_string(counter++);
+    } while(trainsModel->simulator()->trainExists(resultName));
+
+    mTrainEdit->setText(QString::fromStdString(resultName));
 }
 
 void AddTrainDialog::setMode(Mode newMode)

@@ -94,7 +94,8 @@ void TrainTypeListModel::loadTrainTypes(const nlohmann::json &trains)
         if(vehicle.vehicleTypeIndex == VehicleTypesModel::invalidIndex)
           continue;
 
-        vehicle.reversed = train.value<bool>("reversed", item.reversible);
+        vehicle.reversed = object.value<bool>("reversed", vehicle.reversed);
+        item.vehicles.append(vehicle);
       }
     }
 
