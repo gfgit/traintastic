@@ -243,6 +243,16 @@ public:
 
     int8_t maxTime = 0;
     int8_t curTime = 0;
+
+    enum Encoding : uint8_t
+    {
+      CodeAbsent = 0,
+      Code75 = 1,
+      Code120 = 2,
+      Code180 = 3,
+      Code270 = 4
+    };
+    Encoding encoding = Encoding::CodeAbsent;
     bool value = false;
   };
 

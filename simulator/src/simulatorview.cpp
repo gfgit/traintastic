@@ -852,6 +852,7 @@ void SimulatorView::drawTracks(QPainter *painter)
 {
   assert(m_simulator);
 
+  // Default green free tracks
   QPen trackPen(QColor(159, 255, 159), 1.435);
   trackPen.setCapStyle(Qt::FlatCap);
 
@@ -861,31 +862,36 @@ void SimulatorView::drawTracks(QPainter *painter)
     trackPen.setCosmetic(true);
   }
 
+  // Red tracks when occupied
   QPen trackPenOccupied = trackPen;
   trackPenOccupied.setColor(QColor(255, 0, 0));
 
+  // Dark red occupied selected track
   QPen trackPenOccupiedSelected = trackPenOccupied;
   trackPenOccupiedSelected.setColor(QColor(115, 10, 10));
 
+  // Dark green free selected track
   QPen trackPenGreen = trackPen;
   trackPenGreen.setColor(QColor(20, 144, 0));
 
-  QPen trackPenPurple = trackPen;
-  trackPenPurple.setColor(QColor(128, 0, 255));
+  // Purple track if same segment of hovered selected track
+  // Shown only when NOT powered on
+  QPen sameSensorPenPurple = trackPen;
+  sameSensorPenPurple.setColor(QColor(128, 0, 255));
 
-  QPen trackPenCyan = trackPen;
-  trackPenCyan.setColor(QColor(0, 255, 255));
-  trackPenCyan.setWidthF(0.5);
-  trackPenCyan.setCosmetic(false);
+  QPen turnoutStatePenCyan = trackPen;
+  turnoutStatePenCyan.setColor(QColor(0, 255, 255));
+  turnoutStatePenCyan.setWidthF(0.5);
+  turnoutStatePenCyan.setCosmetic(false);
 
   if(m_thinTracks)
   {
-    trackPenCyan.setWidth(1);
-    trackPenCyan.setCosmetic(true);
+    turnoutStatePenCyan.setWidth(1);
+    turnoutStatePenCyan.setCosmetic(true);
   }
 
-  QPen trackPenMagenta = trackPenCyan;
-  trackPenMagenta.setColor(Qt::magenta);
+  QPen turnoutStatePenMagenta = turnoutStatePenCyan;
+  turnoutStatePenMagenta.setColor(Qt::magenta);
 
   const QTransform trasf = painter->transform();
 
@@ -911,7 +917,7 @@ void SimulatorView::drawTracks(QPainter *painter)
       if(segment.hasSensor() && segment.sensor.index == m_hoverSensorIdx)
       {
         // Blue on same hovered sensor
-        painter->setPen(trackPenPurple);
+        painter->setPen(sameSensorPenPurple);
       }
     }
 
@@ -974,12 +980,12 @@ void SimulatorView::drawTracks(QPainter *painter)
     if(!m_stateData.powerOn || (m_showTrackOccupancy && segment.hasSensor() && m_stateData.sensors[segment.sensor.index].value))
     {
       // Cyan contrast on red
-      painter->setPen(trackPenCyan);
+      painter->setPen(turnoutStatePenCyan);
     }
     else
     {
-      // Dark yellow contrast on white
-      painter->setPen(trackPenMagenta);
+      // Magenta contrast on green
+      painter->setPen(turnoutStatePenMagenta);
     }
 
     if(segment.type == Simulator::TrackSegment::Type::Turnout)
