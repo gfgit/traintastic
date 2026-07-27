@@ -1095,6 +1095,25 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       }
       break;
     }
+    case OpCode::SensorEncodingChanged:
+    {
+      const auto& m = static_cast<const SensorEncodingChanged&>(message);
+      if(m.encoding > uint8_t(SensorState::Encoding::Code75))
+        break;
+
+      std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+
+      auto chan = staticData.sensorChannelMap.find(m.channel);
+      if(chan == staticData.sensorChannelMap.end())
+        break;
+
+      auto sensor = chan->second.find(m.address);
+      if(sensor == chan->second.end())
+        break;
+
+      m_stateData.sensors[sensor->second].encoding = SensorState::Encoding(m.encoding);
+      break;
+    }
     case OpCode::OwnSpawn:
     {
       const auto& m = static_cast<const OwnSpawn&>(message);
@@ -1283,6 +1302,25 @@ void Simulator::onConnectionRemoved(const std::shared_ptr<SimulatorConnection>& 
   const size_t connId = connection->connectionId();
 
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+
+  // Turn off encoded tracks
+  // TODO: multiple connection could subscribe to same channel...
+  // But only one must be allowed to set encoding
+  for(uint16_t channel : connection->subscribedChannels)
+  {
+    auto channelMap = staticData.sensorChannelMap.find(channel);
+    if(channelMap == staticData.sensorChannelMap.end())
+      continue;
+
+    for(auto sensor : channelMap->second)
+    {
+      if(staticData.sensors[sensor.second].channel != channel)
+        continue;
+
+      // TODO: update vehicles when they will listen to encoding
+      m_stateData.sensors[sensor.second].encoding = SensorState::Encoding::CodeAbsent;
+    }
+  }
 
   // Turn off owned signals
   for(auto it : m_stateData.mainSignals)

@@ -43,7 +43,8 @@ enum class OpCode : uint8_t
   OwnSpawn = 10,
   SpawnStateChange = 11,
   AuxSignalSetState = 12,
-  SensorBatchState = 13
+  SensorBatchState = 13,
+  SensorEncodingChanged = 14
 };
 
 struct Message
@@ -120,6 +121,22 @@ struct SensorChanged : Message
   }
 } ATTRIBUTE_PACKED;
 static_assert(sizeof(SensorChanged) == 11);
+
+struct SensorEncodingChanged : Message
+{
+  uint16_t channel;
+  uint16_t address;
+  uint8_t encoding = 0;
+
+  SensorEncodingChanged(uint16_t ch, uint16_t addr, uint8_t encoding_)
+    : Message(OpCode::SensorEncodingChanged, sizeof(SensorEncodingChanged))
+    , channel{ch}
+    , address{addr}
+    , encoding{encoding_}
+  {
+  }
+} ATTRIBUTE_PACKED;
+static_assert(sizeof(SensorEncodingChanged) == 7);
 
 struct AccessorySetState : Message
 {
