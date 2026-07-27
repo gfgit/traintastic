@@ -879,6 +879,19 @@ void SimulatorView::drawTracks(QPainter *painter)
   QPen sameSensorPenPurple = trackPen;
   sameSensorPenPurple.setColor(QColor(128, 0, 255));
 
+  // Encoding on free tracks
+  QPen code75Pen = trackPen;
+  code75Pen.setColor(QColor(255, 176, 0));
+
+  QPen code120Pen = trackPen;
+  code120Pen.setColor(QColor(225, 210, 61));
+
+  QPen code180Pen = trackPen;
+  code180Pen.setColor(QColor(30, 234, 245));
+
+  QPen code270Pen = trackPen;
+  code270Pen.setColor(QColor(57, 125, 255));
+
   QPen turnoutStatePenCyan = trackPen;
   turnoutStatePenCyan.setColor(QColor(0, 255, 255));
   turnoutStatePenCyan.setWidthF(0.5);
@@ -903,6 +916,38 @@ void SimulatorView::drawTracks(QPainter *painter)
     {
       // Red if occupied
       painter->setPen(trackPenOccupied);
+    }
+    else if(segment.hasSensor())
+    {
+      switch(m_stateData.sensors[segment.sensor.index].encoding)
+      {
+      case Simulator::SensorState::Encoding::CodeAbsent:
+      {
+        // Default to normal free track
+        painter->setPen(trackPen);
+        break;
+      }
+      case Simulator::SensorState::Encoding::Code75:
+      {
+        painter->setPen(code75Pen);
+        break;
+      }
+      case Simulator::SensorState::Encoding::Code120:
+      {
+        painter->setPen(code120Pen);
+        break;
+      }
+      case Simulator::SensorState::Encoding::Code180:
+      {
+        painter->setPen(code180Pen);
+        break;
+      }
+      case Simulator::SensorState::Encoding::Code270:
+      {
+        painter->setPen(code270Pen);
+        break;
+      }
+      }
     }
     else
     {
@@ -2798,11 +2843,51 @@ void SimulatorView::showItemTooltip(const Simulator::Point &point, QHelpEvent *e
   if (segment.hasSensor())
   {
     const auto &sensor = data_.sensors.at(segment.sensor.index);
+
+    QString encodingStr;
+    Simulator::SensorState::Encoding encoding = Simulator::SensorState::Encoding::CodeAbsent;
+
+    {
+      std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
+      encoding = m_simulator->stateData().sensors[segment.sensor.index].encoding;
+    }
+
+    switch(encoding)
+    {
+    case Simulator::SensorState::Encoding::Code75:
+    {
+      encodingStr = QLatin1String("75");
+      break;
+    }
+    case Simulator::SensorState::Encoding::Code120:
+    {
+      encodingStr = QLatin1String("120");
+      break;
+    }
+    case Simulator::SensorState::Encoding::Code180:
+    {
+      encodingStr = QLatin1String("180");
+      break;
+    }
+    case Simulator::SensorState::Encoding::Code270:
+    {
+      encodingStr = QLatin1String("270");
+      break;
+    }
+    case Simulator::SensorState::Encoding::CodeAbsent:
+    {
+      encodingStr = QLatin1String("AC");
+      break;
+    }
+    }
+
     text.append("<br>");
     text.append(tr("sensor addr: <b>%1</b><br>"
-                   "sensor channel: <b>%2</b><br>")
+                   "sensor channel: <b>%2</b><br><br>"
+                   "Encoding: <b>%3</b>")
                 .arg(sensor.address)
-                .arg(sensor.channel));
+                .arg(sensor.channel)
+                .arg(encodingStr));
   }
 
   QToolTip::showText(ev->globalPos(), text, this);

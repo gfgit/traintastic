@@ -2540,7 +2540,7 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                           channelMap.insert({sensorAddress, trackObj.sensorIndex});
                           if(type == "axle_counter")
                             data.sensors.at(trackObj.sensorIndex).type = Sensor::Type::AxleCounter;
-                          stateData.sensors.emplace_back(SensorState{{0}, 0, 0, false});
+                          stateData.sensors.emplace_back(SensorState{{0}, 0, 0, SensorState::Encoding::CodeAbsent, false});
                         }
                         else
                           trackObj.sensorIndex = it->second;
@@ -3154,7 +3154,7 @@ void Simulator::loadTrackplan(const nlohmann::json& world, StaticData &data, Sta
                   segment.sensor.index = data.sensors.size();
                   data.sensors.emplace_back(Sensor{sensorChannel, sensorAddress, Sensor::Type::TrackCircuit});
                   channelMap.insert({sensorAddress, segment.sensor.index});
-                  stateData.sensors.emplace_back(SensorState{{0}, 0, 0, false});
+                  stateData.sensors.emplace_back(SensorState{{0}, 0, 0, SensorState::Encoding::CodeAbsent, false});
                 }
                 else
                   segment.sensor.index = it->second;
