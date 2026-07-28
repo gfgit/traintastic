@@ -1098,7 +1098,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
     case OpCode::SensorEncodingChanged:
     {
       const auto& m = static_cast<const SensorEncodingChanged&>(message);
-      if(m.encoding > uint8_t(SensorState::Encoding::Code75))
+      if(m.encoding > uint8_t(SensorState::Encoding::Code270))
         break;
 
       std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
