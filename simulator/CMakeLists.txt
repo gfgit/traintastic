@@ -64,7 +64,7 @@ message(STATUS "Found Qt ${Qt6Core_VERSION}")
 target_link_libraries(traintastic-simulator PRIVATE Qt6::Core Qt6::Widgets Qt6::Xml Qt6::Network)
 
 if(WIN32)
-  target_compile_definitions(traintastic-simulator PRIVATE WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x1000)
+  target_compile_definitions(traintastic-simulator PRIVATE WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0A00)
   target_link_libraries(traintastic-simulator PRIVATE wsock32)
   target_link_libraries(traintastic-simulator PRIVATE Qt6::Core)
   target_sources(traintastic-simulator PRIVATE ../shared/gfx/appicon.rc src/version.rc)
@@ -75,7 +75,7 @@ endif()
 
 install(TARGETS traintastic-simulator
     COMPONENT traintastic-simulator
-    RUNTIME DESTINATION "/opt/traintastic/bin/"
+    #RUNTIME DESTINATION "/opt/traintastic/bin/"
 )
 
 if(LINUX)

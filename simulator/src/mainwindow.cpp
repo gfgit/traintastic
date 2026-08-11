@@ -243,7 +243,7 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
     m_showStatusBar->setShortcut(Qt::Key_F9);
     connect(m_showStatusBar,
             &QAction::toggled,
-            [this, statusBar](bool value)
+            [statusBar](bool value)
             {
               statusBar->setVisible(value);
             });

@@ -484,8 +484,6 @@ public:
     }
   };
 
-  struct Train;
-
   struct VehicleState
   {
     struct Face
