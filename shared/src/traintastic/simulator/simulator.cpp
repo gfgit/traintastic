@@ -2298,10 +2298,9 @@ void Simulator::updateSensors()
 
 void Simulator::updateSpawns()
 {
-  const size_t count = m_stateData.spawns.size();
-  for(size_t i = 0; i < count; ++i)
+  for(auto it : m_stateData.spawns)
   {
-    const auto& spawn = m_stateData.spawns[i];
+    Spawn* spawn = it.second;
     if(spawn->waitingResetCount > 0 && spawn->waitingResetCount != Spawn::MAX_WAITING_RESET)
     {
       spawn->waitingResetCount--;
