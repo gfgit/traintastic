@@ -423,6 +423,9 @@ public:
     size_t ownerConnectionId = invalidIndex;
     size_t segmentIndex = invalidIndex;
 
+    static constexpr size_t START_WAITING_RESET = 60; // Ticks, 2 seconds
+    static constexpr size_t MAX_WAITING_RESET = START_WAITING_RESET + 1;
+    size_t waitingResetCount = 0;
     size_t maxWagons = 20;
     float wagonLength = 20.0f;
     float defaultSpeedKmH = 0.0f;
@@ -718,6 +721,8 @@ private:
   void maybeRemoveVehicleSegment(Vehicle *vehicle, size_t segmentIdx);
 
   void updateSensors();
+  void updateSpawns();
+  void doSpawnTrain(Spawn *spawn);
 
   bool isStraight(const TrackSegment& segment);
   bool isCurve(const TrackSegment& segment, size_t& curveIndex);
