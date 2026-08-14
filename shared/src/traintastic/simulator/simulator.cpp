@@ -1566,8 +1566,13 @@ void Simulator::updateTrainPositions()
     bool wasStopped = false;
     float totalTravelled = 0.0f;
 
+    // If train is stopped at signal check if signal goes to "Proceed"
+    if(train->state.speed == 0.0f)
+      checkNextSignal(train);
+
     // Update only if moving or first time to place vehicles on tracks
-    if(train->state.speed != 0.0f || (!train->vehicles.empty() && !train->vehicles.front().vehicle->state.front.position.isFinite()))
+    if(train->state.isOnStationStop || train->state.speed != 0.0f ||
+       (!train->vehicles.empty() && !train->vehicles.front().vehicle->state.front.position.isFinite()))
     {
       updateTrainNextSignal(train, true);
       if(train->state.isOnStationStop)
