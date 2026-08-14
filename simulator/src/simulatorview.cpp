@@ -1869,6 +1869,10 @@ void SimulatorView::drawTrains(QPainter *painter)
   QPen semiautoTrainBorderPenTop = autoTrainBorderPenTop;
   semiautoTrainBorderPenTop.setColor(Qt::darkGreen);
 
+  QPen trainStationStopPen = activeTrainPen;
+  trainStationStopPen.setColor(Qt::darkYellow);
+  trainStationStopPen.setStyle(Qt::DashDotDotLine);
+
   QPen stationStopTrainPen(Qt::black, 1);
   stationStopTrainPen.setCosmetic(true);
 
@@ -2011,9 +2015,8 @@ void SimulatorView::drawTrains(QPainter *painter)
 
       if(activeTrain->state.isOnStationStop)
       {
-        const QRectF stationStopRect = vehicleRect.adjusted(1, 1, -1, -1);
-        painter->setPen(stationStopTrainPen);
-        painter->drawRect(stationStopRect);
+        painter->setPen(trainStationStopPen);
+        painter->drawRect(vehicleRectAdj);
       }
     }
 
