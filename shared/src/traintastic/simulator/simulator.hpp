@@ -699,6 +699,7 @@ private:
 
   size_t lastConnectionId = 0;
   std::list<std::shared_ptr<SimulatorConnection>> m_connections;
+  size_t mLastSpawnSyncIdx = 0;
 
   TrainTypeInterface *trainTypeInterface = nullptr;
 

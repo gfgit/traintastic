@@ -1490,6 +1490,33 @@ void Simulator::syncSensorState()
       connection->m_nextSyncBatchIdx = batchIdx + 1;
     }
   }
+
+  mLastSpawnSyncIdx++;
+  if(mLastSpawnSyncIdx >= m_stateData.spawns.size())
+    mLastSpawnSyncIdx = 0;
+
+  if(mLastSpawnSyncIdx < m_stateData.spawns.size())
+  {
+    auto it = m_stateData.spawns.begin();
+    std::advance(it, mLastSpawnSyncIdx);
+
+    Spawn *spawn = it->second;
+
+    for(const auto& connection : m_connections)
+    {
+      if(connection->connectionId() != spawn->ownerConnectionId)
+        continue;
+
+      uint8_t state = SimulatorProtocol::SpawnStateChange::Reset;
+      if(spawn->state == Spawn::State::Ready)
+        state = SimulatorProtocol::SpawnStateChange::Ready;
+      else if(spawn->state == Spawn::State::WaitingReset)
+        state = SimulatorProtocol::SpawnStateChange::WaitingReset;
+
+      connection->send(SimulatorProtocol::SpawnStateChange(spawn->address, state));
+      break;
+    }
+  }
 }
 
 void Simulator::garbageCollectSegmentState()
