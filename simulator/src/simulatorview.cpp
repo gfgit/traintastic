@@ -1177,6 +1177,7 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
   const qreal advanceSignalHeight = 0.8 * m_signalsScaleFactor;
   const qreal directionIndicatorWidth = 1.2 * m_signalsScaleFactor;
   const qreal directionIndicatorHeight = 1.6 * m_signalsScaleFactor;
+  const qreal departureIndicatorAdj = 0.1 * m_signalsScaleFactor;
 
   QFont triangleFont;
   triangleFont.setBold(true);
@@ -1738,6 +1739,39 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
             painter->drawEllipse(rotLightRect);
 
             painter->restore();
+          }
+
+          break;
+        }
+        case Simulator::AuxSignal::SubType::HighDepartureIndicator:
+        {
+          // Align every signal as if it had 3 lights (std::max() if wrongly specified more than 3 lights)
+          painter->setPen(signalMastPen);
+          painter->drawLine(QLineF(lateralDiff, 0,
+                                   lateralDiff, -mastBaseLength));
+
+          QRectF departIndRect;
+          departIndRect.setSize(QSizeF(directionIndicatorWidth, directionIndicatorWidth * 2.0));
+          departIndRect.moveCenter(QPointF(lateralDiff, - mastBaseLength - directionIndicatorWidth));
+
+          painter->setPen(signalTrianglePen);
+          painter->setBrush(Qt::black);
+          painter->drawRect(departIndRect);
+
+          if(signal->isLightOn(0))
+          {
+            QRectF departIndLightRect = departIndRect;
+            departIndLightRect.setHeight(directionIndicatorWidth);
+            departIndLightRect.adjust(departureIndicatorAdj, departureIndicatorAdj,
+                                      -departureIndicatorAdj, -departureIndicatorAdj);
+
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(Qt::yellow);
+
+            painter->drawEllipse(departIndLightRect);
+
+            departIndLightRect.translate(0, directionIndicatorWidth + departureIndicatorAdj);
+            painter->drawEllipse(departIndLightRect);
           }
 
           break;

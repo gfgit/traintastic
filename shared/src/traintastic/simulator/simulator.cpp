@@ -2769,6 +2769,8 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                     subType = AuxSignal::SubType::LightDwarfSignal;
                   else if(subTypeName == "rot_dwarf_signal")
                     subType = Simulator::AuxSignal::SubType::RotatingDwarfSignal;
+                  else if(subTypeName == "high_departure_ind")
+                    subType = Simulator::AuxSignal::SubType::HighDepartureIndicator;
                   else
                     continue;
 

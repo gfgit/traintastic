@@ -382,7 +382,8 @@ public:
     enum class SubType
     {
       LightDwarfSignal = 0,
-      RotatingDwarfSignal
+      RotatingDwarfSignal,
+      HighDepartureIndicator
     };
 
     uint16_t channel = defaultChannel;
