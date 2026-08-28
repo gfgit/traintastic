@@ -42,6 +42,7 @@ private:
   std::array<std::byte, 1024> m_writeBuffer;
   size_t m_writeBufferOffset = 0;
   size_t m_connectionId = 0;
+  bool isReplica = false;
 
 public:
   std::vector<uint16_t> subscribedChannels;

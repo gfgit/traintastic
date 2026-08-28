@@ -44,7 +44,8 @@ enum class OpCode : uint8_t
   SpawnStateChange = 11,
   AuxSignalSetState = 12,
   SensorBatchState = 13,
-  SensorEncodingChanged = 14
+  SensorEncodingChanged = 14,
+  ReplicaGreeting = 15
 };
 
 struct Message
@@ -69,6 +70,16 @@ struct HandShake : Message
   }
 };
 static_assert(sizeof(HandShake) == 2);
+
+struct ReplicaGreeting : Message
+{
+  ReplicaGreeting()
+    : Message(OpCode::ReplicaGreeting,
+              sizeof(ReplicaGreeting))
+  {
+  }
+};
+static_assert(sizeof(ReplicaGreeting) == 2);
 
 struct Power : Message
 {

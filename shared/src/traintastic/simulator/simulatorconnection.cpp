@@ -88,6 +88,13 @@ void SimulatorConnection::read()
             // Eat message
             m_handShakeResponseReceived = true;
           }
+          else if(!isReplica && m_simulator->getSimMode() == Simulator::SimMode::Master &&
+                  message->opCode == SimulatorProtocol::OpCode::ReplicaGreeting &&
+                  message->size == sizeof(SimulatorProtocol::ReplicaGreeting))
+          {
+            isReplica = true;
+            m_simulator->setConnectionAsReplica(shared_from_this());
+          }
           else
           {
             m_simulator->receive(*message, m_connectionId);
@@ -144,5 +151,5 @@ void SimulatorConnection::write()
 
 void SimulatorConnection::close()
 {
-  m_simulator->removeConnection(shared_from_this());
+  m_simulator->removeConnection(shared_from_this(), isReplica);
 }

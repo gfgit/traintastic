@@ -581,6 +581,13 @@ public:
     std::unordered_map<size_t, SegmentVehicles> segmentVehicles;
   };
 
+  enum class SimMode
+  {
+    Standalone = 0,
+    Master,
+    Replica
+  };
+
 private:
   StateData m_stateData;
 
@@ -628,7 +635,11 @@ public:
 
   void send(const SimulatorProtocol::Message& message);
   void receive(const SimulatorProtocol::Message& message, size_t fromConnId);
-  void removeConnection(const std::shared_ptr<SimulatorConnection>& connection);
+
+  void setConnectionAsReplica(const std::shared_ptr<SimulatorConnection>& connection);
+  void removeConnection(const std::shared_ptr<SimulatorConnection>& connection, bool replica);
+
+  void sendReplicas(const SimulatorProtocol::Message& message);
 
   inline std::recursive_mutex& stateMutex() { return m_stateMutex; }
 
@@ -667,6 +678,9 @@ public:
     }
   }
 
+  void setSimMode(SimMode m);
+  inline SimMode getSimMode() const { return mSimMode; }
+
 private:
   friend struct TrainState;
   constexpr static auto tickRate = std::chrono::milliseconds(1000 / 30);
@@ -700,13 +714,17 @@ private:
 
   size_t lastConnectionId = 0;
   std::list<std::shared_ptr<SimulatorConnection>> m_connections;
+  std::list<std::shared_ptr<SimulatorConnection>> m_repliacas;
   size_t mLastSpawnSyncIdx = 0;
 
   TrainTypeInterface *trainTypeInterface = nullptr;
 
+  SimMode mSimMode = SimMode::Standalone;
+
   void accept();
   void doReceive();
   void onConnectionRemoved(const std::shared_ptr<SimulatorConnection> &connection);
+  void onReplicaRemoved(const std::shared_ptr<SimulatorConnection> &connection);
 
   void tick();
   void handShake();

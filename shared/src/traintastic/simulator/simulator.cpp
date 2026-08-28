@@ -523,6 +523,13 @@ void Simulator::stop()
     connection->stop();
   }
 
+  while(!m_repliacas.empty())
+  {
+    auto connection =  m_repliacas.back();
+    m_repliacas.pop_back();
+    connection->stop();
+  }
+
   // Stop TCP server
   m_acceptor.cancel(ec);
   m_acceptor.close(ec);
@@ -722,9 +729,12 @@ void Simulator::setTurnoutState(size_t segmentIndex, TurnoutState::State state)
             val = 2;
           else if(state == State::Closed)
             val = 1;
-          send(SimulatorProtocol::AccessorySetState(segment.turnout.channel,
-                                                    segment.turnout.addresses[0],
-                                                    val));
+
+          auto msg = SimulatorProtocol::AccessorySetState(segment.turnout.channel,
+                                                          segment.turnout.addresses[0],
+                                                          val);
+          send(msg);
+          sendReplicas(msg);
         }
       }
       else if(segment.type == Type::Turnout3Way)
@@ -795,6 +805,17 @@ void Simulator::toggleTurnoutState(size_t segmentIndex, bool setUnknown)
 void Simulator::send(const SimulatorProtocol::Message& message)
 {
   for(const auto& connection : m_connections)
+  {
+    connection->send(message);
+  }
+}
+
+void Simulator::sendReplicas(const SimulatorProtocol::Message& message)
+{
+  if(getSimMode() != SimMode::Master)
+    return;
+
+  for(const auto& connection : m_repliacas)
   {
     connection->send(message);
   }
@@ -895,6 +916,15 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
               turnoutState.state = Simulator::TurnoutState::State::ThrownRight;
               break;
           }
+
+          // TODO: move all inside setTurnoutState()
+          if(getSimMode() == SimMode::Master)
+          {
+            for(const auto& connection : m_repliacas)
+            {
+              connection->send(m);
+            }
+          }
           break;
         }
       }
@@ -975,6 +1005,14 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
         if(isBlinking && !wasBlinking)
           s->setSignalBlinkStart(true, m_stateData.signalBlinkState);
 
+        if(getSimMode() == SimMode::Master)
+        {
+          for(const auto& connection : m_repliacas)
+          {
+            connection->send(m);
+          }
+        }
+
         break;
       }
       break;
@@ -991,6 +1029,14 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
 
         s->mLights = m.lights;
         s->mPosition = m.position;
+
+        if(getSimMode() == SimMode::Master)
+        {
+          for(const auto& connection : m_repliacas)
+          {
+            connection->send(m);
+          }
+        }
         break;
       }
       break;
@@ -1111,6 +1157,14 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       if(sensor == chan->second.end())
         break;
 
+      if(getSimMode() == SimMode::Master)
+      {
+        for(const auto& connection : m_repliacas)
+        {
+          connection->send(m);
+        }
+      }
+
       m_stateData.sensors[sensor->second].encoding = SensorState::Encoding(m.encoding);
       break;
     }
@@ -1191,12 +1245,33 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
   }
 }
 
-void Simulator::removeConnection(const std::shared_ptr<SimulatorConnection>& connection)
+void Simulator::setConnectionAsReplica(const std::shared_ptr<SimulatorConnection>& connection)
 {
   if(auto it = std::find(m_connections.begin(), m_connections.end(), connection); it != m_connections.end())
   {
+    // Move this connection to replicas list
+    m_repliacas.push_back(connection->shared_from_this());
     m_connections.erase(it);
-    onConnectionRemoved(connection);
+  }
+}
+
+void Simulator::removeConnection(const std::shared_ptr<SimulatorConnection>& connection, bool replica)
+{
+  if(replica)
+  {
+    if(auto it = std::find(m_repliacas.begin(), m_repliacas.end(), connection); it != m_repliacas.end())
+    {
+      m_repliacas.erase(it);
+      onReplicaRemoved(connection);
+    }
+  }
+  else
+  {
+    if(auto it = std::find(m_connections.begin(), m_connections.end(), connection); it != m_connections.end())
+    {
+      m_connections.erase(it);
+      onConnectionRemoved(connection);
+    }
   }
 }
 
@@ -1269,6 +1344,12 @@ void Simulator::onConnectionRemoved(const std::shared_ptr<SimulatorConnection>& 
   }
 }
 
+void Simulator::onReplicaRemoved(const std::shared_ptr<SimulatorConnection>& connection)
+{
+  // No-op for now
+  (void)connection;
+}
+
 void Simulator::accept()
 {
   m_acceptor.async_accept(
@@ -1290,6 +1371,7 @@ void Simulator::accept()
 
 constexpr char RequestMessage[] = {'s', 'i', 'm', '?'};
 constexpr char ResponseMessage[] = {'s', 'i', 'm', '!'};
+constexpr char ReplicaRequestMessage[] = {'r', 'e', 'p', '?'};
 
 void Simulator::doReceive()
 {
@@ -1301,7 +1383,18 @@ void Simulator::doReceive()
     if(!ec)
     {
       const char *recvMsg = reinterpret_cast<char*>(m_udpBuffer.data());
-      if(bytesReceived >= sizeof(RequestMessage) && std::memcmp(recvMsg, &RequestMessage, sizeof(RequestMessage)) == 0)
+
+      bool isRequest = false;
+
+      if(getSimMode() != SimMode::Replica)
+        isRequest = (bytesReceived >= sizeof(RequestMessage) &&
+                     std::memcmp(recvMsg, &RequestMessage, sizeof(RequestMessage)) == 0);
+
+      if(!isRequest && getSimMode() == SimMode::Master)
+        isRequest = (bytesReceived >= sizeof(ReplicaRequestMessage) &&
+                     std::memcmp(recvMsg, &ReplicaRequestMessage, sizeof(ReplicaRequestMessage)) == 0);
+
+      if(isRequest)
       {
         if(!m_serverLocalHostOnly || m_remoteEndpoint.address().is_loopback())
         {
@@ -1380,6 +1473,23 @@ void Simulator::handShake()
       it = m_connections.erase(it);
       conn->stop();
       onConnectionRemoved(conn);
+      continue;
+    }
+
+    (*it)->setHandShakeResponseReceived(false);
+    (*it)->send(SimulatorProtocol::HandShake(false));
+    it++;
+  }
+
+  it = m_repliacas.begin();
+  while(it != m_repliacas.end())
+  {
+    if(!(*it)->handShakeResponseReceived())
+    {
+      std::shared_ptr<SimulatorConnection> conn = *it;
+      it = m_repliacas.erase(it);
+      conn->stop();
+      onReplicaRemoved(conn);
       continue;
     }
 
@@ -2323,6 +2433,14 @@ void Simulator::updateSensors()
             !vec_contains(connection->subscribedChannels, sensor.channel))
           continue;
         connection->send(SimulatorProtocol::SensorChanged(sensor.channel, sensor.address, axleCount, sensorState.value));
+      }
+
+      if(getSimMode() == SimMode::Master)
+      {
+        for(const auto& connection : m_repliacas)
+        {
+          connection->send(SimulatorProtocol::SensorChanged(sensor.channel, sensor.address, axleCount, sensorState.value));
+        }
       }
     }
   }
@@ -4736,4 +4854,17 @@ bool Simulator::coupleTrain(Train *train, bool fwd, size_t& removedTrainIdxOut)
 TrainTypeInterface::~TrainTypeInterface()
 {
 
+}
+
+void Simulator::setSimMode(SimMode m)
+{
+  if(mSimMode == m)
+    return;
+
+  mSimMode = m;
+
+  if(mSimMode == SimMode::Master)
+  {
+
+  }
 }
