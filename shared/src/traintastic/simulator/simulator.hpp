@@ -651,7 +651,7 @@ public:
   void removeConnection(const std::shared_ptr<SimulatorConnection>& connection, bool replica);
 
   void sendReplicas(const SimulatorProtocol::Message& message);
-  void sendReplicas(SimulatorProtocol::OpCode op, const std::string& msg);
+  void sendReplicas(const std::stringstream &ss);
 
   inline std::recursive_mutex& stateMutex() { return m_stateMutex; }
 

@@ -851,17 +851,14 @@ void Simulator::sendReplicas(const SimulatorProtocol::Message& message)
   }
 }
 
-void Simulator::sendReplicas(SimulatorProtocol::OpCode op, const std::string& msg)
+void Simulator::sendReplicas(const std::stringstream &ss)
 {
   if(getSimModeUnlocked() != SimMode::Master)
     return;
 
-  std::unique_ptr<uint8_t[]> ptr(new uint8_t[msg.size() + 2]);
-  ptr[0] = uint8_t(op);
-  ptr[1] = msg.size() + 2;
-  std::memcpy(ptr.get() + 2, msg.data(), msg.size()); // TODO: avoid copy
-
-  const SimulatorProtocol::Message& message = *reinterpret_cast<SimulatorProtocol::Message *>(ptr.get());
+  std::string buf = ss.str();
+  SimulatorProtocol::Message& message = *reinterpret_cast<SimulatorProtocol::Message *>(buf.data());
+  message.size = buf.size();
 
   for(const auto& connection : m_repliacas)
   {
@@ -1455,9 +1452,10 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
     train->state.mode = dummy.state.mode;
     train->state.mode = dummy.state.mode;
 
+    size_t maxIdx = std::min(train->vehicles.size(), dummy.vehicles.size());
     for(auto &item : train->vehicles)
     {
-
+      item.reversed =
     }
 
     break;
@@ -4420,6 +4418,9 @@ bool Simulator::removeVehicle(Vehicle *vehicle)
 void Simulator::sendTrainFullRefreshReplica(SimulatorProtocol::OpCode op, Train *train)
 {
   std::stringstream ss;
+  ss << uint8_t(op);
+  ss << uint8_t(0); // Size placeholder
+
   boost::archive::binary_oarchive arch(ss);
 
   std::vector<Vehicle *> vehiclesSer;
@@ -4430,18 +4431,21 @@ void Simulator::sendTrainFullRefreshReplica(SimulatorProtocol::OpCode op, Train 
   arch << vehiclesSer;
   arch << train;
 
-  sendReplicas(op, ss.str());
+  sendReplicas(ss);
 }
 
 void Simulator::sendTrainStateRefreshReplica(Train *train)
 {
   std::stringstream ss;
+  ss << uint8_t(SimulatorProtocol::OpCode::TrainStateRefresh);
+  ss << uint8_t(0); // Size placeholder
+
   boost::archive::binary_oarchive arch(ss);
   arch << train->name;
   arch << train;
   boost::serialization::serializeVehicleList(arch, train->vehicles);
 
-  sendReplicas(SimulatorProtocol::OpCode::TrainStateRefresh, ss.str());
+  sendReplicas(ss);
 }
 
 void Simulator::updateTrainNextSignal(Train *train, bool next)
