@@ -29,6 +29,9 @@
 #include <chrono>
 #include "protocol.hpp"
 
+#include <boost/archive/binary_oarchive.hpp>
+#include <boost/archive/binary_iarchive.hpp>
+
 #define bitRead(value, bit) (((value) >> (bit)) & 0x01)
 #define bitSet(value, bit) ((value) |= (1UL << (bit)))
 #define bitClear(value, bit) ((value) &= ~(1UL << (bit)))
@@ -847,6 +850,24 @@ void Simulator::sendReplicas(const SimulatorProtocol::Message& message)
   }
 }
 
+void Simulator::sendReplicas(SimulatorProtocol::OpCode op, const std::string& msg)
+{
+  if(getSimModeUnlocked() != SimMode::Master)
+    return;
+
+  std::unique_ptr<uint8_t[]> ptr(new uint8_t[msg.size() + 2]);
+  ptr[0] = uint8_t(op);
+  ptr[1] = msg.size() + 2;
+  std::memcpy(ptr.get() + 2, msg.data(), msg.size()); // TODO: avoid copy
+
+  const SimulatorProtocol::Message& message = *reinterpret_cast<SimulatorProtocol::Message *>(ptr.get());
+
+  for(const auto& connection : m_repliacas)
+  {
+    connection->send(message);
+  }
+}
+
 void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromConnId)
 {
   using namespace SimulatorProtocol;
@@ -1344,6 +1365,51 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
         setTrainSpeedFactor(m.trainSpeedFactor);
       break;
     }
+    case OpCode::TrainAdded:
+    case OpCode::TrainStateRefresh:
+    case OpCode::VehiclesRemoved:
+    case OpCode::TrainRemoved:
+    case OpCode::TrainChangedVehicles:
+    {
+      // Variable size messages
+      if(getSimMode() == SimMode::Replica)
+      {
+        receiveVariableSize(message);
+      }
+    }
+  }
+}
+
+void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
+{
+  using namespace SimulatorProtocol;
+
+  std::string buf;
+  buf.resize(message.size - 2);
+  std::memcpy(buf.data(),
+              reinterpret_cast<const uint8_t *>(&message) + 2,
+              buf.size());
+  std::stringstream ss(buf);
+  boost::archive::binary_iarchive arch(ss);
+
+  switch(message.opCode)
+  {
+  case OpCode::TrainAdded:
+  {
+    std::vector<Vehicle> vehiclesSer;
+    arch >> vehiclesSer;
+
+    Train dummy;
+    arch >> dummy;
+
+    break;
+  }
+  case OpCode::TrainStateRefresh:
+  case OpCode::VehiclesRemoved:
+  case OpCode::TrainRemoved:
+  case OpCode::TrainChangedVehicles:
+  default:
+    break;
   }
 }
 
@@ -1950,18 +2016,6 @@ void Simulator::updateTrainPositions()
       }
     }
 
-    if(train->address != invalidAddress && trainState.speedOrDirectionChanged)
-    {
-        send(SimulatorProtocol::LocomotiveSpeedDirection(train->address,
-                                                         train->protocol,
-                                                         static_cast<uint8_t>(std::clamp<float>(std::round(std::numeric_limits<uint8_t>::max() * (trainState.speed / train->speedMax)),
-          std::numeric_limits<uint8_t>::min(),
-          std::numeric_limits<uint8_t>::max())),
-        trainState.reverse ? Direction::Reverse : Direction::Forward,
-        false));
-      trainState.speedOrDirectionChanged = false;
-    }
-
     bool wasStopped = false;
     float totalTravelled = 0.0f;
 
@@ -2104,6 +2158,22 @@ void Simulator::updateTrainPositions()
           train->state.speedOrDirectionChanged = true;
         }
       }
+    }
+
+    if(train->address != invalidAddress && trainState.speedOrDirectionChanged)
+    {
+      send(SimulatorProtocol::LocomotiveSpeedDirection(
+             train->address,
+             train->protocol,
+             static_cast<uint8_t>(std::clamp<float>(std::round(std::numeric_limits<uint8_t>::max() * (trainState.speed / train->speedMax)),
+                                                    std::numeric_limits<uint8_t>::min(),
+                                                    std::numeric_limits<uint8_t>::max())),
+             trainState.reverse ? Direction::Reverse : Direction::Forward,
+             false));
+      trainState.speedOrDirectionChanged = false;
+
+      if(getSimModeUnlocked() == SimMode::Master)
+        sendTrainStateRefreshReplica(train);
     }
 
     // Go to next train
@@ -4175,6 +4245,13 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
   idxOut = std::distance(m_stateData.trains.begin(), pair.first);
 
   onTrainAddedRemoved(true, idxOut);
+
+  if(getSimModeUnlocked() == SimMode::Master)
+  {
+    sendTrainFullRefreshReplica(SimulatorProtocol::OpCode::TrainAdded,
+                                pair.first->second);
+  }
+
   return true;
 }
 
@@ -4263,6 +4340,31 @@ bool Simulator::removeVehicle(Vehicle *vehicle)
     m_stateData.vehicles.erase(it);
     delete vehicle;
     return true;
+}
+
+void Simulator::sendTrainFullRefreshReplica(SimulatorProtocol::OpCode op, Train *train)
+{
+  std::stringstream ss;
+  boost::archive::binary_oarchive arch(ss);
+
+  std::vector<Vehicle *> vehiclesSer;
+  vehiclesSer.reserve(train->vehicles.size());
+  for(const auto &v : train->vehicles)
+    vehiclesSer.push_back(v.vehicle);
+
+  arch << vehiclesSer;
+  arch << train;
+
+  sendReplicas(op, ss.str());
+}
+
+void Simulator::sendTrainStateRefreshReplica(Train *train)
+{
+  std::stringstream ss;
+  boost::archive::binary_oarchive arch(ss);
+  arch << train;
+
+  sendReplicas(SimulatorProtocol::OpCode::TrainStateRefresh, ss.str());
 }
 
 void Simulator::updateTrainNextSignal(Train *train, bool next)

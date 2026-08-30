@@ -54,7 +54,7 @@ if(DEFINED ENV{VCPKG_ROOT})
   include($ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake)
 endif()
 
-find_package(Boost 1.81 REQUIRED)
+find_package(Boost 1.81 REQUIRED system serialization)
 target_include_directories(traintastic-simulator SYSTEM PRIVATE ${Boost_INCLUDE_DIRS})
 target_link_libraries(traintastic-simulator PRIVATE ${Boost_LIBRARIES})
 

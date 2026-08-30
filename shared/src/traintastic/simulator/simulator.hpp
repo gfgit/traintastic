@@ -38,6 +38,7 @@
 #include <boost/asio/steady_timer.hpp>
 #include <boost/signals2/signal.hpp>
 #include <boost/serialization/access.hpp>
+#include <boost/serialization/vector.hpp>
 #include <nlohmann/json.hpp>
 #include <traintastic/enum/color.hpp>
 #include <traintastic/enum/decoderprotocol.hpp>
@@ -45,6 +46,7 @@
 #include <traintastic/utils/stringequal.hpp>
 
 namespace SimulatorProtocol {
+  enum class OpCode : uint8_t;
   struct Message;
 }
 
@@ -636,11 +638,13 @@ public:
 
   void send(const SimulatorProtocol::Message& message);
   void receive(const SimulatorProtocol::Message& message, size_t fromConnId);
+  void receiveVariableSize(const SimulatorProtocol::Message& message);
 
   void setConnectionAsReplica(const std::shared_ptr<SimulatorConnection>& connection);
   void removeConnection(const std::shared_ptr<SimulatorConnection>& connection, bool replica);
 
   void sendReplicas(const SimulatorProtocol::Message& message);
+  void sendReplicas(SimulatorProtocol::OpCode op, const std::string& msg);
 
   inline std::recursive_mutex& stateMutex() { return m_stateMutex; }
 
@@ -662,6 +666,9 @@ public:
   Vehicle *addVehicle(const std::string_view &baseName, float length,
                       Color color, size_t typeIdx = invalidIndex);
   bool removeVehicle(Vehicle *vehicle);
+
+  void sendTrainFullRefreshReplica(SimulatorProtocol::OpCode op, Train *train);
+  void sendTrainStateRefreshReplica(Train *train);
 
   Vehicle *getVehicleNear(size_t segmentIdx, float pos, float maxDistance,
                           bool canGoForward = true, bool canGoBackwards = true,
@@ -874,6 +881,7 @@ template<class Archive>
 void serialize(Archive & ar, Simulator::Train::VehicleItem &vehicle, const unsigned int /*version*/)
 {
   ar & vehicle.vehicle->name;
+  ar & vehicle.vehicle->state;
   ar & vehicle.reversed;
 }
 

@@ -46,7 +46,14 @@ enum class OpCode : uint8_t
   SensorBatchState = 13,
   SensorEncodingChanged = 14,
   ReplicaGreeting = 15,
-  TrainSpeedFactorChanged = 16
+  TrainSpeedFactorChanged = 16,
+
+  // Special messages with variable size
+  TrainAdded = 17,
+  TrainStateRefresh = 18,
+  VehiclesRemoved = 19,
+  TrainRemoved = 20,
+  TrainChangedVehicles = 21
 };
 
 PRAGMA_PACK_PUSH_1
