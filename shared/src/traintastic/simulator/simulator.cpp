@@ -1336,6 +1336,14 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       }
       break;
     }
+    case OpCode::TrainSpeedFactorChanged:
+    {
+      const auto& m = static_cast<const TrainSpeedFactorChanged&>(message);
+      std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+      if(getSimModeUnlocked() == SimMode::Replica)
+        setTrainSpeedFactor(m.trainSpeedFactor);
+      break;
+    }
   }
 }
 
@@ -1350,6 +1358,7 @@ void Simulator::setConnectionAsReplica(const std::shared_ptr<SimulatorConnection
     // Sync power state
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
     connection->send(SimulatorProtocol::Power(m_stateData.powerOn));
+    connection->send(SimulatorProtocol::TrainSpeedFactorChanged(m_stateData.trainSpeedFactor));
   }
 }
 
@@ -2693,6 +2702,7 @@ void Simulator::updateSensors()
 
       if(getSimModeUnlocked() == SimMode::Master)
       {
+        // TODO: there is a small glitch sometimes when chenging PowerOn many times fast
         for(const auto& connection : m_repliacas)
         {
           connection->send(SimulatorProtocol::SensorChanged(sensor.channel, sensor.address, axleCount, sensorState.value));
@@ -4503,6 +4513,9 @@ void Simulator::setTrainSpeedFactor(float val)
 {
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
   m_stateData.trainSpeedFactor = val;
+
+  if(getSimModeUnlocked() == SimMode::Master)
+    sendReplicas(SimulatorProtocol::TrainSpeedFactorChanged(m_stateData.trainSpeedFactor));
 }
 
 void Simulator::loadTrains(const nlohmann::json &world)

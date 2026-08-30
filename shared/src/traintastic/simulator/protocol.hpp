@@ -45,8 +45,11 @@ enum class OpCode : uint8_t
   AuxSignalSetState = 12,
   SensorBatchState = 13,
   SensorEncodingChanged = 14,
-  ReplicaGreeting = 15
+  ReplicaGreeting = 15,
+  TrainSpeedFactorChanged = 16
 };
+
+PRAGMA_PACK_PUSH_1
 
 struct Message
 {
@@ -58,7 +61,7 @@ struct Message
     , size{size_}
   {
   }
-};
+} ATTRIBUTE_PACKED;
 static_assert(sizeof(Message) == 2);
 
 struct HandShake : Message
@@ -68,7 +71,7 @@ struct HandShake : Message
               sizeof(HandShake))
   {
   }
-};
+} ATTRIBUTE_PACKED;
 static_assert(sizeof(HandShake) == 2);
 
 struct ReplicaGreeting : Message
@@ -78,7 +81,7 @@ struct ReplicaGreeting : Message
               sizeof(ReplicaGreeting))
   {
   }
-};
+} ATTRIBUTE_PACKED;
 static_assert(sizeof(ReplicaGreeting) == 2);
 
 struct Power : Message
@@ -90,7 +93,7 @@ struct Power : Message
     , powerOn(on ? 1 : 0)
   {
   }
-};
+} ATTRIBUTE_PACKED;
 static_assert(sizeof(Power) == 3);
 
 struct LocomotiveSpeedDirection : Message
@@ -110,10 +113,8 @@ struct LocomotiveSpeedDirection : Message
     , speed{spd}
   {
   }
-};
+} ATTRIBUTE_PACKED;
 static_assert(sizeof(LocomotiveSpeedDirection) == 8);
-
-PRAGMA_PACK_PUSH_1
 
 struct SensorChanged : Message
 {
@@ -346,6 +347,19 @@ struct SensorBatchState : Message
   }
 } ATTRIBUTE_PACKED;
 static_assert(sizeof(SensorBatchState) == 8);
+
+struct TrainSpeedFactorChanged : Message
+{
+  TrainSpeedFactorChanged(float trainSpeedFactor_)
+    : Message(OpCode::TrainSpeedFactorChanged,
+              sizeof(TrainSpeedFactorChanged))
+    , trainSpeedFactor(trainSpeedFactor_)
+  {
+  }
+
+  float trainSpeedFactor;
+} ATTRIBUTE_PACKED;
+static_assert(sizeof(TrainSpeedFactorChanged) == 6);
 
 PRAGMA_PACK_POP
 

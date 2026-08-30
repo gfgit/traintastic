@@ -37,6 +37,7 @@
 #include <boost/asio/ip/udp.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/signals2/signal.hpp>
+#include <boost/serialization/access.hpp>
 #include <nlohmann/json.hpp>
 #include <traintastic/enum/color.hpp>
 #include <traintastic/enum/decoderprotocol.hpp>
@@ -834,5 +835,69 @@ constexpr float deg2rad(float degrees)
 }
 
 }
+
+namespace boost {
+namespace serialization {
+
+template<class Archive>
+void serialize(Archive & ar, Simulator::Point &p, const unsigned int /*version*/)
+{
+  ar & p.x;
+  ar & p.y;
+}
+
+template<class Archive>
+void serialize(Archive & ar, Simulator::VehicleState::Face &face, const unsigned int /*version*/)
+{
+  ar & face.segmentIndex;
+  ar & face.segmentDirectionInverted;
+  ar & face.distance;
+}
+
+template<class Archive>
+void serialize(Archive & ar, Simulator::VehicleState &vehicleState, const unsigned int /*version*/)
+{
+  ar & vehicleState.front;
+  ar & vehicleState.rear;
+}
+
+template<class Archive>
+void serialize(Archive & ar, Simulator::Vehicle &vehicle, const unsigned int /*version*/)
+{
+  ar & vehicle.name;
+  ar & vehicle.color;
+  ar & vehicle.length;
+  ar & vehicle.typeIdx;
+}
+
+template<class Archive>
+void serialize(Archive & ar, Simulator::Train::VehicleItem &vehicle, const unsigned int /*version*/)
+{
+  ar & vehicle.vehicle->name;
+  ar & vehicle.reversed;
+}
+
+template<class Archive>
+void serialize(Archive & ar, Simulator::TrainState &trainState, const unsigned int /*version*/)
+{
+  ar & trainState.speed;
+  ar & trainState.targetSpeed;
+  ar & trainState.waitToStart_ms;
+  ar & trainState.reverse;
+  ar & trainState.mode;
+  ar & trainState.isOnStationStop;
+}
+
+template<class Archive>
+void serialize(Archive & ar, Simulator::Train &train, const unsigned int /*version*/)
+{
+  ar & train.name;
+  ar & train.speedMax;
+  ar & train.state;
+  ar & train.vehicles;
+}
+
+} // namespace serialization
+} // namespace boost
 
 #endif

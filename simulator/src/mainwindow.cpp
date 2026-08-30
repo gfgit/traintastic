@@ -489,4 +489,5 @@ void MainWindow::setReplica()
 
   m_view->simulator()->setSimMode(Simulator::SimMode::Replica);
   setWindowTitle("Traintastic simulator v" TRAINTASTIC_VERSION_FULL "REPLICA");
+  mTrainSpeedFactorSpin->setVisible(false); // Can be changed only by master
 }
