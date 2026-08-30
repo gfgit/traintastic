@@ -88,6 +88,14 @@ void SimulatorConnection::read()
             // Eat message
             m_handShakeResponseReceived = true;
           }
+          else if(message->opCode == SimulatorProtocol::OpCode::Handshake &&
+             message->size == sizeof(SimulatorProtocol::HandShake) &&
+             m_simulator->getSimMode() == Simulator::SimMode::Replica)
+          {
+            // Eat message and reply to Master
+            m_handShakeResponseReceived = true;
+            send(SimulatorProtocol::HandShake(true));
+          }
           else if(!isReplica && m_simulator->getSimMode() == Simulator::SimMode::Master &&
                   message->opCode == SimulatorProtocol::OpCode::ReplicaGreeting &&
                   message->size == sizeof(SimulatorProtocol::ReplicaGreeting))

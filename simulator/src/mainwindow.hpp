@@ -56,6 +56,8 @@ private:
 
 private slots:
   void setToolBarVisible(bool val);
+  void setMaster();
+  void setReplica();
 
 private:
   SimulatorView* m_view;

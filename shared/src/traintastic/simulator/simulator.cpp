@@ -384,6 +384,7 @@ Simulator::Simulator(const nlohmann::json& world, TrainTypeInterface *iface)
   , m_socketUDP{m_ioContext}
   , m_signalBlinkStateTimer{m_ioContext}
   , m_syncSensorStateTimer{m_ioContext}
+  , m_syncReplicaStateTimer{m_ioContext}
   , m_garbageCollectTimer{m_ioContext}
   , trainTypeInterface(iface)
 {
@@ -538,6 +539,7 @@ void Simulator::stop()
   m_handShakeTimer.cancel();
   m_signalBlinkStateTimer.cancel();
   m_syncSensorStateTimer.cancel();
+  m_syncReplicaStateTimer.cancel();
   m_garbageCollectTimer.cancel();
   if(m_thread.joinable())
   {
@@ -552,6 +554,7 @@ void Simulator::setPowerOn(bool powerOn)
   {
     m_stateData.powerOn = powerOn;
     send(SimulatorProtocol::Power(m_stateData.powerOn));
+    sendReplicas(SimulatorProtocol::Power(m_stateData.powerOn));
   }
 }
 
@@ -560,6 +563,7 @@ void Simulator::togglePowerOn()
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
   m_stateData.powerOn = !m_stateData.powerOn;
   send(SimulatorProtocol::Power(m_stateData.powerOn));
+  sendReplicas(SimulatorProtocol::Power(m_stateData.powerOn));
 }
 
 Simulator::Train *Simulator::getTrainAt(size_t trainIndex) const
@@ -812,7 +816,7 @@ void Simulator::send(const SimulatorProtocol::Message& message)
 
 void Simulator::sendReplicas(const SimulatorProtocol::Message& message)
 {
-  if(getSimMode() != SimMode::Master)
+  if(getSimModeUnlocked() != SimMode::Master)
     return;
 
   for(const auto& connection : m_repliacas)
@@ -918,7 +922,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
           }
 
           // TODO: move all inside setTurnoutState()
-          if(getSimMode() == SimMode::Master)
+          if(getSimModeUnlocked() == SimMode::Master)
           {
             for(const auto& connection : m_repliacas)
             {
@@ -931,10 +935,30 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       break;
     }
     case OpCode::SensorChanged:
+    {
+      if(getSimModeUnlocked() != SimMode::Replica)
+        break; // Only sent by Master simulator
+
+      const auto& m = static_cast<const SensorChanged&>(message);
+
+      auto chan = staticData.sensorChannelMap.find(m.channel);
+      if(chan == staticData.sensorChannelMap.end())
+        break;
+
+      auto sensor = chan->second.find(m.address);
+      if(sensor == chan->second.end())
+        break;
+
+      std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+      m_stateData.sensors.at(sensor->second).value = m.value;
+
+      break;
+    }
     case OpCode::SensorBatchState:
       break; // only sent by simulator
     case OpCode::Handshake:
     case OpCode::HandshakeResponse:
+    case OpCode::ReplicaGreeting:
       break; // handled by SimulatorConnection already
     case OpCode::SignalSetState:
     {
@@ -943,7 +967,10 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       for(auto it : m_stateData.mainSignals)
       {
         MainSignal *s = it.second;
-        if(s->ownerConnectionId != fromConnId || s->address != m.address || s->channel != m.channel)
+        if(getSimModeUnlocked() == SimMode::Replica || s->ownerConnectionId != fromConnId)
+          continue;
+
+        if(s->address != m.address || s->channel != m.channel)
           continue;
 
         bool wasBlinking = false;
@@ -1005,7 +1032,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
         if(isBlinking && !wasBlinking)
           s->setSignalBlinkStart(true, m_stateData.signalBlinkState);
 
-        if(getSimMode() == SimMode::Master)
+        if(getSimModeUnlocked() == SimMode::Master)
         {
           for(const auto& connection : m_repliacas)
           {
@@ -1024,13 +1051,16 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       for(auto it : m_stateData.auxSignals)
       {
         AuxSignal *s = it.second;
-        if(s->ownerConnectionId != fromConnId || s->address != m.address || s->channel != m.channel)
+        if(getSimModeUnlocked() == SimMode::Replica || s->ownerConnectionId != fromConnId)
+          continue;
+
+        if(s->address != m.address || s->channel != m.channel)
           continue;
 
         s->mLights = m.lights;
         s->mPosition = m.position;
 
-        if(getSimMode() == SimMode::Master)
+        if(getSimModeUnlocked() == SimMode::Master)
         {
           for(const auto& connection : m_repliacas)
           {
@@ -1147,8 +1177,6 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       if(m.encoding > uint8_t(SensorState::Encoding::Code270))
         break;
 
-      std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-
       auto chan = staticData.sensorChannelMap.find(m.channel);
       if(chan == staticData.sensorChannelMap.end())
         break;
@@ -1157,7 +1185,8 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       if(sensor == chan->second.end())
         break;
 
-      if(getSimMode() == SimMode::Master)
+      std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+      if(getSimModeUnlocked() == SimMode::Master)
       {
         for(const auto& connection : m_repliacas)
         {
@@ -1252,6 +1281,9 @@ void Simulator::setConnectionAsReplica(const std::shared_ptr<SimulatorConnection
     // Move this connection to replicas list
     m_repliacas.push_back(connection->shared_from_this());
     m_connections.erase(it);
+
+    // Sync power state
+    connection->send(SimulatorProtocol::Power(m_stateData.powerOn));
   }
 }
 
@@ -1270,7 +1302,18 @@ void Simulator::removeConnection(const std::shared_ptr<SimulatorConnection>& con
     if(auto it = std::find(m_connections.begin(), m_connections.end(), connection); it != m_connections.end())
     {
       m_connections.erase(it);
-      onConnectionRemoved(connection);
+      if(getSimMode() == SimMode::Replica)
+      {
+        if(m_connections.empty())
+        {
+          doSendReplicaDiscover();
+          doReceiveReplicaDiscover();
+        }
+      }
+      else
+      {
+        onConnectionRemoved(connection);
+      }
     }
   }
 }
@@ -1426,6 +1469,84 @@ void Simulator::doReceive()
   });
 }
 
+void Simulator::doSendReplicaDiscover()
+{
+  if(getSimMode() != SimMode::Replica)
+    return;
+
+  if(!m_connections.empty())
+    return;
+
+  boost::asio::ip::udp::endpoint udpServer(boost::asio::ip::address_v4::broadcast(), defaultPort);
+
+  m_socketUDP.async_send_to(boost::asio::buffer(ReplicaRequestMessage, sizeof(ReplicaRequestMessage)),
+                            udpServer,
+                            [this](const boost::system::error_code& ec2, std::size_t bytesTransferred)
+  {
+    assert(!ec2);
+
+    if(!ec2 && bytesTransferred == sizeof(ReplicaRequestMessage))
+      doSendReplicaDiscover();
+  });
+}
+
+void Simulator::doReceiveReplicaDiscover()
+{
+  if(getSimMode() != SimMode::Replica)
+    return;
+
+  if(!m_connections.empty())
+    return;
+
+  m_socketUDP.async_receive_from(
+        boost::asio::buffer(m_udpBuffer),
+        m_remoteEndpoint,
+        [this](const boost::system::error_code& ec, std::size_t bytesReceived)
+  {
+    if(!ec)
+    {
+      const char *recvMsg = reinterpret_cast<char*>(m_udpBuffer.data());
+
+      bool isRequest = (bytesReceived >= (sizeof(ResponseMessage) + 2) &&
+                        std::memcmp(recvMsg, &ResponseMessage, sizeof(ResponseMessage)) == 0);
+
+      if(isRequest && m_connections.empty())
+      {
+        if(!m_serverLocalHostOnly || m_remoteEndpoint.address().is_loopback())
+        {
+          const uint16_t *response = reinterpret_cast< const uint16_t*>(recvMsg);
+          uint16_t remotePort = response[2];
+
+          // Received in big endian format
+          if constexpr (std::endian::native == std::endian::little)
+          {
+            // Swap bytes
+            uint8_t *b = reinterpret_cast<uint8_t *>(&remotePort);
+            std::swap(b[0], b[1]);
+          }
+
+          boost::asio::ip::tcp::endpoint masterServer;
+          masterServer.port(remotePort);
+          masterServer.address(m_remoteEndpoint.address());
+
+          boost::system::error_code sockEc;
+          boost::asio::ip::tcp::socket s(m_ioContext);
+          s.connect(masterServer, sockEc);
+          if(!sockEc)
+          {
+            m_connections.emplace_back(std::make_shared<SimulatorConnection>(
+                                         shared_from_this(), std::move(s),
+                                         lastConnectionId))->start();
+          }
+        }
+      }
+
+      if(m_connections.empty())
+        doReceiveReplicaDiscover();
+    }
+  });
+}
+
 void Simulator::tick()
 {
   m_tickTimer.expires_after(tickRate);
@@ -1472,12 +1593,25 @@ void Simulator::handShake()
       std::shared_ptr<SimulatorConnection> conn = *it;
       it = m_connections.erase(it);
       conn->stop();
-      onConnectionRemoved(conn);
+
+      if(getSimMode() == SimMode::Replica)
+      {
+        if(m_connections.empty())
+        {
+          doSendReplicaDiscover();
+          doReceiveReplicaDiscover();
+        }
+      }
+      else
+      {
+        onConnectionRemoved(conn);
+      }
       continue;
     }
 
     (*it)->setHandShakeResponseReceived(false);
-    (*it)->send(SimulatorProtocol::HandShake(false));
+    if(getSimMode() != SimMode::Replica)
+      (*it)->send(SimulatorProtocol::HandShake(false));
     it++;
   }
 
@@ -1625,6 +1759,92 @@ void Simulator::syncSensorState()
 
       connection->send(SimulatorProtocol::SpawnStateChange(spawn->address, state));
       break;
+    }
+  }
+}
+
+void Simulator::syncReplicaState()
+{
+  m_syncReplicaStateTimer.expires_after(syncReplicaRate);
+  m_syncReplicaStateTimer.async_wait(
+    [this](std::error_code ec)
+    {
+      if(!ec)
+      {
+        syncReplicaState();
+      }
+    });
+
+  if(staticData.sensorChannelMap.empty())
+    return;
+
+  std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+  for(const std::shared_ptr<SimulatorConnection>& connection : m_repliacas)
+  {
+    auto chanIt = staticData.sensorChannelMap.cbegin();
+    std::advance(chanIt, connection->m_lastSyncedChannelIdx);
+
+    const auto& channelMap = chanIt->second;
+
+    size_t batchIdx = connection->m_nextSyncBatchIdx;
+    bool sensorFound = false;
+
+    uint16_t stateBuf = 0;
+    std::map<size_t, size_t>::const_iterator it;
+
+    while(true)
+    {
+      const size_t firstAddress = batchIdx * 16 + 1;
+      const size_t lastAddress = (batchIdx + 1) * 16;
+
+      it = channelMap.lower_bound(firstAddress);
+      stateBuf = 0;
+
+      while(it != channelMap.end())
+      {
+        if(it->first > lastAddress)
+          break;
+
+        const auto& sensor = staticData.sensors[it->second];
+
+        // Axle counter sensor send diffs so there is no point in querying them
+        if(sensor.type == Sensor::Type::AxleCounter)
+        {
+          it++;
+          continue;
+        }
+
+        const auto& sensorState = m_stateData.sensors[it->second];
+        if(sensorState.value)
+          stateBuf |= 1 << (sensor.address - firstAddress);
+
+        sensorFound = true;
+        it++;
+      }
+
+      if(sensorFound || it == channelMap.end())
+        break;
+
+      // Go to next batch
+      batchIdx = (it->first - 1) / 16;
+    }
+
+    if(sensorFound)
+      connection->send(SimulatorProtocol::SensorBatchState(chanIt->first,
+                                                           m_stateData.powerOn ? batchIdx : 0, stateBuf));
+
+    if(it == channelMap.end())
+    {
+      // We reached channel end, go to start of next channel
+      connection->m_nextSyncBatchIdx = 0;
+      connection->m_lastSyncedChannelIdx++;
+
+      if(connection->m_lastSyncedChannelIdx >= staticData.sensorChannelMap.size())
+        connection->m_lastSyncedChannelIdx = 0; // Restart from first channel
+    }
+    else
+    {
+      connection->m_nextSyncBatchIdx = batchIdx + 1;
     }
   }
 }
@@ -4858,13 +5078,61 @@ TrainTypeInterface::~TrainTypeInterface()
 
 void Simulator::setSimMode(SimMode m)
 {
+  std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+
   if(mSimMode == m)
     return;
 
+  const SimMode oldMode = mSimMode;
   mSimMode = m;
+
+  if(oldMode != SimMode::Master)
+  {
+    m_syncReplicaStateTimer.cancel();
+
+    while(!m_repliacas.empty())
+    {
+      auto connection =  m_repliacas.back();
+      m_repliacas.pop_back();
+      connection->stop();
+    }
+  }
 
   if(mSimMode == SimMode::Master)
   {
-
+    syncReplicaState();
   }
+  else if(mSimMode == SimMode::Replica)
+  {
+    // Stop UDP discovery
+    boost::system::error_code ec;
+    m_socketUDP.close(ec);
+
+    // Restart UDP to send discover message
+    // TODO: make unified
+    m_socketUDP.open(boost::asio::ip::udp::v4(), ec);
+    if(ec)
+        assert(false);
+
+    m_socketUDP.set_option(boost::asio::socket_base::reuse_address(true), ec);
+    if(ec)
+        assert(false);
+
+    m_socketUDP.set_option(boost::asio::socket_base::broadcast(true), ec);
+    if(ec)
+        assert(false);
+
+    m_socketUDP.bind(boost::asio::ip::udp::endpoint(boost::asio::ip::address_v4::any(), defaultPort), ec);
+    if(ec)
+      assert(false);
+
+    doSendReplicaDiscover();
+    doReceiveReplicaDiscover();
+  }
+}
+
+Simulator::SimMode Simulator::getSimMode() const
+{
+  std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+  return mSimMode;
 }

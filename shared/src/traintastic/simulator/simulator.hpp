@@ -679,7 +679,10 @@ public:
   }
 
   void setSimMode(SimMode m);
-  inline SimMode getSimMode() const { return mSimMode; }
+  SimMode getSimMode() const;
+
+
+  inline SimMode getSimModeUnlocked() const { return mSimMode; };
 
 private:
   friend struct TrainState;
@@ -687,6 +690,7 @@ private:
   constexpr static auto handShakeRate = std::chrono::milliseconds(1000);
   constexpr static auto signalBlinkRate = std::chrono::milliseconds(275);
   constexpr static auto syncSensorRate = std::chrono::milliseconds(150);
+  constexpr static auto syncReplicaRate = std::chrono::milliseconds(220);
   constexpr static auto garbageCollectRate = std::chrono::milliseconds(500);
 
   constexpr static float defaultSpeedKmH = 200;
@@ -703,6 +707,7 @@ private:
 
   boost::asio::steady_timer m_signalBlinkStateTimer;
   boost::asio::steady_timer m_syncSensorStateTimer;
+  boost::asio::steady_timer m_syncReplicaStateTimer;
   boost::asio::steady_timer m_garbageCollectTimer;
 
   std::thread m_thread;
@@ -723,6 +728,8 @@ private:
 
   void accept();
   void doReceive();
+  void doSendReplicaDiscover();
+  void doReceiveReplicaDiscover();
   void onConnectionRemoved(const std::shared_ptr<SimulatorConnection> &connection);
   void onReplicaRemoved(const std::shared_ptr<SimulatorConnection> &connection);
 
@@ -730,6 +737,7 @@ private:
   void handShake();
   void blinkSignals();
   void syncSensorState();
+  void syncReplicaState();
   void garbageCollectSegmentState();
 
   void updateTrainPositions();

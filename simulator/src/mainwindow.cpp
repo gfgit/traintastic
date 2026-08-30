@@ -112,6 +112,11 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
           loadExtraImages(filename);
         }
       });
+    menu->addSeparator();
+    menu->addAction("Set Master", this, &MainWindow::setMaster);
+    menu->addAction("Set Replica", this, &MainWindow::setReplica);
+
+    menu->addSeparator();
     menu->addAction("Quit", this, &MainWindow::close);
 
     viewMenu = menu = menuBar()->addMenu("View");
@@ -454,4 +459,34 @@ void MainWindow::setToolBarVisible(bool val)
     toolbar->setVisible(val);
   }
   m_showToolBar->setChecked(val);
+}
+
+void MainWindow::setMaster()
+{
+  if(m_view->simulator()->getSimMode() == Simulator::SimMode::Master)
+    return; // Already master
+
+  if(m_view->simulator()->getSimMode() == Simulator::SimMode::Replica)
+  {
+    QMessageBox::warning(this, tr("Cannot set Master"), tr("This simulator is a replica!"));
+    return;
+  }
+
+  m_view->simulator()->setSimMode(Simulator::SimMode::Master);
+  setWindowTitle("Traintastic simulator v" TRAINTASTIC_VERSION_FULL "MASTER");
+}
+
+void MainWindow::setReplica()
+{
+  if(m_view->simulator()->getSimMode() == Simulator::SimMode::Replica)
+    return; // Already master
+
+  if(m_view->simulator()->getSimMode() == Simulator::SimMode::Master)
+  {
+    QMessageBox::warning(this, tr("Cannot set Replica"), tr("This simulator is master!"));
+    return;
+  }
+
+  m_view->simulator()->setSimMode(Simulator::SimMode::Replica);
+  setWindowTitle("Traintastic simulator v" TRAINTASTIC_VERSION_FULL "REPLICA");
 }
