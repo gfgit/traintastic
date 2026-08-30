@@ -29,6 +29,11 @@
 #include <chrono>
 #include "protocol.hpp"
 
+#define bitRead(value, bit) (((value) >> (bit)) & 0x01)
+#define bitSet(value, bit) ((value) |= (1UL << (bit)))
+#define bitClear(value, bit) ((value) &= ~(1UL << (bit)))
+#define bitWrite(value, bit, bitvalue) ((bitvalue) ? bitSet(value, bit) : bitClear(value, bit))
+
 static std::mt19937 rng = std::mt19937(std::random_device{}());
 
 constexpr static float ADJ_MARGIN = 0.000001;
@@ -550,20 +555,37 @@ void Simulator::stop()
 void Simulator::setPowerOn(bool powerOn)
 {
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-  if(m_stateData.powerOn != powerOn)
+  if(getSimModeUnlocked() == SimMode::Replica)
   {
-    m_stateData.powerOn = powerOn;
-    send(SimulatorProtocol::Power(m_stateData.powerOn));
-    sendReplicas(SimulatorProtocol::Power(m_stateData.powerOn));
+    // Send request to master
+    send(SimulatorProtocol::Power(powerOn));
+  }
+  else
+  {
+    if(m_stateData.powerOn != powerOn)
+    {
+      m_stateData.powerOn = powerOn;
+      send(SimulatorProtocol::Power(m_stateData.powerOn));
+      sendReplicas(SimulatorProtocol::Power(m_stateData.powerOn));
+    }
   }
 }
 
 void Simulator::togglePowerOn()
 {
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-  m_stateData.powerOn = !m_stateData.powerOn;
-  send(SimulatorProtocol::Power(m_stateData.powerOn));
-  sendReplicas(SimulatorProtocol::Power(m_stateData.powerOn));
+
+  if(getSimModeUnlocked() == SimMode::Replica)
+  {
+    // Send request to master
+    send(SimulatorProtocol::Power(!m_stateData.powerOn));
+  }
+  else
+  {
+    m_stateData.powerOn = !m_stateData.powerOn;
+    send(SimulatorProtocol::Power(m_stateData.powerOn));
+    sendReplicas(SimulatorProtocol::Power(m_stateData.powerOn));
+  }
 }
 
 Simulator::Train *Simulator::getTrainAt(size_t trainIndex) const
@@ -834,7 +856,14 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
     case OpCode::Power:
     {
       std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+      const bool wasPowerOn = m_stateData.powerOn;
       m_stateData.powerOn = static_cast<const Power&>(message).powerOn;
+
+      if(getSimModeUnlocked() != SimMode::Replica && wasPowerOn != m_stateData.powerOn)
+      {
+        send(message);
+        sendReplicas(message);
+      }
       break;
     }
     case OpCode::LocomotiveSpeedDirection:
@@ -950,12 +979,54 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
         break;
 
       std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-      m_stateData.sensors.at(sensor->second).value = m.value;
+
+      auto &sensorState = m_stateData.sensors[sensor->second];
+      const auto sensorType = staticData.sensors.at(sensor->second).type;
+      if(sensorType == Sensor::Type::PositionSensor)
+      {
+        sensorState.curTime = sensorState.maxTime;
+      }
+      else if(sensorType == Sensor::Type::AxleCounter)
+      {
+        sensorState.axleCount += m.axleCount;
+        sensorState.curTime = sensorState.axleCount > 0 ? sensorState.maxTime : -sensorState.maxTime;
+      }
+
+      sensorState.value = m.value;
 
       break;
     }
     case OpCode::SensorBatchState:
-      break; // only sent by simulator
+    {
+      if(getSimModeUnlocked() != SimMode::Replica)
+        break; // Only sent by Master simulator
+
+      const auto& m = static_cast<const SensorBatchState&>(message);
+
+      if(m.channel != 0)
+        break; // Protocol error
+
+      const size_t firstIdx = m.batchIdx * 16;
+      const size_t idxCount = std::min(firstIdx + 16, staticData.sensors.size());
+
+      std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+
+      for(size_t idx = firstIdx; idx < idxCount; idx++)
+      {
+        const auto& sensor = staticData.sensors[idx];
+
+        // Axle counter sensor send diffs so there is no point in querying them
+        if(sensor.type == Sensor::Type::AxleCounter)
+        {
+          continue;
+        }
+
+        auto& sensorState = m_stateData.sensors[idx];
+        sensorState.value = bitRead(m.state, idx - firstIdx);
+      }
+
+      break;
+    }
     case OpCode::Handshake:
     case OpCode::HandshakeResponse:
     case OpCode::ReplicaGreeting:
@@ -967,7 +1038,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       for(auto it : m_stateData.mainSignals)
       {
         MainSignal *s = it.second;
-        if(getSimModeUnlocked() == SimMode::Replica || s->ownerConnectionId != fromConnId)
+        if(getSimModeUnlocked() != SimMode::Replica && s->ownerConnectionId != fromConnId)
           continue;
 
         if(s->address != m.address || s->channel != m.channel)
@@ -1034,10 +1105,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
 
         if(getSimModeUnlocked() == SimMode::Master)
         {
-          for(const auto& connection : m_repliacas)
-          {
-            connection->send(m);
-          }
+          sendReplicas(m);
         }
 
         break;
@@ -1051,7 +1119,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       for(auto it : m_stateData.auxSignals)
       {
         AuxSignal *s = it.second;
-        if(getSimModeUnlocked() == SimMode::Replica || s->ownerConnectionId != fromConnId)
+        if(getSimModeUnlocked() != SimMode::Replica && s->ownerConnectionId != fromConnId)
           continue;
 
         if(s->address != m.address || s->channel != m.channel)
@@ -1062,10 +1130,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
 
         if(getSimModeUnlocked() == SimMode::Master)
         {
-          for(const auto& connection : m_repliacas)
-          {
-            connection->send(m);
-          }
+          sendReplicas(m);
         }
         break;
       }
@@ -1152,7 +1217,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
 
             const auto& sensorState = m_stateData.sensors[it->second];
             if(sensorState.value)
-              stateBuf |= 1 << (sensor.address - firstAddress);
+              bitSet(stateBuf, sensor.address - firstAddress);
 
             sensorFound = true;
             it++;
@@ -1283,6 +1348,7 @@ void Simulator::setConnectionAsReplica(const std::shared_ptr<SimulatorConnection
     m_connections.erase(it);
 
     // Sync power state
+    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
     connection->send(SimulatorProtocol::Power(m_stateData.powerOn));
   }
 }
@@ -1537,6 +1603,9 @@ void Simulator::doReceiveReplicaDiscover()
             m_connections.emplace_back(std::make_shared<SimulatorConnection>(
                                          shared_from_this(), std::move(s),
                                          lastConnectionId))->start();
+
+            // Tell master we are a replica
+            m_connections.back()->send(SimulatorProtocol::ReplicaGreeting());
           }
         }
       }
@@ -1718,7 +1787,7 @@ void Simulator::syncSensorState()
     }
 
     if(sensorFound)
-      connection->send(SimulatorProtocol::SensorBatchState(currentChannel, m_stateData.powerOn ? batchIdx : 0, stateBuf));
+      connection->send(SimulatorProtocol::SensorBatchState(currentChannel, batchIdx, m_stateData.powerOn ? stateBuf : 0));
 
     if(it == channelMap.end())
     {
@@ -1781,71 +1850,35 @@ void Simulator::syncReplicaState()
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
   for(const std::shared_ptr<SimulatorConnection>& connection : m_repliacas)
   {
-    auto chanIt = staticData.sensorChannelMap.cbegin();
-    std::advance(chanIt, connection->m_lastSyncedChannelIdx);
+    size_t firstIdx = connection->m_nextSyncBatchIdx * 16;
 
-    const auto& channelMap = chanIt->second;
+    if(firstIdx >= staticData.sensors.size())
+    {
+      // Start from zero again
+      connection->m_nextSyncBatchIdx = 0;
+      firstIdx = 0;
+    }
 
-    size_t batchIdx = connection->m_nextSyncBatchIdx;
-    bool sensorFound = false;
+    const size_t idxCount = std::min(firstIdx + 16, staticData.sensors.size());
 
     uint16_t stateBuf = 0;
-    std::map<size_t, size_t>::const_iterator it;
-
-    while(true)
+    for(size_t idx = firstIdx; idx < idxCount; idx++)
     {
-      const size_t firstAddress = batchIdx * 16 + 1;
-      const size_t lastAddress = (batchIdx + 1) * 16;
+      const auto& sensor = staticData.sensors[idx];
 
-      it = channelMap.lower_bound(firstAddress);
-      stateBuf = 0;
-
-      while(it != channelMap.end())
+      // Axle counter sensor send diffs so there is no point in querying them
+      if(sensor.type == Sensor::Type::AxleCounter)
       {
-        if(it->first > lastAddress)
-          break;
-
-        const auto& sensor = staticData.sensors[it->second];
-
-        // Axle counter sensor send diffs so there is no point in querying them
-        if(sensor.type == Sensor::Type::AxleCounter)
-        {
-          it++;
-          continue;
-        }
-
-        const auto& sensorState = m_stateData.sensors[it->second];
-        if(sensorState.value)
-          stateBuf |= 1 << (sensor.address - firstAddress);
-
-        sensorFound = true;
-        it++;
+        continue;
       }
 
-      if(sensorFound || it == channelMap.end())
-        break;
-
-      // Go to next batch
-      batchIdx = (it->first - 1) / 16;
+      const auto& sensorState = m_stateData.sensors[idx];
+      if(sensorState.value)
+        bitSet(stateBuf, idx - firstIdx);
     }
 
-    if(sensorFound)
-      connection->send(SimulatorProtocol::SensorBatchState(chanIt->first,
-                                                           m_stateData.powerOn ? batchIdx : 0, stateBuf));
-
-    if(it == channelMap.end())
-    {
-      // We reached channel end, go to start of next channel
-      connection->m_nextSyncBatchIdx = 0;
-      connection->m_lastSyncedChannelIdx++;
-
-      if(connection->m_lastSyncedChannelIdx >= staticData.sensorChannelMap.size())
-        connection->m_lastSyncedChannelIdx = 0; // Restart from first channel
-    }
-    else
-    {
-      connection->m_nextSyncBatchIdx = batchIdx + 1;
-    }
+    connection->send(SimulatorProtocol::SensorBatchState(0, connection->m_nextSyncBatchIdx, stateBuf));
+    connection->m_nextSyncBatchIdx++;
   }
 }
 
@@ -2644,18 +2677,21 @@ void Simulator::updateSensors()
 
     if(sensorState.value != sensorValue || axleCount != 0)
     {
-      sensorState.value = sensorValue;
-
-      for(const auto& connection : m_connections)
+      if(getSimModeUnlocked() != SimMode::Replica || axleCount != 0)
       {
-        // Only send to subscribed clients or clients with no subscriptions
-        if(!connection->subscribedChannels.empty() &&
-            !vec_contains(connection->subscribedChannels, sensor.channel))
-          continue;
-        connection->send(SimulatorProtocol::SensorChanged(sensor.channel, sensor.address, axleCount, sensorState.value));
+        sensorState.value = sensorValue;
+
+        for(const auto& connection : m_connections)
+        {
+          // Only send to subscribed clients or clients with no subscriptions
+          if(!connection->subscribedChannels.empty() &&
+              !vec_contains(connection->subscribedChannels, sensor.channel))
+            continue;
+          connection->send(SimulatorProtocol::SensorChanged(sensor.channel, sensor.address, axleCount, sensorState.value));
+        }
       }
 
-      if(getSimMode() == SimMode::Master)
+      if(getSimModeUnlocked() == SimMode::Master)
       {
         for(const auto& connection : m_repliacas)
         {
