@@ -687,6 +687,7 @@ void Simulator::setTrainMode(Train *train, TrainState::Mode mode)
     train->state.mode = mode;
     train->state.nextSignal.dirty = true;
     train->state.prevSignal.dirty = true;
+    train->state.speedOrDirectionChanged = true;
 
     if(train->state.mode == TrainState::Mode::Manual)
     {
@@ -1402,9 +1403,65 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
     Train dummy;
     arch >> dummy;
 
+    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+
+    {
+      auto it = m_stateData.trains.find(dummy.name);
+      if(it != m_stateData.trains.end())
+      {
+        removeTrain(dummy.name, true);
+      }
+    }
+
+    for(const Vehicle &v : vehiclesSer)
+    {
+      Vehicle *result = nullptr;
+      auto it = m_stateData.vehicles.find(v.name);
+      if(it != m_stateData.vehicles.end())
+      {
+        result = it->second;
+        result->color = v.color;
+        result->length = v.length;
+        result->typeIdx = v.typeIdx;
+      }
+      else
+      {
+        result = addVehicle(v.name, v.length, v.color, v.typeIdx);
+      }
+
+      const auto oldState = result->state;
+      result->state = v.state;
+      updateReplicaTracking(result, oldState);
+    }
+
     break;
   }
   case OpCode::TrainStateRefresh:
+  {
+    Train dummy;
+    arch >> dummy;
+
+    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+    auto it = m_stateData.trains.find(dummy.name);
+    if(it == m_stateData.trains.end())
+      break;
+
+    Train *train = it->second;
+    train->speedMax = dummy.speedMax;
+    train->state.speed = dummy.state.speed;
+    train->state.targetSpeed = dummy.state.targetSpeed;
+    train->state.waitToStart_ms = dummy.state.waitToStart_ms;
+    train->state.reverse = dummy.state.reverse;
+    train->state.mode = dummy.state.mode;
+    train->state.mode = dummy.state.mode;
+
+    for(auto &item : train->vehicles)
+    {
+
+    }
+
+    break;
+  }
   case OpCode::VehiclesRemoved:
   case OpCode::TrainRemoved:
   case OpCode::TrainChangedVehicles:
@@ -2222,6 +2279,38 @@ inline bool isTurnoutUnknownState(const Simulator::TrackSegment& segment,
   return false;
 }
 
+
+
+void Simulator::calculateFacePosition(Simulator::VehicleState::Face &face)
+{
+  const auto& segment = staticData.trackSegments[face.segmentIndex];
+  size_t curveIndex = Simulator::invalidIndex;
+
+  if(isStraight(segment))
+  {
+    face.position.x = segment.points[0].x + face.distance * std::cos(segment.rotation);
+    face.position.y = segment.points[0].y + face.distance * std::sin(segment.rotation);
+  }
+  else if(isCurve(segment, curveIndex))
+  {
+    assert(curveIndex != Simulator::invalidIndex);
+    const auto& curve = segment.curves[curveIndex];
+
+    float angle = segment.rotation + (face.distance / curve.length) * curve.angle;
+    if(curve.angle < 0)
+    {
+      angle += pi;
+    }
+
+    face.position.x = curve.center.x + curve.radius * std::sin(angle);
+    face.position.y = curve.center.y - curve.radius * std::cos(angle);
+  }
+  else
+  {
+    assert(false);
+  }
+}
+
 bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
                                       const float speed, bool isFirst_,
                                       Train &train_, bool &trainRemoved, float &outRemaining)
@@ -2629,38 +2718,24 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
   }
 
   // Calculate position:
-  {
-    const auto& segment = staticData.trackSegments[face.segmentIndex];
-    size_t curveIndex = invalidIndex;
-
-    if(isStraight(segment))
-    {
-      face.position.x = segment.points[0].x + distance * std::cos(segment.rotation);
-      face.position.y = segment.points[0].y + distance * std::sin(segment.rotation);
-    }
-    else if(isCurve(segment, curveIndex))
-    {
-      assert(curveIndex != invalidIndex);
-      const auto& curve = segment.curves[curveIndex];
-
-      float angle = segment.rotation + (distance / curve.length) * curve.angle;
-      if(curve.angle < 0)
-      {
-        angle += pi;
-      }
-
-      face.position.x = curve.center.x + curve.radius * std::sin(angle);
-      face.position.y = curve.center.y - curve.radius * std::cos(angle);
-    }
-    else
-    {
-      assert(false);
-    }
-  }
-
   face.distance = distance;
+  calculateFacePosition(face);
 
   return true;
+}
+
+void Simulator::updateReplicaTracking(Vehicle *vehicle, const VehicleState &oldState)
+{
+  maybeRemoveVehicleSegment(vehicle, oldState.front.segmentIndex);
+  if(oldState.rear.segmentIndex != oldState.front.segmentIndex)
+    maybeRemoveVehicleSegment(vehicle, oldState.rear.segmentIndex);
+
+  maybeAddVehicleSegment(vehicle, vehicle->state.front.segmentIndex);
+  if(vehicle->state.rear.segmentIndex != vehicle->state.front.segmentIndex)
+    maybeAddVehicleSegment(vehicle, vehicle->state.rear.segmentIndex);
+
+  calculateFacePosition(vehicle->state.front);
+  calculateFacePosition(vehicle->state.rear);
 }
 
 void Simulator::maybeAddVehicleSegment(Vehicle *vehicle, size_t segmentIdx)
@@ -4362,7 +4437,9 @@ void Simulator::sendTrainStateRefreshReplica(Train *train)
 {
   std::stringstream ss;
   boost::archive::binary_oarchive arch(ss);
+  arch << train->name;
   arch << train;
+  boost::serialization::serializeVehicleList(arch, train->vehicles);
 
   sendReplicas(SimulatorProtocol::OpCode::TrainStateRefresh, ss.str());
 }

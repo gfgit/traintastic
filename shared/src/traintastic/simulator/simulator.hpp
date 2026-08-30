@@ -525,6 +525,13 @@ public:
       bool reversed = false;
     };
 
+    struct VehicleItemFull
+    {
+      std::string name;
+      VehicleState state;
+      bool reversed = false;
+    };
+
     std::vector<VehicleItem> vehicles;
     float length = 0.0f;
     float speedMax = 0.0f;
@@ -749,10 +756,13 @@ private:
   void garbageCollectSegmentState();
 
   void updateTrainPositions();
+
+  void calculateFacePosition(Simulator::VehicleState::Face &face);
   bool updateVehiclePosition(Vehicle *vehicle, bool frontFace,
                              const float speed, bool isFirst_,
                              Train &train_, bool &trainRemoved, float &outRemaining);
 
+  void updateReplicaTracking(Vehicle *vehicle, const VehicleState &oldState);
   void maybeAddVehicleSegment(Vehicle *vehicle, size_t segmentIdx);
   void maybeRemoveVehicleSegment(Vehicle *vehicle, size_t segmentIdx);
 
@@ -878,11 +888,32 @@ void serialize(Archive & ar, Simulator::Vehicle &vehicle, const unsigned int /*v
 }
 
 template<class Archive>
-void serialize(Archive & ar, Simulator::Train::VehicleItem &vehicle, const unsigned int /*version*/)
+void serializeVehicleList(Archive & ar, const std::vector<Simulator::Train::VehicleItem> &vehicles)
 {
-  ar & vehicle.vehicle->name;
-  ar & vehicle.vehicle->state;
-  ar & vehicle.reversed;
+  ar << vehicles.size();
+  for(const auto &item : vehicles)
+  {
+    ar << item.vehicle->name;
+    ar << item.vehicle->state;
+    ar << item.reversed;
+  }
+}
+
+template<class Archive>
+void deserializeVehicleList(Archive & ar, std::vector<Simulator::Train::VehicleItemFull> &vehicles)
+{
+  size_t sz = 0;
+  ar >> sz;
+  vehicles.reserve(sz);
+
+  for(size_t i = 0; i < sz; i++)
+  {
+    Simulator::Train::VehicleItemFull item;
+    ar >> item.name;
+    ar >> item.state;
+    ar >> item.reversed;
+    vehicles.push_back(item);
+  }
 }
 
 template<class Archive>
