@@ -37,13 +37,13 @@
 #include <boost/asio/ip/udp.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/signals2/signal.hpp>
-#include <boost/serialization/access.hpp>
-#include <boost/serialization/vector.hpp>
 #include <nlohmann/json.hpp>
 #include <traintastic/enum/color.hpp>
 #include <traintastic/enum/decoderprotocol.hpp>
 #include <traintastic/utils/stringhash.hpp>
 #include <traintastic/utils/stringequal.hpp>
+
+#include <QDataStream>
 
 namespace SimulatorProtocol {
   enum class OpCode : uint8_t;
@@ -460,7 +460,7 @@ public:
     static constexpr float AccelerationRate_ms2 = 0.6;
     static constexpr float DecelerationRate_ms2 = 0.75;
 
-    enum class Mode
+    enum class Mode : uint8_t
     {
       Manual = 0,
       SemiAutomatic = 1,
@@ -854,65 +854,89 @@ constexpr float deg2rad(float degrees)
 
 }
 
-namespace boost {
-namespace serialization {
 
-template<class Archive>
-void serialize(Archive & ar, Simulator::Point &p, const unsigned int /*version*/)
+QDataStream &operator<<(QDataStream &stream, const Simulator::Point &p)
 {
-  ar & p.x;
-  ar & p.y;
+  stream << p.x;
+  stream << p.y;
 }
 
-template<class Archive>
-void serialize(Archive & ar, Simulator::VehicleState::Face &face, const unsigned int /*version*/)
+QDataStream &operator>>(QDataStream &stream, Simulator::Point &p)
 {
-  ar & face.segmentIndex;
-  ar & face.segmentDirectionInverted;
-  ar & face.distance;
+  stream >> p.x;
+  stream >> p.y;
 }
 
-template<class Archive>
-void serialize(Archive & ar, Simulator::VehicleState &vehicleState, const unsigned int /*version*/)
+QDataStream &operator<<(QDataStream &stream, const Simulator::VehicleState::Face &face)
 {
-  ar & vehicleState.front;
-  ar & vehicleState.rear;
+  stream << face.segmentIndex;
+  stream << face.segmentDirectionInverted;
+  stream << face.distance;
 }
 
-template<class Archive>
-void serialize(Archive & ar, Simulator::Vehicle &vehicle, const unsigned int /*version*/)
+QDataStream &operator>>(QDataStream &stream, Simulator::VehicleState::Face &face)
 {
-  ar & vehicle.name;
-  ar & vehicle.typeIdx;
-  ar & vehicle.state;
+  stream >> face.segmentIndex;
+  stream >> face.segmentDirectionInverted;
+  stream >> face.distance;
+}
+
+QDataStream &operator<<(QDataStream &stream, const Simulator::VehicleState &vehicleState)
+{
+  stream << vehicleState.front;
+  stream << vehicleState.rear;
+}
+
+QDataStream &operator>>(QDataStream &stream, Simulator::VehicleState &vehicleState)
+{
+  stream >> vehicleState.front;
+  stream >> vehicleState.rear;
+}
+
+QDataStream &operator<<(QDataStream &stream, const Simulator::Vehicle &vehicle)
+{
+  stream << vehicle.name;
+  stream << vehicle.typeIdx;
+  stream << vehicle.state;
 
   if(vehicle.typeIdx == Simulator::invalidIndex)
   {
-    ar & vehicle.color;
-    ar & vehicle.length;
+    stream << vehicle.color;
+    stream << vehicle.length;
   }
 }
 
-template<class Archive>
-void serializeVehicleList(Archive & ar, const std::vector<Simulator::Train::VehicleItem> &vehicles, bool full)
+QDataStream &operator>>(QDataStream &stream, Simulator::Vehicle &vehicle)
 {
-  ar << vehicles.size();
+  stream >> vehicle.name;
+  stream >> vehicle.typeIdx;
+  stream >> vehicle.state;
+
+  if(vehicle.typeIdx == Simulator::invalidIndex)
+  {
+    stream >> vehicle.color;
+    stream >> vehicle.length;
+  }
+}
+
+void serializeVehicleList(QDataStream &stream, const std::vector<Simulator::Train::VehicleItem> &vehicles, bool full)
+{
+  stream << size_t(vehicles.size());
   for(const auto &item : vehicles)
   {
     if(full)
-      ar << item.vehicle;
+      stream << item.vehicle;
     else
-      ar << item.vehicle->state;
+      stream << item.vehicle->state;
 
-    ar << item.reversed;
+    stream << item.reversed;
   }
 }
 
-template<class Archive>
-void deserializeVehicleList(Archive & ar, std::vector<Simulator::Train::VehicleItemFull> &vehicles, bool full)
+void deserializeVehicleList(QDataStream &stream, std::vector<Simulator::Train::VehicleItemFull> &vehicles, bool full)
 {
   size_t sz = 0;
-  ar >> sz;
+  stream >> sz;
   vehicles.reserve(sz);
 
   for(size_t i = 0; i < sz; i++)
@@ -920,60 +944,63 @@ void deserializeVehicleList(Archive & ar, std::vector<Simulator::Train::VehicleI
     Simulator::Train::VehicleItemFull item;
 
     if(full)
-      ar >> item.vehicle;
+      stream >> item.vehicle;
     else
-      ar >> item.vehicle.state;
+      stream >> item.vehicle.state;
 
-    ar >> item.reversed;
+    stream >> item.reversed;
 
     vehicles.push_back(item);
   }
 }
 
-template<class Archive>
-void serialize(Archive & ar, Simulator::TrainState &trainState, const unsigned int /*version*/)
+QDataStream &operator<<(QDataStream &stream, const Simulator::TrainState &trainState)
 {
-  ar & trainState.speed;
-  ar & trainState.targetSpeed;
-  ar & trainState.waitToStart_ms;
-  ar & trainState.reverse;
-  ar & trainState.mode;
-  ar & trainState.isOnStationStop;
+  stream << trainState.speed;
+  stream << trainState.targetSpeed;
+  stream << trainState.waitToStart_ms;
+  stream << trainState.reverse;
+  stream << trainState.mode;
+  stream << trainState.isOnStationStop;
 }
 
-template<class Archive>
-void serializeTrain(Archive & ar, const Simulator::Train &train, bool full)
+QDataStream &operator>>(QDataStream &ar, Simulator::TrainState &trainState)
 {
-  ar << train.name;
+  ar >> trainState.speed;
+  ar >> trainState.targetSpeed;
+  ar >> trainState.waitToStart_ms;
+  ar >> trainState.reverse;
+  ar >> trainState.mode;
+  ar >> trainState.isOnStationStop;
+}
+
+void serializeTrain(QDataStream &stream, const Simulator::Train &train, bool full)
+{
+  stream << train.name;
 
   if(full)
   {
-    ar << train.speedMax;
+    stream << train.speedMax;
   }
 
-  ar << train.state;
-
-  serializeVehicleList(ar, train.vehicles, full);
+  stream << train.state;
+  serializeVehicleList(stream, train.vehicles, full);
 }
 
-template<class Archive>
-void deserializeTrain(Archive & ar, std::vector<Simulator::Train::VehicleItemFull> &vehicles,
+void deserializeTrain(QDataStream &stream, std::vector<Simulator::Train::VehicleItemFull> &vehicles,
                       std::string &name, Simulator::TrainState &trainState, float &speedMax,
                       bool full)
 {
-  ar >> name;
+  stream >> name;
 
   if(full)
   {
-    ar >> speedMax;
+    stream >> speedMax;
   }
 
-  ar >> trainState;
+  stream >> trainState;
 
-  deserializeVehicleList(ar, vehicles, full);
+  deserializeVehicleList(stream, vehicles, full);
 }
-
-} // namespace serialization
-} // namespace boost
 
 #endif
