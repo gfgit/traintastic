@@ -3089,7 +3089,7 @@ void SimulatorView::userAskRemoveTrain(size_t trainIdx)
     std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
     Simulator::Train *train = m_simulator->getTrainAt(m_trainToBeRemovedIdx);
     if(train)
-      m_simulator->removeTrain(train->name, true);
+      m_simulator->removeTrain(train->trainId, true);
 
     m_trainToBeRemovedIdx = Simulator::invalidIndex;
   }

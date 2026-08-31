@@ -122,12 +122,12 @@ bool TrainsModel::removeTrain(const QString &name)
     if(!mSimulator || !mTrains.contains(name))
         return false;
 
-    if(!mSimulator->removeTrain(name.toStdString(), true))
-        return false;
+    // if(!mSimulator->removeTrain(name.toStdString(), true))
+    //     return false;
 
-    beginResetModel();
-    mTrains.remove(name);
-    endResetModel();
+    // beginResetModel();
+    // mTrains.remove(name);
+    // endResetModel();
     return true;
 }
 

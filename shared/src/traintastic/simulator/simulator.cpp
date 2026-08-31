@@ -1390,11 +1390,12 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
   {
     std::vector<Simulator::Train::VehicleItemFull> vehicles;
     std::string trainName;
+    quint64 trainId = 0;
     Simulator::TrainState trainState;
     float speedMax = 0.0f;
 
     deserializeTrain(stream, vehicles, trainName,
-                     trainState, speedMax,
+                     trainId, trainState, speedMax,
                      true);
 
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
@@ -1403,13 +1404,14 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
       auto it = m_stateData.trains.find(trainName);
       if(it != m_stateData.trains.end())
       {
-        removeTrain(trainName, true);
+        removeTrain(trainId, true);
       }
     }
 
     std::unique_ptr<Train> train(new Train);
     train->address = 3;
     train->protocol = DecoderProtocol::DCCShort;
+    train->trainId = trainId;
     train->name = trainName;
     train->speedMax = speedMax;
     train->state = trainState;
@@ -1457,7 +1459,7 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
         if(otherVehicles.size() == 1 && otherVehicles.front().vehicle == v.vehicle)
         {
           // After removing this vehicle, train will be empty
-          removeTrain(v.vehicle->activeTrain->name, false);
+          removeTrain(v.vehicle->activeTrain->trainId, false);
           v.vehicle->activeTrain = nullptr;
         }
         else
@@ -1483,7 +1485,7 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
       trainTypeInterface->setupTrainSpeedPowered(train.get());
     }
 
-    auto pair = m_stateData.trains.insert({train->name, train.release()});
+    auto pair = m_stateData.trains.insert({train->trainId, train.release()});
     size_t idxOut = std::distance(m_stateData.trains.begin(), pair.first);
     onTrainAddedRemoved(true, idxOut);
 
@@ -1493,11 +1495,12 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
   {
     std::vector<Simulator::Train::VehicleItemFull> vehicles;
     std::string trainName;
+    quint64 trainId = 0;
     Simulator::TrainState trainState;
     float speedMax = 0.0f;
 
     deserializeTrain(stream, vehicles, trainName,
-                     trainState, speedMax,
+                     trainId, trainState, speedMax,
                      false);
 
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
@@ -4416,7 +4419,8 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
       train->state.mode = TrainState::Mode::Manual;
   }
 
-  auto pair = m_stateData.trains.insert({train->name, train.release()});
+  train->trainId = mLastTrainId++;
+  auto pair = m_stateData.trains.insert({train->trainId, train.release()});
   idxOut = std::distance(m_stateData.trains.begin(), pair.first);
 
   onTrainAddedRemoved(true, idxOut);
@@ -4430,11 +4434,11 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
   return true;
 }
 
-bool Simulator::removeTrain(const std::string_view &name, bool removeWagons)
+bool Simulator::removeTrain(quint64 trainId, bool removeWagons)
 {
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-    auto it = m_stateData.trains.find(name);
+    auto it = m_stateData.trains.find(trainId);
     if(it == m_stateData.trains.end())
         return false;
 
@@ -5182,7 +5186,8 @@ bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const b
     trainTypeInterface->setupTrainSpeedPowered(remainingTrain.get());
   }
 
-  auto pair = m_stateData.trains.insert({remainingTrain->name, remainingTrain.release()});
+  remainingTrain->trainId = mLastTrainId++;
+  auto pair = m_stateData.trains.insert({remainingTrain->trainId, remainingTrain.release()});
   idxOut = std::distance(m_stateData.trains.begin(), pair.first);
 
   onTrainAddedRemoved(true, idxOut);
@@ -5387,7 +5392,7 @@ bool Simulator::coupleTrain(Train *train, bool fwd, size_t& removedTrainIdxOut)
   if(trainToRemove)
   {
     removedTrainIdxOut = getTrainIndex(trainToRemove);
-    removeTrain(trainToRemove->name, false);
+    removeTrain(trainToRemove->trainId, false);
   }
 
   if(trainTypeInterface)

@@ -199,10 +199,11 @@ QDataStream &operator>>(QDataStream &stream, Simulator::TrainState &trainState)
 
 void serializeTrain(QDataStream &stream, const Simulator::Train &train, bool full)
 {
-  stream << train.name;
+  stream << train.trainId;
 
   if(full)
   {
+    stream << train.name;
     stream << train.speedMax;
   }
 
@@ -211,13 +212,14 @@ void serializeTrain(QDataStream &stream, const Simulator::Train &train, bool ful
 }
 
 void deserializeTrain(QDataStream &stream, std::vector<Simulator::Train::VehicleItemFull> &vehicles,
-                      std::string &name, Simulator::TrainState &trainState, float &speedMax,
+                      std::string &name, quint64 &trainId, Simulator::TrainState &trainState, float &speedMax,
                       bool full)
 {
-  stream >> name;
+  stream >> trainId;
 
   if(full)
   {
+    stream >> name;
     stream >> speedMax;
   }
 

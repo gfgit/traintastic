@@ -43,6 +43,8 @@
 #include <traintastic/utils/stringhash.hpp>
 #include <traintastic/utils/stringequal.hpp>
 
+#include <QtGlobal>
+
 class QByteArray;
 
 namespace SimulatorProtocol {
@@ -517,6 +519,7 @@ public:
 
   struct Train
   {
+    quint64 trainId = invalidIndex;
     std::string name;
 
     struct VehicleItem
@@ -582,7 +585,7 @@ public:
     uint8_t signalBlinkState = 0; // Goes from 0 to 7
     std::vector<SensorState> sensors;
     std::vector<TurnoutState> turnouts;
-    std::map<std::string, Train *, std::less<>> trains; // Avoid rehashing
+    std::map<quint64, Train *, std::less<>> trains; // Avoid rehashing
     std::unordered_map<std::string, Vehicle *, StringHash, StringEqual> vehicles;
     std::unordered_map<std::string, MainSignal *, StringHash, StringEqual> mainSignals;
     std::unordered_map<std::string, AuxSignal *, StringHash, StringEqual> auxSignals;
@@ -666,7 +669,7 @@ public:
                 const std::vector<Train::VehicleItem> &vehicles, size_t segmentIndex,
                 size_t &idxOut, float startPos = -1.0, TrainPlacement placement = TrainPlacement::PlaceCenter);
 
-  bool removeTrain(const std::string_view& name, bool removeWagons);
+  bool removeTrain(quint64 trainId, bool removeWagons);
   void destroyTrain(Train *train, bool removeWagons);
 
   Vehicle *addVehicle(const std::string_view &baseName, float length,
@@ -736,6 +739,7 @@ private:
   std::list<std::shared_ptr<SimulatorConnection>> m_repliacas;
   size_t mLastSpawnSyncIdx = 0;
 
+  quint64 mLastTrainId = 0;
   TrainTypeInterface *trainTypeInterface = nullptr;
 
   SimMode mSimMode = SimMode::Standalone;
