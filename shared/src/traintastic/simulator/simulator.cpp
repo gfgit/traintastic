@@ -1394,68 +1394,141 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
   {
   case OpCode::TrainAdded:
   {
-    std::vector<Vehicle> vehiclesSer;
-    arch >> vehiclesSer;
+    std::vector<Simulator::Train::VehicleItemFull> vehicles;
+    std::string trainName;
+    Simulator::TrainState trainState;
+    float speedMax = 0.0f;
 
-    Train dummy;
-    arch >> dummy;
+    boost::serialization::deserializeTrain(arch, vehicles, trainName,
+                                           trainState, speedMax,
+                                           true);
 
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
     {
-      auto it = m_stateData.trains.find(dummy.name);
+      auto it = m_stateData.trains.find(trainName);
       if(it != m_stateData.trains.end())
       {
-        removeTrain(dummy.name, true);
+        removeTrain(trainName, true);
       }
     }
 
-    for(const Vehicle &v : vehiclesSer)
+    std::unique_ptr<Train> train(new Train);
+    train->address = 3;
+    train->protocol = DecoderProtocol::DCCShort;
+    train->name = trainName;
+    train->speedMax = speedMax;
+    train->state = trainState;
+
+    bool empty = true;
+    train->vehicles.reserve(vehicles.size());
+
+    for(const Simulator::Train::VehicleItemFull &v : vehicles)
     {
       Vehicle *result = nullptr;
-      auto it = m_stateData.vehicles.find(v.name);
+      auto it = m_stateData.vehicles.find(v.vehicle.name);
       if(it != m_stateData.vehicles.end())
       {
         result = it->second;
-        result->color = v.color;
-        result->length = v.length;
-        result->typeIdx = v.typeIdx;
+        result->typeIdx = v.vehicle.typeIdx;
+
+        result->color = v.vehicle.color;
+        result->length = v.vehicle.length;
       }
       else
       {
-        result = addVehicle(v.name, v.length, v.color, v.typeIdx);
+        result = addVehicle(v.vehicle.name, v.vehicle.length, v.vehicle.color, v.vehicle.typeIdx);
       }
 
+      if(trainTypeInterface && result->typeIdx != invalidIndex)
+        trainTypeInterface->fillVehicleProperties(result);
+
       const auto oldState = result->state;
-      result->state = v.state;
+      result->state = v.vehicle.state;
       updateReplicaTracking(result, oldState);
+
+      train->vehicles.push_back({result, v.reversed});
+      train->length += result->length + (empty ? 0.0f : staticData.trainCouplingLength);
+      empty = false;
     }
+
+    if(empty)
+      break;
+
+    for(const Simulator::Train::VehicleItem &v : train->vehicles)
+    {
+      if(v.vehicle->activeTrain)
+      {
+        auto &otherVehicles = v.vehicle->activeTrain->vehicles;
+        if(otherVehicles.size() == 1 && otherVehicles.front().vehicle == v.vehicle)
+        {
+          // After removing this vehicle, train will be empty
+          removeTrain(v.vehicle->activeTrain->name, false);
+          v.vehicle->activeTrain = nullptr;
+        }
+        else
+        {
+          // Vehicle *vehicle = v.vehicle;
+          // auto it = std::find(otherVehicles.begin(), otherVehicles.end(), [vehicle](const Simulator::Train::VehicleItem &item) -> bool
+          //                     {
+          //                       return item.vehicle == vehicle;
+          //                     });
+          // if(it != otherVehicles.end())
+          // {
+          //   otherVehicles.erase(it);
+          //   v.vehicle->activeTrain = nullptr;
+          // }
+        }
+      }
+
+      v.vehicle->activeTrain = train.get();
+    }
+
+    if(trainTypeInterface)
+    {
+      trainTypeInterface->setupTrainSpeedPowered(train.get());
+    }
+
+    auto pair = m_stateData.trains.insert({train->name, train.release()});
+    size_t idxOut = std::distance(m_stateData.trains.begin(), pair.first);
+    onTrainAddedRemoved(true, idxOut);
 
     break;
   }
   case OpCode::TrainStateRefresh:
   {
-    Train dummy;
-    arch >> dummy;
+    std::vector<Simulator::Train::VehicleItemFull> vehicles;
+    std::string trainName;
+    Simulator::TrainState trainState;
+    float speedMax = 0.0f;
+
+    boost::serialization::deserializeTrain(arch, vehicles, trainName,
+                                           trainState, speedMax,
+                                           false);
 
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-    auto it = m_stateData.trains.find(dummy.name);
+    auto it = m_stateData.trains.find(trainName);
     if(it == m_stateData.trains.end())
       break;
 
     Train *train = it->second;
-    train->speedMax = dummy.speedMax;
-    train->state.speed = dummy.state.speed;
-    train->state.targetSpeed = dummy.state.targetSpeed;
-    train->state.waitToStart_ms = dummy.state.waitToStart_ms;
-    train->state.reverse = dummy.state.reverse;
-    train->state.mode = dummy.state.mode;
-    train->state.mode = dummy.state.mode;
+    train->state.speed = trainState.speed;
+    train->state.targetSpeed = trainState.targetSpeed;
+    train->state.waitToStart_ms = trainState.waitToStart_ms;
+    train->state.reverse = trainState.reverse;
+    train->state.mode = trainState.mode;
+    train->state.isOnStationStop = trainState.isOnStationStop;
 
-    size_t maxIdx = std::min(train->vehicles.size(), dummy.vehicles.size());
-    for(auto &item : train->vehicles)
+    size_t maxIdx = std::min(train->vehicles.size(), vehicles.size());
+    for(size_t i = 0; i < maxIdx; i++)
     {
-      item.reversed =
+      Train::VehicleItem &item = train->vehicles[i];
+      const Train::VehicleItemFull &source = vehicles.at(i);
+
+      item.reversed = source.reversed;
+      const auto oldState = item.vehicle->state;
+      item.vehicle->state = source.vehicle.state;
+      updateReplicaTracking(item.vehicle, oldState);
     }
 
     break;
@@ -2281,6 +2354,9 @@ inline bool isTurnoutUnknownState(const Simulator::TrackSegment& segment,
 
 void Simulator::calculateFacePosition(Simulator::VehicleState::Face &face)
 {
+  if(face.segmentIndex == invalidIndex)
+    return;
+
   const auto& segment = staticData.trackSegments[face.segmentIndex];
   size_t curveIndex = Simulator::invalidIndex;
 
@@ -4422,14 +4498,7 @@ void Simulator::sendTrainFullRefreshReplica(SimulatorProtocol::OpCode op, Train 
   ss << uint8_t(0); // Size placeholder
 
   boost::archive::binary_oarchive arch(ss);
-
-  std::vector<Vehicle *> vehiclesSer;
-  vehiclesSer.reserve(train->vehicles.size());
-  for(const auto &v : train->vehicles)
-    vehiclesSer.push_back(v.vehicle);
-
-  arch << vehiclesSer;
-  arch << train;
+  boost::serialization::serializeTrain(arch, *train, true);
 
   sendReplicas(ss);
 }
@@ -4441,9 +4510,7 @@ void Simulator::sendTrainStateRefreshReplica(Train *train)
   ss << uint8_t(0); // Size placeholder
 
   boost::archive::binary_oarchive arch(ss);
-  arch << train->name;
-  arch << train;
-  boost::serialization::serializeVehicleList(arch, train->vehicles);
+  boost::serialization::serializeTrain(arch, *train, false);
 
   sendReplicas(ss);
 }

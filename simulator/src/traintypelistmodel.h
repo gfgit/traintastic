@@ -52,6 +52,8 @@ public:
 
   void setupTrainSpeedPowered(Simulator::Train *train) override;
 
+  void fillVehicleProperties(Simulator::Vehicle *vehicle) override;
+
 private:
   VehicleTypesModel *vehicleTypesModel = nullptr;
   QVector<Train> mTrains;

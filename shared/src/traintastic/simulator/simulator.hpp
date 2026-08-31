@@ -527,8 +527,7 @@ public:
 
     struct VehicleItemFull
     {
-      std::string name;
-      VehicleState state;
+      Vehicle vehicle;
       bool reversed = false;
     };
 
@@ -808,6 +807,8 @@ public:
                                                                        bool &canInvert, size_t &invertLoco) = 0;
 
   virtual void setupTrainSpeedPowered(Simulator::Train *train) = 0;
+  
+  virtual void fillVehicleProperties(Simulator::Vehicle *vehicle) = 0;
 };
 
 
@@ -882,25 +883,33 @@ template<class Archive>
 void serialize(Archive & ar, Simulator::Vehicle &vehicle, const unsigned int /*version*/)
 {
   ar & vehicle.name;
-  ar & vehicle.color;
-  ar & vehicle.length;
   ar & vehicle.typeIdx;
+  ar & vehicle.state;
+
+  if(vehicle.typeIdx == Simulator::invalidIndex)
+  {
+    ar & vehicle.color;
+    ar & vehicle.length;
+  }
 }
 
 template<class Archive>
-void serializeVehicleList(Archive & ar, const std::vector<Simulator::Train::VehicleItem> &vehicles)
+void serializeVehicleList(Archive & ar, const std::vector<Simulator::Train::VehicleItem> &vehicles, bool full)
 {
   ar << vehicles.size();
   for(const auto &item : vehicles)
   {
-    ar << item.vehicle->name;
-    ar << item.vehicle->state;
+    if(full)
+      ar << item.vehicle;
+    else
+      ar << item.vehicle->state;
+
     ar << item.reversed;
   }
 }
 
 template<class Archive>
-void deserializeVehicleList(Archive & ar, std::vector<Simulator::Train::VehicleItemFull> &vehicles)
+void deserializeVehicleList(Archive & ar, std::vector<Simulator::Train::VehicleItemFull> &vehicles, bool full)
 {
   size_t sz = 0;
   ar >> sz;
@@ -909,9 +918,14 @@ void deserializeVehicleList(Archive & ar, std::vector<Simulator::Train::VehicleI
   for(size_t i = 0; i < sz; i++)
   {
     Simulator::Train::VehicleItemFull item;
-    ar >> item.name;
-    ar >> item.state;
+
+    if(full)
+      ar >> item.vehicle;
+    else
+      ar >> item.vehicle.state;
+
     ar >> item.reversed;
+
     vehicles.push_back(item);
   }
 }
@@ -928,12 +942,35 @@ void serialize(Archive & ar, Simulator::TrainState &trainState, const unsigned i
 }
 
 template<class Archive>
-void serialize(Archive & ar, Simulator::Train &train, const unsigned int /*version*/)
+void serializeTrain(Archive & ar, const Simulator::Train &train, bool full)
 {
-  ar & train.name;
-  ar & train.speedMax;
-  ar & train.state;
-  ar & train.vehicles;
+  ar << train.name;
+
+  if(full)
+  {
+    ar << train.speedMax;
+  }
+
+  ar << train.state;
+
+  serializeVehicleList(ar, train.vehicles, full);
+}
+
+template<class Archive>
+void deserializeTrain(Archive & ar, std::vector<Simulator::Train::VehicleItemFull> &vehicles,
+                      std::string &name, Simulator::TrainState &trainState, float &speedMax,
+                      bool full)
+{
+  ar >> name;
+
+  if(full)
+  {
+    ar >> speedMax;
+  }
+
+  ar >> trainState;
+
+  deserializeVehicleList(ar, vehicles, full);
 }
 
 } // namespace serialization

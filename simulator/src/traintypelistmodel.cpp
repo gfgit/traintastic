@@ -220,3 +220,13 @@ void TrainTypeListModel::setupTrainSpeedPowered(Simulator::Train *train)
     train->speedMax = maxSpeed;
   }
 }
+
+void TrainTypeListModel::fillVehicleProperties(Simulator::Vehicle *vehicle)
+{
+  if(vehicle->typeIdx == invalidIndex)
+    return;
+
+  const VehicleTypesModel::VehicleType vehicleType = vehicleTypesModel->getTypeAt(vehicle->typeIdx);
+  vehicle->length = vehicleType.length;
+  vehicle->color = Color::Blue;
+}
