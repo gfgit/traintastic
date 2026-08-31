@@ -4514,7 +4514,7 @@ void Simulator::sendTrainStateRefreshReplica(Train *train)
   QDataStream stream(&buf, QIODeviceBase::WriteOnly);
   stream << uint8_t(SimulatorProtocol::OpCode::TrainStateRefresh);
   stream << uint16_t(0); // Size placeholder
-  serializeTrain(stream, *train, true);
+  serializeTrain(stream, *train, false);
 
   sendReplicas(buf);
 }
