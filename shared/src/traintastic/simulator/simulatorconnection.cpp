@@ -46,14 +46,14 @@ void SimulatorConnection::stop()
 
 bool SimulatorConnection::send(const SimulatorProtocol::Message& message)
 {
-  if(m_writeBufferOffset + message.size > m_writeBuffer.size())
+  if(m_writeBufferOffset + message.size() > m_writeBuffer.size())
   {
     return false;
   }
 
   const bool wasEmpty = m_writeBufferOffset == 0;
-  memcpy(m_writeBuffer.data() + m_writeBufferOffset, &message, message.size);
-  m_writeBufferOffset += message.size;
+  memcpy(m_writeBuffer.data() + m_writeBufferOffset, &message, message.size());
+  m_writeBufferOffset += message.size();
 
   if(wasEmpty)
   {
@@ -73,23 +73,23 @@ void SimulatorConnection::read()
         const std::byte* pos = m_readBuffer.data();
         bytesTransferred += m_readBufferOffset;
 
-        while(bytesTransferred > 1)
+        while(bytesTransferred > 2)
         {
           const auto* message = reinterpret_cast<const SimulatorProtocol::Message*>(pos);
 
-          if(bytesTransferred < message->size)
+          if(bytesTransferred < message->size())
           {
             break;
           }
 
           if(message->opCode == SimulatorProtocol::OpCode::HandshakeResponse &&
-             message->size == sizeof(SimulatorProtocol::HandShake))
+             message->size() == sizeof(SimulatorProtocol::HandShake))
           {
             // Eat message
             m_handShakeResponseReceived = true;
           }
           else if(message->opCode == SimulatorProtocol::OpCode::Handshake &&
-             message->size == sizeof(SimulatorProtocol::HandShake) &&
+             message->size() == sizeof(SimulatorProtocol::HandShake) &&
              m_simulator->getSimMode() == Simulator::SimMode::Replica)
           {
             // Eat message and reply to Master
@@ -98,7 +98,7 @@ void SimulatorConnection::read()
           }
           else if(!isReplica && m_simulator->getSimMode() == Simulator::SimMode::Master &&
                   message->opCode == SimulatorProtocol::OpCode::ReplicaGreeting &&
-                  message->size == sizeof(SimulatorProtocol::ReplicaGreeting))
+                  message->size() == sizeof(SimulatorProtocol::ReplicaGreeting))
           {
             isReplica = true;
             m_simulator->setConnectionAsReplica(shared_from_this());
@@ -108,8 +108,8 @@ void SimulatorConnection::read()
             m_simulator->receive(*message, m_connectionId);
           }
 
-          pos += message->size;
-          bytesTransferred -= message->size;
+          pos += message->size();
+          bytesTransferred -= message->size();
         }
 
         if(bytesTransferred != 0)

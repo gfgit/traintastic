@@ -37,9 +37,9 @@ class SimulatorConnection : public std::enable_shared_from_this<SimulatorConnect
 private:
   std::shared_ptr<Simulator> m_simulator;
   boost::asio::ip::tcp::socket m_socket;
-  std::array<std::byte, 1024> m_readBuffer;
+  std::array<std::byte, 2048> m_readBuffer;
   size_t m_readBufferOffset = 0;
-  std::array<std::byte, 1024> m_writeBuffer;
+  std::array<std::byte, 2048> m_writeBuffer;
   size_t m_writeBufferOffset = 0;
   size_t m_connectionId = 0;
   bool isReplica = false;

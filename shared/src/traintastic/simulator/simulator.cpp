@@ -856,7 +856,7 @@ void Simulator::sendReplicas(QByteArray &buf)
     return;
 
   SimulatorProtocol::Message& message = *reinterpret_cast<SimulatorProtocol::Message *>(buf.data());
-  message.size = buf.size();
+  message.setSize(buf.size());
 
   for(const auto& connection : m_repliacas)
   {
@@ -1380,8 +1380,8 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
 {
   using namespace SimulatorProtocol;
 
-  QByteArray buf = QByteArray::fromRawData(reinterpret_cast<const char *>(&message) + 2,
-                                           message.size - 2);
+  QByteArray buf = QByteArray::fromRawData(reinterpret_cast<const char *>(&message) + sizeof(SimulatorProtocol::Message),
+                                           message.size() - sizeof(SimulatorProtocol::Message));
   QDataStream stream(buf);
 
   switch(message.opCode)
@@ -2118,12 +2118,14 @@ void Simulator::updateTrainPositions()
   // Reduce a bit higher trainSpeedFactor so train does not depart instantly
   const float TickWaitFactor = 1.0 + (m_stateData.trainSpeedFactor - 1.0) / 3.0;
 
+  const bool isReplica = getSimModeUnlocked() == SimMode::Replica;
+
   for(auto it = m_stateData.trains.begin(); it != m_stateData.trains.end(); )
   {
     Train* train = it->second;
     auto& trainState = train->state;
 
-    if(train->state.isOnStationStop && train->state.mode != TrainState::Mode::Manual)
+    if(!isReplica && train->state.isOnStationStop && train->state.mode != TrainState::Mode::Manual)
     {
       bool stoppedAndCannotContinue = train->state.speed == 0.0;
       if(stoppedAndCannotContinue)
@@ -2142,18 +2144,21 @@ void Simulator::updateTrainPositions()
     float totalTravelled = 0.0f;
 
     // If train is stopped at signal check if signal goes to "Proceed"
-    if(train->state.speed == 0.0f)
+    if(!isReplica && train->state.speed == 0.0f)
       checkNextSignal(train);
 
     // Update only if moving or first time to place vehicles on tracks
     if(train->state.isOnStationStop || train->state.speed != 0.0f ||
        (!train->vehicles.empty() && !train->vehicles.front().vehicle->state.front.position.isFinite()))
     {
-      updateTrainNextSignal(train, true);
-      if(train->state.isOnStationStop)
-        updateTrainNextSignal(train, false);
+      if(!isReplica)
+      {
+        updateTrainNextSignal(train, true);
+        if(train->state.isOnStationStop)
+          updateTrainNextSignal(train, false);
 
-      checkNextSignal(train);
+        checkNextSignal(train);
+      }
 
       auto updateHelper = [this](Simulator::Train::VehicleItem& item, float speed,
                                  bool reverse, bool isFirst,
@@ -2282,7 +2287,7 @@ void Simulator::updateTrainPositions()
       }
     }
 
-    if(train->address != invalidAddress && trainState.speedOrDirectionChanged)
+    if(!isReplica && train->address != invalidAddress && trainState.speedOrDirectionChanged)
     {
       send(SimulatorProtocol::LocomotiveSpeedDirection(
              train->address,
@@ -2292,6 +2297,7 @@ void Simulator::updateTrainPositions()
                                                     std::numeric_limits<uint8_t>::max())),
              trainState.reverse ? Direction::Reverse : Direction::Forward,
              false));
+
       trainState.speedOrDirectionChanged = false;
 
       if(getSimModeUnlocked() == SimMode::Master)
@@ -2384,6 +2390,8 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
                                       Train &train_, bool &trainRemoved, float &outRemaining)
 {
   using Object = Simulator::TrackSegment::Object;
+
+  const bool isReplica = getSimModeUnlocked() == SimMode::Replica;
 
   VehicleState::Face& face = frontFace ? vehicle->state.front : vehicle->state.rear;
 
@@ -2509,7 +2517,7 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
 
     bool stop = false;
     const bool dirFwd = face.segmentDirectionInverted == (speed < 0);
-    if(dirFwd)
+    if(dirFwd && !isReplica)
     {
         for(const TrackSegment::Object& obj : segment.objects)
         {
@@ -2524,7 +2532,7 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
           break;
         }
     }
-    else
+    else if(!dirFwd && !isReplica)
     {
       for(const TrackSegment::Object& obj : segment.objects | std::views::reverse)
       {
@@ -2540,7 +2548,7 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
       }
     }
 
-    if(isFirst_ && vehicle->activeTrain)
+    if(!isReplica && isFirst_ && vehicle->activeTrain)
     {
       // We are train head, check other trains for collision
 
@@ -2663,7 +2671,7 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
         if(nextSegment.nextSegmentIndex[0] != faceSegmentIndexBefore)
         {
           // We take turnout from straight/curve side, check its state
-          if(getNextSegmentIndex(nextSegment, true, m_stateData) != faceSegmentIndexBefore)
+          if(!isReplica && getNextSegmentIndex(nextSegment, true, m_stateData) != faceSegmentIndexBefore)
           {
             // Turnout is not in good state, train will hit switch blades and derail
             // We simulate by stopping train and setting turnout to unknown position
@@ -2680,7 +2688,7 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
         }
       }
 
-      if(segment.sensor.index != invalidIndex)
+      if(!isReplica && segment.sensor.index != invalidIndex)
       {
         auto& sensor = m_stateData.sensors[segment.sensor.index];
         assert(sensor.occupied != 0);
@@ -2704,7 +2712,7 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
         face.segmentDirectionInverted = (speed > 0);
       }
 
-      if(nextSegment.sensor.index != invalidIndex)
+      if(!isReplica && nextSegment.sensor.index != invalidIndex)
       {
         m_stateData.sensors[nextSegment.sensor.index].occupied++;
       }
@@ -2733,7 +2741,7 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
         if(nextSegment.nextSegmentIndex[0] != faceSegmentIndexBefore)
         {
           // We take turnout from straight/curve side, check its state
-          if(getNextSegmentIndex(nextSegment, true, m_stateData) != faceSegmentIndexBefore)
+          if(!isReplica && getNextSegmentIndex(nextSegment, true, m_stateData) != faceSegmentIndexBefore)
           {
             // Turnout is not in good state, train will hit switch blades and derail
             // We simulate by stopping train and setting turnout to unknown position
@@ -2750,7 +2758,7 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
         }
       }
 
-      if(segment.sensor.index != invalidIndex)
+      if(!isReplica && segment.sensor.index != invalidIndex)
       {
         auto& sensor = m_stateData.sensors[segment.sensor.index];
         assert(sensor.occupied != 0);
@@ -2774,7 +2782,7 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
         face.segmentDirectionInverted = (speed > 0);
       }
 
-      if(nextSegment.sensor.index != invalidIndex)
+      if(!isReplica && nextSegment.sensor.index != invalidIndex)
       {
         m_stateData.sensors[nextSegment.sensor.index].occupied++;
       }
@@ -4489,10 +4497,10 @@ void Simulator::sendTrainFullRefreshReplica(SimulatorProtocol::OpCode op, Train 
 {
   QByteArray buf;
   buf.reserve(100);
-  buf.append(char(op));
-  buf.append(char(0)); // Size placeholder
 
   QDataStream stream(&buf, QIODeviceBase::WriteOnly);
+  stream << uint8_t(op);
+  stream << uint16_t(0); // Size placeholder
   serializeTrain(stream, *train, true);
 
   sendReplicas(buf);
@@ -4502,10 +4510,10 @@ void Simulator::sendTrainStateRefreshReplica(Train *train)
 {
   QByteArray buf;
   buf.reserve(100);
-  buf.append(char(SimulatorProtocol::OpCode::TrainStateRefresh));
-  buf.append(char(0)); // Size placeholder
 
   QDataStream stream(&buf, QIODeviceBase::WriteOnly);
+  stream << uint8_t(SimulatorProtocol::OpCode::TrainStateRefresh);
+  stream << uint16_t(0); // Size placeholder
   serializeTrain(stream, *train, true);
 
   sendReplicas(buf);

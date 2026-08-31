@@ -61,15 +61,41 @@ PRAGMA_PACK_PUSH_1
 struct Message
 {
   OpCode opCode;
-  uint8_t size;
+  uint16_t sizeLE; // Little endian
 
-  Message(OpCode opCode_, uint8_t size_)
+  Message(OpCode opCode_, uint16_t size_)
     : opCode{opCode_}
-    , size{size_}
   {
+    setSize(size_);
+  }
+
+  inline uint16_t size() const
+  {
+    uint16_t result = sizeLE;
+
+    if constexpr (std::endian::native == std::endian::big)
+    {
+      // Swap bytes
+      uint8_t *b = reinterpret_cast<uint8_t *>(&result);
+      std::swap(b[0], b[1]);
+    }
+
+    return result;
+  }
+
+  inline void setSize(uint16_t size_)
+  {
+    sizeLE = size_;
+
+    if constexpr (std::endian::native == std::endian::big)
+    {
+      // Swap bytes
+      uint8_t *b = reinterpret_cast<uint8_t *>(&sizeLE);
+      std::swap(b[0], b[1]);
+    }
   }
 } ATTRIBUTE_PACKED;
-static_assert(sizeof(Message) == 2);
+static_assert(sizeof(Message) == 3);
 
 struct HandShake : Message
 {
@@ -79,7 +105,7 @@ struct HandShake : Message
   {
   }
 } ATTRIBUTE_PACKED;
-static_assert(sizeof(HandShake) == 2);
+static_assert(sizeof(HandShake) == 3);
 
 struct ReplicaGreeting : Message
 {
@@ -89,7 +115,7 @@ struct ReplicaGreeting : Message
   {
   }
 } ATTRIBUTE_PACKED;
-static_assert(sizeof(ReplicaGreeting) == 2);
+static_assert(sizeof(ReplicaGreeting) == 3);
 
 struct Power : Message
 {
@@ -101,7 +127,7 @@ struct Power : Message
   {
   }
 } ATTRIBUTE_PACKED;
-static_assert(sizeof(Power) == 3);
+static_assert(sizeof(Power) == 4);
 
 struct LocomotiveSpeedDirection : Message
 {
@@ -121,7 +147,7 @@ struct LocomotiveSpeedDirection : Message
   {
   }
 } ATTRIBUTE_PACKED;
-static_assert(sizeof(LocomotiveSpeedDirection) == 8);
+static_assert(sizeof(LocomotiveSpeedDirection) == 9);
 
 struct SensorChanged : Message
 {
@@ -139,7 +165,7 @@ struct SensorChanged : Message
   {
   }
 } ATTRIBUTE_PACKED;
-static_assert(sizeof(SensorChanged) == 11);
+static_assert(sizeof(SensorChanged) == 12);
 
 struct SensorEncodingChanged : Message
 {
@@ -155,7 +181,7 @@ struct SensorEncodingChanged : Message
   {
   }
 } ATTRIBUTE_PACKED;
-static_assert(sizeof(SensorEncodingChanged) == 7);
+static_assert(sizeof(SensorEncodingChanged) == 8);
 
 struct AccessorySetState : Message
 {
@@ -171,7 +197,7 @@ struct AccessorySetState : Message
   {
   }
 } ATTRIBUTE_PACKED;
-static_assert(sizeof(AccessorySetState) == 7);
+static_assert(sizeof(AccessorySetState) == 8);
 
 struct SignalSetState : Message
 {
@@ -240,7 +266,7 @@ struct SignalSetState : Message
     lights[2] = {Color::Red, State::Off};
   }
 } ATTRIBUTE_PACKED;
-static_assert(sizeof(SignalSetState) == 19);
+static_assert(sizeof(SignalSetState) == 20);
 
 struct AuxSignalSetState : Message
 {
@@ -272,7 +298,7 @@ struct AuxSignalSetState : Message
     return lights & (1u << n);
   }
 } ATTRIBUTE_PACKED;
-static_assert(sizeof(AuxSignalSetState) == 8);
+static_assert(sizeof(AuxSignalSetState) == 9);
 
 struct OwnSignal : Message
 {
@@ -288,7 +314,7 @@ struct OwnSignal : Message
   {
   }
 } ATTRIBUTE_PACKED;
-static_assert(sizeof(OwnSignal) == 7);
+static_assert(sizeof(OwnSignal) == 8);
 
 struct RequestChannel : Message
 {
@@ -301,7 +327,7 @@ struct RequestChannel : Message
   {
   }
 } ATTRIBUTE_PACKED;
-static_assert(sizeof(RequestChannel) == 4);
+static_assert(sizeof(RequestChannel) == 5);
 
 struct OwnSpawn : Message
 {
@@ -313,7 +339,7 @@ struct OwnSpawn : Message
   {
   }
 } ATTRIBUTE_PACKED;
-static_assert(sizeof(OwnSpawn) == 4);
+static_assert(sizeof(OwnSpawn) == 5);
 
 struct SpawnStateChange : Message
 {
@@ -337,7 +363,7 @@ struct SpawnStateChange : Message
   {
   }
 } ATTRIBUTE_PACKED;
-static_assert(sizeof(SpawnStateChange) == 5);
+static_assert(sizeof(SpawnStateChange) == 6);
 
 struct SensorBatchState : Message
 {
@@ -353,7 +379,7 @@ struct SensorBatchState : Message
   {
   }
 } ATTRIBUTE_PACKED;
-static_assert(sizeof(SensorBatchState) == 8);
+static_assert(sizeof(SensorBatchState) == 9);
 
 struct TrainSpeedFactorChanged : Message
 {
@@ -366,7 +392,7 @@ struct TrainSpeedFactorChanged : Message
 
   float trainSpeedFactor;
 } ATTRIBUTE_PACKED;
-static_assert(sizeof(TrainSpeedFactorChanged) == 6);
+static_assert(sizeof(TrainSpeedFactorChanged) == 7);
 
 PRAGMA_PACK_POP
 
