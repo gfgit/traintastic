@@ -29,6 +29,8 @@
 #include <chrono>
 #include "protocol.hpp"
 
+#include "serialization.hpp"
+
 #define bitRead(value, bit) (((value) >> (bit)) & 0x01)
 #define bitSet(value, bit) ((value) |= (1UL << (bit)))
 #define bitClear(value, bit) ((value) &= ~(1UL << (bit)))
@@ -848,12 +850,11 @@ void Simulator::sendReplicas(const SimulatorProtocol::Message& message)
   }
 }
 
-void Simulator::sendReplicas(const std::stringstream &ss)
+void Simulator::sendReplicas(QByteArray &buf)
 {
   if(getSimModeUnlocked() != SimMode::Master)
     return;
 
-  std::string buf = ss.str();
   SimulatorProtocol::Message& message = *reinterpret_cast<SimulatorProtocol::Message *>(buf.data());
   message.size = buf.size();
 
@@ -1379,13 +1380,9 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
 {
   using namespace SimulatorProtocol;
 
-  std::string buf;
-  buf.resize(message.size - 2);
-  std::memcpy(buf.data(),
-              reinterpret_cast<const uint8_t *>(&message) + 2,
-              buf.size());
-  std::stringstream ss(buf);
-  boost::archive::binary_iarchive arch(ss);
+  QByteArray buf = QByteArray::fromRawData(reinterpret_cast<const char *>(&message) + 2,
+                                           message.size - 2);
+  QDataStream stream(buf);
 
   switch(message.opCode)
   {
@@ -1396,9 +1393,9 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
     Simulator::TrainState trainState;
     float speedMax = 0.0f;
 
-    boost::serialization::deserializeTrain(arch, vehicles, trainName,
-                                           trainState, speedMax,
-                                           true);
+    deserializeTrain(stream, vehicles, trainName,
+                     trainState, speedMax,
+                     true);
 
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
@@ -1499,9 +1496,9 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
     Simulator::TrainState trainState;
     float speedMax = 0.0f;
 
-    boost::serialization::deserializeTrain(arch, vehicles, trainName,
-                                           trainState, speedMax,
-                                           false);
+    deserializeTrain(stream, vehicles, trainName,
+                     trainState, speedMax,
+                     false);
 
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
     auto it = m_stateData.trains.find(trainName);
@@ -4490,26 +4487,28 @@ bool Simulator::removeVehicle(Vehicle *vehicle)
 
 void Simulator::sendTrainFullRefreshReplica(SimulatorProtocol::OpCode op, Train *train)
 {
-  std::stringstream ss;
-  ss << uint8_t(op);
-  ss << uint8_t(0); // Size placeholder
+  QByteArray buf;
+  buf.reserve(100);
+  buf.append(char(op));
+  buf.append(char(0)); // Size placeholder
 
-  boost::archive::binary_oarchive arch(ss);
-  boost::serialization::serializeTrain(arch, *train, true);
+  QDataStream stream(&buf, QIODeviceBase::WriteOnly);
+  serializeTrain(stream, *train, true);
 
-  sendReplicas(ss);
+  sendReplicas(buf);
 }
 
 void Simulator::sendTrainStateRefreshReplica(Train *train)
 {
-  std::stringstream ss;
-  ss << uint8_t(SimulatorProtocol::OpCode::TrainStateRefresh);
-  ss << uint8_t(0); // Size placeholder
+  QByteArray buf;
+  buf.reserve(100);
+  buf.append(char(SimulatorProtocol::OpCode::TrainStateRefresh));
+  buf.append(char(0)); // Size placeholder
 
-  boost::archive::binary_oarchive arch(ss);
-  boost::serialization::serializeTrain(arch, *train, false);
+  QDataStream stream(&buf, QIODeviceBase::WriteOnly);
+  serializeTrain(stream, *train, true);
 
-  sendReplicas(ss);
+  sendReplicas(buf);
 }
 
 void Simulator::updateTrainNextSignal(Train *train, bool next)

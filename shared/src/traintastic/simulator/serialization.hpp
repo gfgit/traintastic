@@ -1,0 +1,230 @@
+/**
+ * This file is part of Traintastic,
+ * see <https://github.com/traintastic/traintastic>.
+ *
+ * Copyright (C) 2026 Filippo Gentile
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+#ifndef TRAINTASTIC_SHARED_TRAINTASTIC_SIMULATOR_SERIALIZATION_HPP
+#define TRAINTASTIC_SHARED_TRAINTASTIC_SIMULATOR_SERIALIZATION_HPP
+
+#include <QDataStream>
+#include <QByteArray>
+
+#include "simulator.hpp"
+
+// QDataStream &operator<<(QDataStream &stream, const size_t &sz)
+// {
+//   stream << quint64(sz);
+//   return stream;
+// }
+
+// QDataStream &operator>>(QDataStream &stream, size_t &sz)
+// {
+//   quint64 val = 0;
+//   stream >> val;
+//   sz = val;
+//   return stream;
+// }
+
+QDataStream &operator<<(QDataStream &stream, const std::string &str)
+{
+  stream << quint64(str.size());
+  for(const char ch : str)
+    stream << ch;
+  return stream;
+}
+
+QDataStream &operator>>(QDataStream &stream, std::string &str)
+{
+  quint64 sz = 0;
+  stream >> sz;
+  str.resize(sz);
+
+  for(size_t i = 0; i < sz; i++)
+    stream >> str[i];
+  return stream;
+}
+
+
+QDataStream &operator<<(QDataStream &stream, const Simulator::Point &p)
+{
+  stream << p.x;
+  stream << p.y;
+  return stream;
+}
+
+QDataStream &operator>>(QDataStream &stream, Simulator::Point &p)
+{
+  stream >> p.x;
+  stream >> p.y;
+  return stream;
+}
+
+QDataStream &operator<<(QDataStream &stream, const Simulator::VehicleState::Face &face)
+{
+  stream << quint64(face.segmentIndex);
+  stream << face.segmentDirectionInverted;
+  stream << face.distance;
+  return stream;
+}
+
+QDataStream &operator>>(QDataStream &stream, Simulator::VehicleState::Face &face)
+{
+  quint64 idx = 0;
+  stream >> idx;
+  face.segmentIndex = idx;
+
+  stream >> face.segmentDirectionInverted;
+  stream >> face.distance;
+  return stream;
+}
+
+QDataStream &operator<<(QDataStream &stream, const Simulator::VehicleState &vehicleState)
+{
+  stream << vehicleState.front;
+  stream << vehicleState.rear;
+  return stream;
+}
+
+QDataStream &operator>>(QDataStream &stream, Simulator::VehicleState &vehicleState)
+{
+  stream >> vehicleState.front;
+  stream >> vehicleState.rear;
+  return stream;
+}
+
+QDataStream &operator<<(QDataStream &stream, const Simulator::Vehicle &vehicle)
+{
+  stream << vehicle.name;
+  stream << quint64(vehicle.typeIdx);
+  stream << vehicle.state;
+
+  if(vehicle.typeIdx == Simulator::invalidIndex)
+  {
+    stream << vehicle.color;
+    stream << vehicle.length;
+  }
+  return stream;
+}
+
+QDataStream &operator>>(QDataStream &stream, Simulator::Vehicle &vehicle)
+{
+  stream >> vehicle.name;
+
+  quint64 idx = 0;
+  stream >> idx;
+  vehicle.typeIdx = idx;
+
+  stream >> vehicle.state;
+
+  if(vehicle.typeIdx == Simulator::invalidIndex)
+  {
+    stream >> vehicle.color;
+    stream >> vehicle.length;
+  }
+  return stream;
+}
+
+void serializeVehicleList(QDataStream &stream, const std::vector<Simulator::Train::VehicleItem> &vehicles, bool full)
+{
+  stream << quint64(vehicles.size());
+  for(const auto &item : vehicles)
+  {
+    if(full)
+      stream << *item.vehicle;
+    else
+      stream << item.vehicle->state;
+
+    stream << item.reversed;
+  }
+}
+
+void deserializeVehicleList(QDataStream &stream, std::vector<Simulator::Train::VehicleItemFull> &vehicles, bool full)
+{
+  quint64 sz = 0;
+  stream >> sz;
+  vehicles.reserve(sz);
+
+  for(size_t i = 0; i < sz; i++)
+  {
+    Simulator::Train::VehicleItemFull item;
+
+    if(full)
+      stream >> item.vehicle;
+    else
+      stream >> item.vehicle.state;
+
+    stream >> item.reversed;
+
+    vehicles.push_back(item);
+  }
+}
+
+QDataStream &operator<<(QDataStream &stream, const Simulator::TrainState &trainState)
+{
+  stream << trainState.speed;
+  stream << trainState.targetSpeed;
+  stream << trainState.waitToStart_ms;
+  stream << trainState.reverse;
+  stream << trainState.mode;
+  stream << trainState.isOnStationStop;
+  return stream;
+}
+
+QDataStream &operator>>(QDataStream &stream, Simulator::TrainState &trainState)
+{
+  stream >> trainState.speed;
+  stream >> trainState.targetSpeed;
+  stream >> trainState.waitToStart_ms;
+  stream >> trainState.reverse;
+  stream >> trainState.mode;
+  stream >> trainState.isOnStationStop;
+  return stream;
+}
+
+void serializeTrain(QDataStream &stream, const Simulator::Train &train, bool full)
+{
+  stream << train.name;
+
+  if(full)
+  {
+    stream << train.speedMax;
+  }
+
+  stream << train.state;
+  serializeVehicleList(stream, train.vehicles, full);
+}
+
+void deserializeTrain(QDataStream &stream, std::vector<Simulator::Train::VehicleItemFull> &vehicles,
+                      std::string &name, Simulator::TrainState &trainState, float &speedMax,
+                      bool full)
+{
+  stream >> name;
+
+  if(full)
+  {
+    stream >> speedMax;
+  }
+
+  stream >> trainState;
+
+  deserializeVehicleList(stream, vehicles, full);
+}
+
+
+#endif // TRAINTASTIC_SHARED_TRAINTASTIC_SIMULATOR_SERIALIZATION_HPP

@@ -43,7 +43,7 @@
 #include <traintastic/utils/stringhash.hpp>
 #include <traintastic/utils/stringequal.hpp>
 
-#include <QDataStream>
+class QByteArray;
 
 namespace SimulatorProtocol {
   enum class OpCode : uint8_t;
@@ -650,7 +650,7 @@ public:
   void removeConnection(const std::shared_ptr<SimulatorConnection>& connection, bool replica);
 
   void sendReplicas(const SimulatorProtocol::Message& message);
-  void sendReplicas(const std::stringstream &ss);
+  void sendReplicas(QByteArray &buf);
 
   inline std::recursive_mutex& stateMutex() { return m_stateMutex; }
 
@@ -852,155 +852,6 @@ constexpr float deg2rad(float degrees)
   return degrees * static_cast<float>(std::numbers::pi / 180);
 }
 
-}
-
-
-QDataStream &operator<<(QDataStream &stream, const Simulator::Point &p)
-{
-  stream << p.x;
-  stream << p.y;
-}
-
-QDataStream &operator>>(QDataStream &stream, Simulator::Point &p)
-{
-  stream >> p.x;
-  stream >> p.y;
-}
-
-QDataStream &operator<<(QDataStream &stream, const Simulator::VehicleState::Face &face)
-{
-  stream << face.segmentIndex;
-  stream << face.segmentDirectionInverted;
-  stream << face.distance;
-}
-
-QDataStream &operator>>(QDataStream &stream, Simulator::VehicleState::Face &face)
-{
-  stream >> face.segmentIndex;
-  stream >> face.segmentDirectionInverted;
-  stream >> face.distance;
-}
-
-QDataStream &operator<<(QDataStream &stream, const Simulator::VehicleState &vehicleState)
-{
-  stream << vehicleState.front;
-  stream << vehicleState.rear;
-}
-
-QDataStream &operator>>(QDataStream &stream, Simulator::VehicleState &vehicleState)
-{
-  stream >> vehicleState.front;
-  stream >> vehicleState.rear;
-}
-
-QDataStream &operator<<(QDataStream &stream, const Simulator::Vehicle &vehicle)
-{
-  stream << vehicle.name;
-  stream << vehicle.typeIdx;
-  stream << vehicle.state;
-
-  if(vehicle.typeIdx == Simulator::invalidIndex)
-  {
-    stream << vehicle.color;
-    stream << vehicle.length;
-  }
-}
-
-QDataStream &operator>>(QDataStream &stream, Simulator::Vehicle &vehicle)
-{
-  stream >> vehicle.name;
-  stream >> vehicle.typeIdx;
-  stream >> vehicle.state;
-
-  if(vehicle.typeIdx == Simulator::invalidIndex)
-  {
-    stream >> vehicle.color;
-    stream >> vehicle.length;
-  }
-}
-
-void serializeVehicleList(QDataStream &stream, const std::vector<Simulator::Train::VehicleItem> &vehicles, bool full)
-{
-  stream << size_t(vehicles.size());
-  for(const auto &item : vehicles)
-  {
-    if(full)
-      stream << item.vehicle;
-    else
-      stream << item.vehicle->state;
-
-    stream << item.reversed;
-  }
-}
-
-void deserializeVehicleList(QDataStream &stream, std::vector<Simulator::Train::VehicleItemFull> &vehicles, bool full)
-{
-  size_t sz = 0;
-  stream >> sz;
-  vehicles.reserve(sz);
-
-  for(size_t i = 0; i < sz; i++)
-  {
-    Simulator::Train::VehicleItemFull item;
-
-    if(full)
-      stream >> item.vehicle;
-    else
-      stream >> item.vehicle.state;
-
-    stream >> item.reversed;
-
-    vehicles.push_back(item);
-  }
-}
-
-QDataStream &operator<<(QDataStream &stream, const Simulator::TrainState &trainState)
-{
-  stream << trainState.speed;
-  stream << trainState.targetSpeed;
-  stream << trainState.waitToStart_ms;
-  stream << trainState.reverse;
-  stream << trainState.mode;
-  stream << trainState.isOnStationStop;
-}
-
-QDataStream &operator>>(QDataStream &ar, Simulator::TrainState &trainState)
-{
-  ar >> trainState.speed;
-  ar >> trainState.targetSpeed;
-  ar >> trainState.waitToStart_ms;
-  ar >> trainState.reverse;
-  ar >> trainState.mode;
-  ar >> trainState.isOnStationStop;
-}
-
-void serializeTrain(QDataStream &stream, const Simulator::Train &train, bool full)
-{
-  stream << train.name;
-
-  if(full)
-  {
-    stream << train.speedMax;
-  }
-
-  stream << train.state;
-  serializeVehicleList(stream, train.vehicles, full);
-}
-
-void deserializeTrain(QDataStream &stream, std::vector<Simulator::Train::VehicleItemFull> &vehicles,
-                      std::string &name, Simulator::TrainState &trainState, float &speedMax,
-                      bool full)
-{
-  stream >> name;
-
-  if(full)
-  {
-    stream >> speedMax;
-  }
-
-  stream >> trainState;
-
-  deserializeVehicleList(stream, vehicles, full);
 }
 
 #endif
