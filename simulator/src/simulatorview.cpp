@@ -2714,6 +2714,9 @@ void SimulatorView::setThinTracks(bool newThinTracks)
 
 void SimulatorView::mouseLeftClick(const Simulator::Point &point, bool shiftPressed)
 {
+  if(!m_simulator)
+    return;
+
   const size_t clickedSegIdx = getSegmentAt(point, m_simulator->staticData);
   if(clickedSegIdx == Simulator::invalidIndex)
     return;
@@ -2747,6 +2750,9 @@ void SimulatorView::showItemTooltip(const Simulator::Point &point, QHelpEvent *e
     QToolTip::showText(ev->globalPos(), text, this);
     return;
   }
+
+  if(!m_simulator)
+    return;
 
   const auto &data_ = m_simulator->staticData;
   QString text;
