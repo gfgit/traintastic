@@ -2656,6 +2656,12 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
       if(nextSegmentIndex == invalidIndex)
       {
         outRemaining = segmentLength - face.distance - ADJ_MARGIN;
+        if(outRemaining > ADJ_MARGIN && outRemaining <= std::abs(speed))
+        {
+          // Travel exactly to segment end
+          distance = segmentLength - ADJ_MARGIN;
+          break;
+        }
         return false; // no next segment
       }
 
@@ -2684,6 +2690,12 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
         {
           // Turnout is in unknown position, stop train
           outRemaining = segmentLength - face.distance - ADJ_MARGIN;
+          if(outRemaining > ADJ_MARGIN && outRemaining <= std::abs(speed))
+          {
+            // Travel exactly to segment end
+            distance = segmentLength - ADJ_MARGIN;
+            break;
+          }
           return false;
         }
       }
@@ -2726,6 +2738,12 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
       if(nextSegmentIndex == invalidIndex)
       {
         outRemaining = face.distance;
+        if(outRemaining > ADJ_MARGIN && outRemaining <= std::abs(speed))
+        {
+          // Travel exactly to segment start
+          distance = 0;
+          break;
+        }
         return false; // no next segment
       }
 
@@ -2754,6 +2772,12 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
         {
           // Turnout is in unknown position, stop train
           outRemaining = face.distance;
+          if(outRemaining > ADJ_MARGIN && outRemaining <= std::abs(speed))
+          {
+            // Travel exactly to segment start
+            distance = 0;
+            break;
+          }
           return false;
         }
       }
