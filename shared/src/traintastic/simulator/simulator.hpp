@@ -61,6 +61,7 @@ public:
   static constexpr auto invalidIndex = std::numeric_limits<size_t>::max();
   static constexpr uint16_t defaultChannel = 0;
   static constexpr auto invalidAddress = std::numeric_limits<uint16_t>::max();
+  static constexpr auto invalidTrainId = std::numeric_limits<quint32>::max();
 
   struct Point
   {
@@ -519,7 +520,7 @@ public:
 
   struct Train
   {
-    quint64 trainId = invalidIndex;
+    quint32 trainId = invalidTrainId;
     std::string name;
 
     struct VehicleItem
@@ -606,7 +607,7 @@ private:
 public:
   const StaticData staticData;
   boost::signals2::signal<void()> onTick;
-  boost::signals2::signal<void(bool add, size_t idx)> onTrainAddedRemoved;
+  boost::signals2::signal<void(bool add, quint32 trainId)> onTrainAddedRemoved;
 
   Simulator(const nlohmann::json& world, TrainTypeInterface *iface);
   ~Simulator();
@@ -639,7 +640,6 @@ public:
 
   void setTrainSpeedFactor(float val);
 
-  bool trainExists(const std::string_view &name) const;
   bool segmentOccupied(size_t segmentIdx) const;
 
   void setTurnoutState(size_t segmentIndex, TurnoutState::State state);
@@ -667,7 +667,7 @@ public:
   bool addTrain(const std::string_view& name,
                 DecoderProtocol proto, uint16_t addr,
                 const std::vector<Train::VehicleItem> &vehicles, size_t segmentIndex,
-                size_t &idxOut, float startPos = -1.0, TrainPlacement placement = TrainPlacement::PlaceCenter);
+                quint32 &trainIdOut, float startPos = -1.0, TrainPlacement placement = TrainPlacement::PlaceCenter);
 
   bool removeTrain(quint64 trainId, bool removeWagons);
   void destroyTrain(Train *train, bool removeWagons);
@@ -683,7 +683,7 @@ public:
                           bool canGoForward = true, bool canGoBackwards = true,
                           float *outDistance = nullptr);
 
-  bool splitTrain(Train *trainToSplit, const size_t vehicleIdx, const bool fwd, size_t &idxOut);
+  bool splitTrain(Train *trainToSplit, const size_t vehicleIdx, const bool fwd, quint32 &trainIdOut);
   bool coupleTrain(Train *train, bool fwd, size_t &removedTrainIdxOut);
 
   void liftRestrictions(bool val)

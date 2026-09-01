@@ -85,19 +85,13 @@ bool TrainsModel::addTrain(const QString &name,
         return false;
     }
 
-    if(mSimulator->trainExists(name.toStdString()))
-    {
-        *errOut = tr("Name already in use!");
-        return false;
-    }
-
     if(segmentIdx >= mSimulator->staticData.trackSegments.size())
     {
         *errOut = tr("Segment does not exist!");
         return false;
     }
 
-    size_t trainIdx = 0;
+    quint32 trainIdx = Simulator::invalidTrainId;
     if(!mSimulator->addTrain(name.toStdString(), DecoderProtocol::DCCShort, 3,
                              vehicles, segmentIdx, trainIdx, startPos, placement))
     {
@@ -106,7 +100,7 @@ bool TrainsModel::addTrain(const QString &name,
     }
 
     if(invert)
-        mSimulator->setTrainDirection(mSimulator->getTrainAt(trainIdx), true);
+        mSimulator->setTrainDirection(mSimulator->stateData().trains.at(trainIdx), true);
 
     beginResetModel();
     mTrains.insert(name, Train{name, 0.0});

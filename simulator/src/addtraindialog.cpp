@@ -146,15 +146,8 @@ AddTrainDialog::AddTrainDialog(size_t segmentIndex, const float startPos,
     setMinimumSize(450, 500);
     setWindowTitle(tr("Add Train"));
 
-    std::string baseName = "treno_";
-    std::string resultName;
-    size_t counter = 0;
-    do
-    {
-        resultName = baseName + std::to_string(counter++);
-    } while(trainsModel->simulator()->trainExists(resultName));
-
-    mTrainEdit->setText(QString::fromStdString(resultName));
+    std::string baseName = "treno";
+    mTrainEdit->setText(QString::fromStdString(baseName));
 }
 
 void AddTrainDialog::setMode(Mode newMode)

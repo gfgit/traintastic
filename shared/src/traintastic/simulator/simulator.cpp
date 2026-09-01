@@ -717,12 +717,6 @@ void Simulator::stopAllTrains()
   }
 }
 
-bool Simulator::trainExists(const std::string_view &name) const
-{
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-    return m_stateData.trains.contains(name);
-}
-
 bool Simulator::segmentOccupied(size_t segmentIdx) const
 {
     if(segmentIdx >= staticData.trackSegments.size())
@@ -1401,7 +1395,7 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
     {
-      auto it = m_stateData.trains.find(trainName);
+      auto it = m_stateData.trains.find(trainId);
       if(it != m_stateData.trains.end())
       {
         removeTrain(trainId, true);
@@ -1504,7 +1498,7 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
                      false);
 
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-    auto it = m_stateData.trains.find(trainName);
+    auto it = m_stateData.trains.find(trainId);
     if(it == m_stateData.trains.end())
       break;
 
@@ -2990,111 +2984,95 @@ void Simulator::doSpawnTrain(Spawn *spawn)
   if(spawn->state != Spawn::State::Ready)
     return;
 
-  const std::string baseName = std::string("spawn") + std::to_string(spawn->address) + std::string("_");
-  size_t count = 0;
-  static const size_t maxTrains = 10000;
-  while(count < maxTrains)
-  {
-    const std::string candidate = baseName + std::to_string(count);
-    if(!m_stateData.trains.contains(candidate))
-      break;
+  // Spawn a train
+  const std::string trainName = std::string("spawn") + std::to_string(spawn->address) + std::string("_");
+  const std::string vehicleBaseName = trainName + ".";
 
-    count++;
+  std::vector<Simulator::Train::VehicleItem> vehicles;
+  size_t trainTypeIdx = trainTypeInterface->getRandomTrainType(spawn->allowList, spawn->blackList);
+
+  if(trainTypeIdx != invalidIndex)
+  {
+    // Create composition
+    bool reversible = false;
+    size_t locoReversible = 0;
+    vehicles = trainTypeInterface->createTrainOfType(trainTypeIdx, this,
+                                                     reversible, locoReversible);
+    if(!vehicles.empty())
+    {
+      std::uniform_int_distribution<size_t> invertLoco(0, 3);
+      if(locoReversible != 0)
+      {
+        size_t shouldInvert = invertLoco(rng);
+        if(locoReversible == 1 && shouldInvert <= 1)
+          shouldInvert = 0;
+
+        if(shouldInvert >= 2)
+          vehicles.front().reversed = !vehicles.front().reversed;
+      }
+
+      std::uniform_int_distribution<size_t> invertTrain(0, 10);
+      bool shouldInvert = reversible && invertTrain(rng) > 5;
+      if(!spawn->forward)
+        shouldInvert = !shouldInvert;
+
+      if(shouldInvert)
+      {
+        std::reverse(vehicles.begin(), vehicles.end());
+        for(auto &vehicle : vehicles)
+          vehicle.reversed = !vehicle.reversed;
+      }
+    }
   }
 
-  if(count < maxTrains)
+  if(vehicles.empty())
   {
-    // Spawn a train
+    // Create basic train
+    std::uniform_int_distribution<size_t> dist(1, spawn->maxWagons);
+    size_t numWagons = dist(rng);
 
-    const std::string trainName = baseName + std::to_string(count);
-    const std::string vehicleBaseName = trainName + ".";
+    const auto& segment = staticData.trackSegments[spawn->segmentIndex];
+    const float segmentLength = getSegmentLength(segment, m_stateData);
+    const float avgLength = spawn->wagonLength + staticData.trainCouplingLength;
+    const size_t maxWagons = size_t(std::floor(segmentLength / avgLength));
 
-    std::vector<Simulator::Train::VehicleItem> vehicles;
-    size_t trainTypeIdx = trainTypeInterface->getRandomTrainType(spawn->allowList, spawn->blackList);
+    numWagons = std::min(numWagons, maxWagons);
 
-    if(trainTypeIdx != invalidIndex)
+    for(size_t i = 0; i < numWagons; i++)
     {
-      // Create composition
-      bool reversible = false;
-      size_t locoReversible = 0;
-      vehicles = trainTypeInterface->createTrainOfType(trainTypeIdx, this,
-                                                       reversible, locoReversible);
-      if(!vehicles.empty())
-      {
-        std::uniform_int_distribution<size_t> invertLoco(0, 3);
-        if(locoReversible != 0)
-        {
-          size_t shouldInvert = invertLoco(rng);
-          if(locoReversible == 1 && shouldInvert <= 1)
-            shouldInvert = 0;
-
-          if(shouldInvert >= 2)
-            vehicles.front().reversed = !vehicles.front().reversed;
-        }
-
-        std::uniform_int_distribution<size_t> invertTrain(0, 10);
-        bool shouldInvert = reversible && invertTrain(rng) > 5;
-        if(!spawn->forward)
-          shouldInvert = !shouldInvert;
-
-        if(shouldInvert)
-        {
-          std::reverse(vehicles.begin(), vehicles.end());
-          for(auto &vehicle : vehicles)
-            vehicle.reversed = !vehicle.reversed;
-        }
-      }
+      Simulator::Train::VehicleItem item;
+      item.vehicle = addVehicle(vehicleBaseName + std::to_string(i), spawn->wagonLength, Color::Aqua);
+      item.reversed = false;
+      vehicles.push_back(item);
     }
+  }
 
-    if(vehicles.empty())
+  TrainPlacement placement = TrainPlacement::PlaceEnd;
+  if(!spawn->forward)
+    placement = TrainPlacement::PlaceStart;
+
+  quint32 outTrainId = invalidTrainId;
+  if(addTrain(trainName, DecoderProtocol::DCCLong, 3,
+              vehicles, spawn->segmentIndex, outTrainId, spawn->posInSegment, placement))
+  {
+    // DONE!
+    Train *train = m_stateData.trains.at(outTrainId);
+    setTrainDirection(train, !spawn->forward);
+    setTrainMode(train, TrainState::Mode::Automatic);
+
+    // Give some default speed
+    train->state.speed = std::clamp(spawn->defaultSpeedKmH * SpeedKmHtoTick, 0.0f, train->speedMax);
+    train->state.targetSpeed = std::clamp(train->speedMax * 0.8f, train->state.speed, train->speedMax);
+
+    // Wait reset
+    spawn->state = Spawn::State::WaitingReset;
+    spawn->waitingResetCount = Spawn::MAX_WAITING_RESET;
+  }
+  else
+  {
+    for(const auto &item : vehicles)
     {
-      // Create basic train
-      std::uniform_int_distribution<size_t> dist(1, spawn->maxWagons);
-      size_t numWagons = dist(rng);
-
-      const auto& segment = staticData.trackSegments[spawn->segmentIndex];
-      const float segmentLength = getSegmentLength(segment, m_stateData);
-      const float avgLength = spawn->wagonLength + staticData.trainCouplingLength;
-      const size_t maxWagons = size_t(std::floor(segmentLength / avgLength));
-
-      numWagons = std::min(numWagons, maxWagons);
-
-      for(size_t i = 0; i < numWagons; i++)
-      {
-        Simulator::Train::VehicleItem item;
-        item.vehicle = addVehicle(vehicleBaseName + std::to_string(i), spawn->wagonLength, Color::Aqua);
-        item.reversed = false;
-        vehicles.push_back(item);
-      }
-    }
-
-    TrainPlacement placement = TrainPlacement::PlaceEnd;
-    if(!spawn->forward)
-      placement = TrainPlacement::PlaceStart;
-
-    size_t unusedTrainIdx = 0;
-    if(addTrain(baseName + std::to_string(count), DecoderProtocol::DCCLong, 3,
-                vehicles, spawn->segmentIndex, unusedTrainIdx, spawn->posInSegment, placement))
-    {
-      // DONE!
-      Train *train = m_stateData.trains.at(trainName);
-      setTrainDirection(train, !spawn->forward);
-      setTrainMode(train, TrainState::Mode::Automatic);
-
-      // Give some default speed
-      train->state.speed = std::clamp(spawn->defaultSpeedKmH * SpeedKmHtoTick, 0.0f, train->speedMax);
-      train->state.targetSpeed = std::clamp(train->speedMax * 0.8f, train->state.speed, train->speedMax);
-
-      // Wait reset
-      spawn->state = Spawn::State::WaitingReset;
-      spawn->waitingResetCount = Spawn::MAX_WAITING_RESET;
-    }
-    else
-    {
-      for(const auto &item : vehicles)
-      {
-        removeVehicle(item.vehicle);
-      }
+      removeVehicle(item.vehicle);
     }
   }
 }
@@ -4134,11 +4112,11 @@ Simulator::StaticData Simulator::load(const nlohmann::json& world, StateData& st
 
 bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, uint16_t addr,
                          const std::vector<Train::VehicleItem> &vehicles, size_t segmentIndex,
-                         size_t &idxOut, float startPos, TrainPlacement placement)
+                         quint32 &trainIdOut, float startPos, TrainPlacement placement)
 {
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-  if(name.empty() || m_stateData.trains.contains(name))
+  if(name.empty())
     return false;
 
   std::unique_ptr<Train> train(new Train);
@@ -4421,9 +4399,9 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
 
   train->trainId = mLastTrainId++;
   auto pair = m_stateData.trains.insert({train->trainId, train.release()});
-  idxOut = std::distance(m_stateData.trains.begin(), pair.first);
+  trainIdOut = train->trainId;
 
-  onTrainAddedRemoved(true, idxOut);
+  onTrainAddedRemoved(true, trainIdOut);
 
   if(getSimModeUnlocked() == SimMode::Master)
   {
@@ -4812,7 +4790,7 @@ void Simulator::loadTrains(const nlohmann::json &world)
       }
 
       const std::string_view name = object.value<std::string_view>("name", {});
-      if(name.empty() || m_stateData.trains.contains(name))
+      if(name.empty())
         continue;
 
       size_t segmentIndex = invalidIndex;
@@ -4864,7 +4842,7 @@ void Simulator::loadTrains(const nlohmann::json &world)
         vehicles.push_back(item);
       }
 
-      size_t unused1 = 0;
+      quint32 unused1 = invalidTrainId;
       addTrain(name,
                stringToEnum<DecoderProtocol>(object.value<std::string_view>("protocol", {})).value_or(DecoderProtocol::None),
                object.value("address", 3),
@@ -5108,7 +5086,7 @@ Simulator::Vehicle *Simulator::getVehicleNear(size_t segmentIdx,
   return bestVehicle;
 }
 
-bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const bool fwd, size_t &idxOut)
+bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const bool fwd, quint32 &trainIdOut)
 {
   if(!trainToSplit->state.isManualAndStopped())
     return false; // Train must be Manual and stopped
@@ -5121,15 +5099,8 @@ bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const b
 
   std::unique_ptr<Train> remainingTrain(new Train);
 
-  // Find unique name
-  size_t nameNum = 1;
+  // Put a name
   remainingTrain->name = trainToSplit->name + '_';
-  while(m_stateData.trains.contains(remainingTrain->name))
-  {
-    remainingTrain->name = trainToSplit->name + '_' + std::to_string(nameNum);
-    nameNum++;
-  }
-
   remainingTrain->protocol = trainToSplit->protocol;
   remainingTrain->address = trainToSplit->address; // TODO: unique
   remainingTrain->speedMax = trainToSplit->speedMax;
@@ -5187,10 +5158,10 @@ bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const b
   }
 
   remainingTrain->trainId = mLastTrainId++;
-  auto pair = m_stateData.trains.insert({remainingTrain->trainId, remainingTrain.release()});
-  idxOut = std::distance(m_stateData.trains.begin(), pair.first);
+  m_stateData.trains.insert({remainingTrain->trainId, remainingTrain.release()});
+  trainIdOut = remainingTrain->trainId;
 
-  onTrainAddedRemoved(true, idxOut);
+  onTrainAddedRemoved(true, trainIdOut);
 
   return true;
 }
