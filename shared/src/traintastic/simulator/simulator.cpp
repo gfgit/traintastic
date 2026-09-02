@@ -1401,7 +1401,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
   }
   case OpCode::TrainRequestSetMode:
   {
-    if(!isReplica)
+    if(isReplica)
       break;
 
     const auto& m = static_cast<const TrainRequestSetMode&>(message);
@@ -1416,7 +1416,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
   }
   case OpCode::TrainRequestSetDirection:
   {
-    if(!isReplica)
+    if(isReplica)
       break;
 
     const auto& m = static_cast<const TrainRequestSetDirection&>(message);
@@ -1431,7 +1431,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
   }
   case OpCode::TrainRequestChangeSpeed:
   {
-    if(!isReplica)
+    if(isReplica)
       break;
 
     const auto& m = static_cast<const TrainRequestChangeSpeed&>(message);
@@ -1471,7 +1471,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
   }
   case OpCode::TrainRequestRemove:
   {
-    if(!isReplica)
+    if(isReplica)
       break;
 
     const auto& m = static_cast<const TrainRemoved&>(message);
@@ -1486,6 +1486,9 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
   }
   case OpCode::TrainRemoved:
   {
+    if(!isReplica)
+      break;
+
     break; // TODO:
   }
   case OpCode::TrainAdded:
@@ -1493,19 +1496,19 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
   case OpCode::TrainChangedVehicles:
   {
     // Variable size messages sent by Master
-    if(isReplica)
-    {
-      receiveVariableSize(message);
-    }
+    if(!isReplica)
+      break;
+
+    receiveVariableSize(message);
     break;
   }
   case OpCode::TrainRequestAdd:
   {
     // Variable size messages sent by replica
-    if(!isReplica)
-    {
-      receiveVariableSize(message);
-    }
+    if(isReplica)
+      break;
+
+    receiveVariableSize(message);
     break;
   }
   }
