@@ -586,7 +586,7 @@ public:
     uint8_t signalBlinkState = 0; // Goes from 0 to 7
     std::vector<SensorState> sensors;
     std::vector<TurnoutState> turnouts;
-    std::map<quint64, Train *, std::less<>> trains; // Avoid rehashing
+    std::map<quint32, Train *, std::less<>> trains; // Avoid rehashing
     std::unordered_map<std::string, Vehicle *, StringHash, StringEqual> vehicles;
     std::unordered_map<std::string, MainSignal *, StringHash, StringEqual> mainSignals;
     std::unordered_map<std::string, AuxSignal *, StringHash, StringEqual> auxSignals;
@@ -628,8 +628,7 @@ public:
   void setPowerOn(bool powerOn);
   void togglePowerOn();
 
-  Train *getTrainAt(size_t trainIndex) const;
-  size_t getTrainIndex(Train *train) const;
+  Train *getTrainById(quint32 trainId) const;
 
   std::pair<Point, Point> getTrainExtents(Train *train);
   void setTrainDirection(Train *train, bool reverse);
@@ -814,21 +813,6 @@ public:
   
   virtual void fillVehicleProperties(Simulator::Vehicle *vehicle) = 0;
 };
-
-
-inline size_t Simulator::getTrainIndex(Train *train) const
-{
-  std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-
-  size_t idx = 0;
-  for(auto it : m_stateData.trains)
-  {
-    if(it.second == train)
-      return idx;
-    idx++;
-  }
-  return invalidIndex;
-}
 
 
 constexpr Simulator::Point operator+(const Simulator::Point lhs, const Simulator::Point rhs)

@@ -590,21 +590,17 @@ void Simulator::togglePowerOn()
   }
 }
 
-Simulator::Train *Simulator::getTrainAt(size_t trainIndex) const
+Simulator::Train *Simulator::getTrainById(quint32 trainId) const
 {
-  if(trainIndex == invalidIndex)
+  if(trainId == invalidTrainId)
     return nullptr;
 
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-  if(trainIndex < m_stateData.trains.size())
-  {
-    auto it = std::cbegin(m_stateData.trains);
-    for(size_t i = 0; i < trainIndex; i++)
-      it++;
-    return it->second;
-  }
+  auto it = m_stateData.trains.find(trainId);
+  if(it == m_stateData.trains.end())
+    return nullptr;
 
-  return nullptr;
+  return it->second;
 }
 
 std::pair<Simulator::Point, Simulator::Point> Simulator::getTrainExtents(Train *train)
@@ -1480,8 +1476,7 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
     }
 
     auto pair = m_stateData.trains.insert({train->trainId, train.release()});
-    size_t idxOut = std::distance(m_stateData.trains.begin(), pair.first);
-    onTrainAddedRemoved(true, idxOut);
+    onTrainAddedRemoved(true, pair.first->second->trainId);
 
     break;
   }
@@ -2239,10 +2234,10 @@ void Simulator::updateTrainPositions()
 
       if(trainRemoved)
       {
+        const quint32 trainId = it->second->trainId;
         destroyTrain(it->second, true);
-        const int trainIdx = std::distance(m_stateData.trains.begin(), it);
         it = m_stateData.trains.erase(it);
-        onTrainAddedRemoved(false, trainIdx);
+        onTrainAddedRemoved(false, trainId);
         continue;
       }
     }
@@ -4398,8 +4393,8 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
   }
 
   train->trainId = mLastTrainId++;
-  auto pair = m_stateData.trains.insert({train->trainId, train.release()});
   trainIdOut = train->trainId;
+  auto pair = m_stateData.trains.insert({train->trainId, train.release()});
 
   onTrainAddedRemoved(true, trainIdOut);
 
@@ -4422,9 +4417,8 @@ bool Simulator::removeTrain(quint64 trainId, bool removeWagons)
 
     Train *train = it->second;
     destroyTrain(train, removeWagons);
-    const int trainIdx = std::distance(m_stateData.trains.begin(), it);
     it = m_stateData.trains.erase(it);
-    onTrainAddedRemoved(false, trainIdx);
+    onTrainAddedRemoved(false, trainId);
     return true;
 }
 
@@ -5362,7 +5356,7 @@ bool Simulator::coupleTrain(Train *train, bool fwd, size_t& removedTrainIdxOut)
 
   if(trainToRemove)
   {
-    removedTrainIdxOut = getTrainIndex(trainToRemove);
+    removedTrainIdxOut = trainToRemove->trainId;
     removeTrain(trainToRemove->trainId, false);
   }
 

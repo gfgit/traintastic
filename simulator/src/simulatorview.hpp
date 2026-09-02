@@ -187,8 +187,8 @@ private:
   QPoint m_middleMousePos;
 
   quint32 m_currentTrainId = Simulator::invalidTrainId;
-  quint32 m_trainToBeRemovedIdx = Simulator::invalidTrainId;
-  quint32 m_trainUnderMouseIdx = Simulator::invalidTrainId;
+  quint32 m_trainToBeRemovedId = Simulator::invalidTrainId;
+  quint32 m_trainUnderMouseId = Simulator::invalidTrainId;
   size_t m_trainUnderMouseVehicleIdx = Simulator::invalidIndex;
 
   // Turnout blink
@@ -220,7 +220,7 @@ private:
 
 private slots:
   void tick();
-  void trainAddedRemoved(bool add, size_t trainIdx);
+  void trainAddedRemoved(bool add, quint32 trainId);
   void userAskRemoveTrain(size_t trainIdx);
   void doSetCurrentTrainIndex(quint32 newTrainId);
 };
