@@ -1489,7 +1489,18 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
     if(!isReplica)
       break;
 
-    break; // TODO:
+    const auto& m = static_cast<const TrainRemoved&>(message);
+    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+
+    auto it = m_stateData.trains.find(m.trainId);
+    if(it == m_stateData.trains.end())
+      break;
+
+    removeTrain(it->second->trainId, true);
+
+    // TODO: change current active train to suggested
+
+    break;
   }
   case OpCode::TrainAdded:
   case OpCode::TrainStateRefresh:
@@ -4579,6 +4590,13 @@ bool Simulator::removeTrain(quint32 trainId, bool removeWagons)
     destroyTrain(train, removeWagons);
     it = m_stateData.trains.erase(it);
     onTrainAddedRemoved(false, trainId);
+
+    if(getSimModeUnlocked() == SimMode::Master)
+    {
+      // TODO: suggest new active train
+      sendReplicas(SimulatorProtocol::TrainRemoved(trainId, false));
+    }
+
     return true;
 }
 
