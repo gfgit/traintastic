@@ -110,7 +110,7 @@ QDataStream &operator>>(QDataStream &stream, Simulator::VehicleState &vehicleSta
 
 QDataStream &operator<<(QDataStream &stream, const Simulator::Vehicle &vehicle)
 {
-  stream << vehicle.name;
+  stream << vehicle.vehicleId;
   stream << quint64(vehicle.typeIdx);
   stream << vehicle.state;
 
@@ -124,7 +124,7 @@ QDataStream &operator<<(QDataStream &stream, const Simulator::Vehicle &vehicle)
 
 QDataStream &operator>>(QDataStream &stream, Simulator::Vehicle &vehicle)
 {
-  stream >> vehicle.name;
+  stream >> vehicle.vehicleId;
 
   quint64 idx = 0;
   stream >> idx;

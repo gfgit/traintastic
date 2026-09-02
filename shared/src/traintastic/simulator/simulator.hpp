@@ -510,12 +510,12 @@ public:
 
   struct Vehicle
   {
-    std::string name;
-    Color color;
-    float length;
     Train *activeTrain = nullptr;
     VehicleState state;
+    quint32 vehicleId = invalidTrainId;
+    float length;
     size_t typeIdx = invalidIndex;
+    Color color;
   };
 
   struct Train
@@ -580,14 +580,16 @@ public:
     float tickActive = 0.0f;
     float tickLoad = 0.0f;
     float trainSpeedFactor = 1.0f;
+    quint32 mLastTrainId = 0;
+    quint32 mLastVehicleId = 0;
 
     bool powerOn = false;
 
     uint8_t signalBlinkState = 0; // Goes from 0 to 7
     std::vector<SensorState> sensors;
     std::vector<TurnoutState> turnouts;
-    std::map<quint32, Train *, std::less<>> trains; // Avoid rehashing
-    std::unordered_map<std::string, Vehicle *, StringHash, StringEqual> vehicles;
+    std::map<quint32, Train *> trains; // Avoid rehashing
+    std::map<quint32, Vehicle *> vehicles;
     std::unordered_map<std::string, MainSignal *, StringHash, StringEqual> mainSignals;
     std::unordered_map<std::string, AuxSignal *, StringHash, StringEqual> auxSignals;
     std::unordered_map<size_t, Spawn *> spawns;
@@ -671,8 +673,8 @@ public:
   bool removeTrain(quint64 trainId, bool removeWagons);
   void destroyTrain(Train *train, bool removeWagons);
 
-  Vehicle *addVehicle(const std::string_view &baseName, float length,
-                      Color color, size_t typeIdx = invalidIndex);
+  Vehicle *addVehicle(float length, Color color,
+                      size_t typeIdx = invalidIndex);
   bool removeVehicle(Vehicle *vehicle);
 
   void sendTrainFullRefreshReplica(SimulatorProtocol::OpCode op, Train *train);
@@ -738,7 +740,6 @@ private:
   std::list<std::shared_ptr<SimulatorConnection>> m_repliacas;
   size_t mLastSpawnSyncIdx = 0;
 
-  quint64 mLastTrainId = 0;
   TrainTypeInterface *trainTypeInterface = nullptr;
 
   SimMode mSimMode = SimMode::Standalone;

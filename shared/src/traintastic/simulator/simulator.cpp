@@ -1412,7 +1412,7 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
     for(const Simulator::Train::VehicleItemFull &v : vehicles)
     {
       Vehicle *result = nullptr;
-      auto it = m_stateData.vehicles.find(v.vehicle.name);
+      auto it = m_stateData.vehicles.find(v.vehicle.vehicleId);
       if(it != m_stateData.vehicles.end())
       {
         result = it->second;
@@ -1423,7 +1423,7 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
       }
       else
       {
-        result = addVehicle(v.vehicle.name, v.vehicle.length, v.vehicle.color, v.vehicle.typeIdx);
+        result = addVehicle(v.vehicle.length, v.vehicle.color, v.vehicle.typeIdx);
       }
 
       if(trainTypeInterface && result->typeIdx != invalidIndex)
@@ -2981,7 +2981,6 @@ void Simulator::doSpawnTrain(Spawn *spawn)
 
   // Spawn a train
   const std::string trainName = std::string("spawn") + std::to_string(spawn->address) + std::string("_");
-  const std::string vehicleBaseName = trainName + ".";
 
   std::vector<Simulator::Train::VehicleItem> vehicles;
   size_t trainTypeIdx = trainTypeInterface->getRandomTrainType(spawn->allowList, spawn->blackList);
@@ -3036,7 +3035,7 @@ void Simulator::doSpawnTrain(Spawn *spawn)
     for(size_t i = 0; i < numWagons; i++)
     {
       Simulator::Train::VehicleItem item;
-      item.vehicle = addVehicle(vehicleBaseName + std::to_string(i), spawn->wagonLength, Color::Aqua);
+      item.vehicle = addVehicle(spawn->wagonLength, Color::Aqua);
       item.reversed = false;
       vehicles.push_back(item);
     }
@@ -3996,15 +3995,11 @@ Simulator::StaticData Simulator::load(const nlohmann::json& world, StateData& st
         continue;
       }
 
-      const std::string_view name = object.value<std::string_view>("name", {});
-      if(name.empty() || stateData.vehicles.contains(name))
-        continue;
-
       Vehicle *vehicle = new Vehicle;
-      vehicle->name = name;
+      vehicle->vehicleId = stateData.mLastVehicleId++;
       vehicle->length = object.value("length", 20.0f);
       vehicle->color = stringToEnum<Color>(object.value<std::string_view>("color", {})).value_or(Color::Red);
-      stateData.vehicles.insert({vehicle->name, vehicle});
+      stateData.vehicles.insert({vehicle->vehicleId, vehicle});
     }
   }
 
@@ -4392,7 +4387,7 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
       train->state.mode = TrainState::Mode::Manual;
   }
 
-  train->trainId = mLastTrainId++;
+  train->trainId = m_stateData.mLastTrainId++;
   trainIdOut = train->trainId;
   auto pair = m_stateData.trains.insert({train->trainId, train.release()});
 
@@ -4422,33 +4417,24 @@ bool Simulator::removeTrain(quint64 trainId, bool removeWagons)
     return true;
 }
 
-Simulator::Vehicle *Simulator::addVehicle(const std::string_view &baseName, float length, Color color, size_t typeIdx)
+Simulator::Vehicle *Simulator::addVehicle(float length, Color color, size_t typeIdx)
 {    
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
     Vehicle *vehicle = new Vehicle;
+    vehicle->vehicleId = m_stateData.mLastVehicleId++;
     vehicle->length = length;
     vehicle->color = color;
     vehicle->typeIdx = typeIdx;
 
-    size_t num = 0;
-    vehicle->name = baseName;
-    while(m_stateData.vehicles.contains(vehicle->name))
-    {
-        num++;
-        vehicle->name = baseName;
-        vehicle->name += '_';
-        vehicle->name += std::to_string(num);
-    }
-
-    m_stateData.vehicles.insert({vehicle->name, vehicle});
+    m_stateData.vehicles.insert({vehicle->vehicleId, vehicle});
     return vehicle;
 }
 
 bool Simulator::removeVehicle(Vehicle *vehicle)
 {
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-    auto it = m_stateData.vehicles.find(vehicle->name);
+    auto it = m_stateData.vehicles.find(vehicle->vehicleId);
     if(it == m_stateData.vehicles.end())
         return false;
 
@@ -4819,13 +4805,10 @@ void Simulator::loadTrains(const nlohmann::json &world)
           continue;
         }
 
-        const std::string_view vehicleName = vehicleObj.value<std::string_view>("name", {});
-        if(vehicleName.empty())
-          continue;
-
         Vehicle *vehicle = nullptr;
-        if(const auto it = m_stateData.vehicles.find(vehicleName); it != m_stateData.vehicles.end())
-          vehicle = it->second;
+        // TODO: use vehicle ID? or declare vehicles inside train JSON object
+        //if(const auto it = m_stateData.vehicles.find(vehicleName); it != m_stateData.vehicles.end())
+        //  vehicle = it->second;
 
         if(!vehicle || vehicle->activeTrain)
           continue;
@@ -5151,9 +5134,9 @@ bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const b
     trainTypeInterface->setupTrainSpeedPowered(remainingTrain.get());
   }
 
-  remainingTrain->trainId = mLastTrainId++;
-  m_stateData.trains.insert({remainingTrain->trainId, remainingTrain.release()});
+  remainingTrain->trainId = m_stateData.mLastTrainId++;
   trainIdOut = remainingTrain->trainId;
+  m_stateData.trains.insert({remainingTrain->trainId, remainingTrain.release()});
 
   onTrainAddedRemoved(true, trainIdOut);
 

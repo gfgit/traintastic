@@ -182,8 +182,7 @@ std::vector<Simulator::Train::VehicleItem> TrainTypeListModel::createTrainOfType
     if(vehicleType.name.isEmpty())
         continue;
 
-    item.vehicle = simulator->addVehicle(vehicleType.name.toStdString(),
-                                         vehicleType.length,
+    item.vehicle = simulator->addVehicle(vehicleType.length,
                                          Color::Blue,
                                          vehicle.vehicleTypeIndex);
 

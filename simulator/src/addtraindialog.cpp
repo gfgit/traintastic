@@ -182,8 +182,7 @@ std::vector<Simulator::Train::VehicleItem> AddTrainDialog::createTrain()
     if(mode == Mode::CustomVehicle)
     {
         Simulator::Train::VehicleItem item;
-        item.vehicle = mTrainsModel->simulator()->addVehicle(mTrainEdit->text().toStdString(),
-                                                             customLengthSpin->value(),
+        item.vehicle = mTrainsModel->simulator()->addVehicle(customLengthSpin->value(),
                                                              Color::Blue);
         return {item};
     }
@@ -217,8 +216,7 @@ std::vector<Simulator::Train::VehicleItem> AddTrainDialog::createTrain()
         if(vehicleType.name.isEmpty())
             continue;
 
-        item.vehicle = mTrainsModel->simulator()->addVehicle(vehicleType.name.toStdString(),
-                                                             vehicleType.length,
+        item.vehicle = mTrainsModel->simulator()->addVehicle(vehicleType.length,
                                                              Color::Blue,
                                                              vehicle.vehicleTypeIndex);
         result.push_back(item);
