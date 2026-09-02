@@ -43,6 +43,8 @@
 #include <traintastic/utils/stringhash.hpp>
 #include <traintastic/utils/stringequal.hpp>
 
+#include <traintastic/simulator/protocol.hpp> // TODO: forward declare
+
 #include <QtGlobal>
 
 class QByteArray;
@@ -463,12 +465,7 @@ public:
     static constexpr float AccelerationRate_ms2 = 0.6;
     static constexpr float DecelerationRate_ms2 = 0.75;
 
-    enum class Mode : uint8_t
-    {
-      Manual = 0,
-      SemiAutomatic = 1,
-      Automatic = 2
-    };
+    using Mode = SimulatorProtocol::TrainMode;
 
     Mode mode = Mode::SemiAutomatic;
 
@@ -637,13 +634,14 @@ public:
   void setTrainSpeed(Train *train, float speed, bool immediate = false);
   void applyTrainSpeedDelta(Train *train, float delta);
   void setTrainMode(Train *train, TrainState::Mode mode);
+  void stopTrainAndSetManual(Train *train);
   void stopAllTrains();
 
   void setTrainSpeedFactor(float val);
 
   bool segmentOccupied(size_t segmentIdx) const;
 
-  void setTurnoutState(size_t segmentIndex, TurnoutState::State state);
+  void setTurnoutState(size_t segmentIndex, TurnoutState::State state, bool sendChange = true);
   void toggleTurnoutState(size_t segmentIndex, bool setUnknown);
 
   void send(const SimulatorProtocol::Message& message);
@@ -670,7 +668,8 @@ public:
                 const std::vector<Train::VehicleItem> &vehicles, size_t segmentIndex,
                 quint32 &trainIdOut, float startPos = -1.0, TrainPlacement placement = TrainPlacement::PlaceCenter);
 
-  bool removeTrain(quint64 trainId, bool removeWagons);
+  bool removeTrain(quint32 trainId, bool removeWagons);
+  bool removeTrainUser(quint32 trainId);
   void destroyTrain(Train *train, bool removeWagons);
 
   Vehicle *addVehicle(float length, Color color,

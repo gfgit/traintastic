@@ -26,6 +26,8 @@
 #include "../enum/direction.hpp"
 #include "../utils/packed.hpp"
 
+#include <QtGlobal>
+
 namespace SimulatorProtocol
 {
 
@@ -51,9 +53,23 @@ enum class OpCode : uint8_t
   // Special messages with variable size
   TrainAdded = 17,
   TrainStateRefresh = 18,
-  VehiclesRemoved = 19,
-  TrainRemoved = 20,
-  TrainChangedVehicles = 21
+  TrainChangedVehicles = 19,
+  TrainRequestAdd = 20,
+
+  // Again fixed size
+  TrainRequestSetMode = 21,
+  TrainRequestSetDirection = 22,
+  TrainRequestChangeSpeed = 23,
+  TrainRequestCoupleSplit = 24,
+  TrainRequestRemove = 25,
+  TrainRemoved = 26,
+};
+
+enum class TrainMode : uint8_t
+{
+  Manual = 0,
+  SemiAutomatic = 1,
+  Automatic = 2
 };
 
 PRAGMA_PACK_PUSH_1
@@ -393,6 +409,96 @@ struct TrainSpeedFactorChanged : Message
   float trainSpeedFactor;
 } ATTRIBUTE_PACKED;
 static_assert(sizeof(TrainSpeedFactorChanged) == 7);
+
+struct TrainRequestSetMode : Message
+{
+  TrainRequestSetMode(quint32 trainId_, TrainMode mode_)
+    : Message(OpCode::TrainRequestSetMode,
+              sizeof(TrainRequestSetMode))
+    , trainId(trainId_)
+    , mode(mode_)
+  {
+  }
+
+  quint32 trainId;
+  TrainMode mode;
+} ATTRIBUTE_PACKED;
+static_assert(sizeof(TrainRequestSetMode) == 8);
+
+struct TrainRequestSetDirection : Message
+{
+  TrainRequestSetDirection(quint32 trainId_, bool reverse_)
+    : Message(OpCode::TrainRequestSetDirection,
+              sizeof(TrainRequestSetDirection))
+    , trainId(trainId_)
+    , reverse(reverse_)
+  {
+  }
+
+  quint32 trainId;
+  bool reverse;
+} ATTRIBUTE_PACKED;
+static_assert(sizeof(TrainRequestSetDirection) == 8);
+
+struct TrainRequestChangeSpeed : Message
+{
+  enum SpeedStep : uint8_t
+  {
+    Stop = 0,
+    IncreaseStep = 1,
+    DecreaseStep = 2
+  };
+
+  TrainRequestChangeSpeed(quint32 trainId_, SpeedStep step_)
+    : Message(OpCode::TrainRequestChangeSpeed,
+              sizeof(TrainRequestChangeSpeed))
+    , trainId(trainId_)
+    , step(step_)
+  {
+  }
+
+  quint32 trainId;
+  SpeedStep step;
+} ATTRIBUTE_PACKED;
+static_assert(sizeof(TrainRequestChangeSpeed) == 8);
+
+struct TrainRequestCoupleSplit : Message
+{
+  enum CoupleOp : uint8_t
+  {
+    CoupleFront = 0,
+    CoupleRear = 1,
+    SplitFront = 2,
+    SplitRear = 3
+  };
+
+  TrainRequestCoupleSplit(quint32 trainId_, CoupleOp coupleOp_)
+    : Message(OpCode::TrainRequestCoupleSplit,
+              sizeof(TrainRequestCoupleSplit))
+    , trainId(trainId_)
+    , coupleOp(coupleOp_)
+  {
+  }
+
+  quint32 trainId;
+  CoupleOp coupleOp;
+} ATTRIBUTE_PACKED;
+static_assert(sizeof(TrainRequestCoupleSplit) == 8);
+
+struct TrainRemoved : Message
+{
+  TrainRemoved(quint32 trainId_, bool request, quint32 nextSelectedTrainId_ = 0)
+    : Message(request ? OpCode::TrainRequestRemove : OpCode::TrainRemoved,
+              sizeof(TrainRemoved))
+    , trainId(trainId_)
+    , nextSelectedTrainId(request ? 0 : nextSelectedTrainId_)
+  {
+  }
+
+  quint32 trainId;
+  quint32 nextSelectedTrainId = 0;
+} ATTRIBUTE_PACKED;
+static_assert(sizeof(TrainRemoved) == 11);
 
 PRAGMA_PACK_POP
 

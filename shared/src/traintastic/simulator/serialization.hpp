@@ -212,7 +212,7 @@ void serializeTrain(QDataStream &stream, const Simulator::Train &train, bool ful
 }
 
 void deserializeTrain(QDataStream &stream, std::vector<Simulator::Train::VehicleItemFull> &vehicles,
-                      std::string &name, quint64 &trainId, Simulator::TrainState &trainState, float &speedMax,
+                      std::string &name, quint32 &trainId, Simulator::TrainState &trainState, float &speedMax,
                       bool full)
 {
   stream >> trainId;

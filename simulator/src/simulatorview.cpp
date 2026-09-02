@@ -2215,8 +2215,7 @@ void SimulatorView::keyPressEvent(QKeyEvent* e)
       Simulator::Train *train = m_simulator->getTrainById(m_currentTrainId);
       if(train)
       {
-        m_simulator->setTrainMode(train, Simulator::TrainState::Mode::Manual);
-        m_simulator->setTrainSpeed(train, 0.0f, true);
+        m_simulator->stopTrainAndSetManual(train);
       }
       break;
     }
@@ -3073,7 +3072,7 @@ void SimulatorView::userAskRemoveTrain(size_t trainIdx)
     std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
     Simulator::Train *train = m_simulator->getTrainById(m_trainToBeRemovedId);
     if(train)
-      m_simulator->removeTrain(train->trainId, true);
+      m_simulator->removeTrainUser(train->trainId);
 
     m_trainToBeRemovedId = Simulator::invalidTrainId;
   }

@@ -625,6 +625,12 @@ void Simulator::setTrainDirection(Train *train, bool reverse)
 {
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
+  if(getSimModeUnlocked() == SimMode::Replica && train->state.reverse != reverse)
+  {
+    send(SimulatorProtocol::TrainRequestSetDirection(train->trainId, reverse));
+    return;
+  }
+
   if(train->state.reverse != reverse)
   {
     train->state.reverse = reverse;
@@ -674,6 +680,12 @@ void Simulator::setTrainMode(Train *train, TrainState::Mode mode)
 {
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
+  if(getSimModeUnlocked() == SimMode::Replica && train->state.mode != mode)
+  {
+    send(SimulatorProtocol::TrainRequestSetMode(train->trainId, mode));
+    return;
+  }
+
   if(!train->isPowered)
     mode = TrainState::Mode::Manual;
 
@@ -698,8 +710,32 @@ void Simulator::applyTrainSpeedDelta(Train *train, float delta)
 {
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
+  if(getSimModeUnlocked() == SimMode::Replica)
+  {
+    const auto step = delta > 0 ?
+          SimulatorProtocol::TrainRequestChangeSpeed::IncreaseStep :
+          SimulatorProtocol::TrainRequestChangeSpeed::DecreaseStep;
+    send(SimulatorProtocol::TrainRequestChangeSpeed(train->trainId, step));
+    return;
+  }
+
   const float speed = std::clamp(train->state.speed + delta, 0.0f, train->speedMax);
   setTrainSpeed(train, speed);
+}
+
+void Simulator::stopTrainAndSetManual(Train *train)
+{
+  std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+
+  if(getSimModeUnlocked() == SimMode::Replica)
+  {
+    const auto step = SimulatorProtocol::TrainRequestChangeSpeed::Stop;
+    send(SimulatorProtocol::TrainRequestChangeSpeed(train->trainId, step));
+    return;
+  }
+
+  setTrainMode(train, Simulator::TrainState::Mode::Manual);
+  setTrainSpeed(train, 0.0f, true);
 }
 
 void Simulator::stopAllTrains()
@@ -727,7 +763,7 @@ bool Simulator::segmentOccupied(size_t segmentIdx) const
     return sensor.value;
 }
 
-void Simulator::setTurnoutState(size_t segmentIndex, TurnoutState::State state)
+void Simulator::setTurnoutState(size_t segmentIndex, TurnoutState::State state, bool sendChange)
 {
   using Type = TrackSegment::Type;
   using State = TurnoutState::State;
@@ -749,11 +785,14 @@ void Simulator::setTurnoutState(size_t segmentIndex, TurnoutState::State state)
           else if(state == State::Closed)
             val = 1;
 
-          auto msg = SimulatorProtocol::AccessorySetState(segment.turnout.channel,
-                                                          segment.turnout.addresses[0],
-                                                          val);
-          send(msg);
-          sendReplicas(msg);
+          if(sendChange)
+          {
+            auto msg = SimulatorProtocol::AccessorySetState(segment.turnout.channel,
+                                                            segment.turnout.addresses[0],
+                                                            val);
+            send(msg);
+            sendReplicas(msg);
+          }
         }
       }
       else if(segment.type == Type::Turnout3Way)
@@ -858,511 +897,617 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
 {
   using namespace SimulatorProtocol;
 
+  const bool isReplica = getSimMode() == SimMode::Replica;
+
   switch(message.opCode)
   {
-    case OpCode::Power:
-    {
-      std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-      const bool wasPowerOn = m_stateData.powerOn;
-      m_stateData.powerOn = static_cast<const Power&>(message).powerOn;
+  case OpCode::Power:
+  {
+    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+    const bool wasPowerOn = m_stateData.powerOn;
 
-      if(getSimModeUnlocked() != SimMode::Replica && wasPowerOn != m_stateData.powerOn)
-      {
-        send(message);
-        sendReplicas(message);
-      }
-      break;
+    // NOTE: for replica we set local value here matching master value
+    m_stateData.powerOn = static_cast<const Power&>(message).powerOn;
+
+    if(!isReplica && wasPowerOn != m_stateData.powerOn)
+    {
+      send(message);
+      sendReplicas(message);
     }
-    case OpCode::LocomotiveSpeedDirection:
-    {
-      const auto &m = static_cast<const LocomotiveSpeedDirection &>(message);
-      std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-      for(auto it : m_stateData.trains)
-      {
-        Train *train = it.second;
-
-        if(m.address == train->address && (m.protocol == train->protocol || train->protocol == DecoderProtocol::None))
-        {
-          const float speed = std::clamp(train->speedMax * (m.speed / 255.0f), 0.0f, train->speedMax);
-          const bool reverse = m.direction == Direction::Reverse;
-
-          auto &trainState = train->state;
-          if(trainState.speed != speed || trainState.reverse != reverse)
-          {
-            setTrainSpeed(train, speed);
-            setTrainDirection(train, reverse);
-          }
-          break;
-        }
-      }
+    break;
+  }
+  case OpCode::LocomotiveSpeedDirection:
+  {
+    if(isReplica)
       break;
-    }
-    case OpCode::AccessorySetState:
+
+    const auto &m = static_cast<const LocomotiveSpeedDirection &>(message);
+    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+    for(auto it : m_stateData.trains)
     {
-      const auto& m = static_cast<const AccessorySetState&>(message);
-      const auto count = staticData.trackSegments.size();
-      for(size_t i = 0; i < count; ++i)
+      Train *train = it.second;
+
+      if(m.address == train->address && (m.protocol == train->protocol || train->protocol == DecoderProtocol::None))
       {
-        const auto& segment = staticData.trackSegments[i];
-        if((segment.type == Simulator::TrackSegment::Type::Turnout || segment.type == Simulator::TrackSegment::Type::TurnoutCurved) &&
-            m.address == segment.turnout.addresses[0] && m.channel == segment.turnout.channel)
+        const float speed = std::clamp(train->speedMax * (m.speed / 255.0f), 0.0f, train->speedMax);
+        const bool reverse = m.direction == Direction::Reverse;
+
+        auto &trainState = train->state;
+        if(trainState.speed != speed || trainState.reverse != reverse)
         {
-          Simulator::TurnoutState::State newState = Simulator::TurnoutState::State::Unknown;
-          if(m.state == 1)
-          {
-            newState = Simulator::TurnoutState::State::Closed;
-          }
-          else if(m.state == 2)
-          {
-            newState = Simulator::TurnoutState::State::Thrown;
-          }
-          setTurnoutState(i, newState);
-          break;
+          setTrainSpeed(train, speed);
+          setTrainDirection(train, reverse);
         }
-        else if(segment.type == Simulator::TrackSegment::Type::Turnout3Way && (m.address == segment.turnout.addresses[0] || m.address == segment.turnout.addresses[1]))
-        {
-          // Left has preference over right, if other behavior is required add it to the json config as option.
-          //
-          //  |/ = 2nd address
-          // \|  = 1st address
-          //
-          // TurnoutState::coils = 0 0 0 0 RC RT LC LT
-
-          std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-          auto& turnoutState = m_stateData.turnouts[segment.turnout.index];
-          if(m.address == segment.turnout.addresses[0])
-          {
-            turnoutState.coils &= 0x0C;
-            turnoutState.coils |= (m.state & 0x03);
-          }
-          else if(m.address == segment.turnout.addresses[1])
-          {
-            turnoutState.coils &= 0x03;
-            turnoutState.coils |= (m.state & 0x03) << 2;
-          }
-
-          switch(turnoutState.coils)
-          {
-            case 0x0A:
-              turnoutState.state = Simulator::TurnoutState::State::Closed;
-              break;
-
-            case 0x05:
-            case 0x09:
-              turnoutState.state = Simulator::TurnoutState::State::ThrownLeft;
-              break;
-
-            case 0x06:
-              turnoutState.state = Simulator::TurnoutState::State::ThrownRight;
-              break;
-          }
-
-          // TODO: move all inside setTurnoutState()
-          if(getSimModeUnlocked() == SimMode::Master)
-          {
-            for(const auto& connection : m_repliacas)
-            {
-              connection->send(m);
-            }
-          }
-          break;
-        }
-      }
-      break;
-    }
-    case OpCode::SensorChanged:
-    {
-      if(getSimModeUnlocked() != SimMode::Replica)
-        break; // Only sent by Master simulator
-
-      const auto& m = static_cast<const SensorChanged&>(message);
-
-      auto chan = staticData.sensorChannelMap.find(m.channel);
-      if(chan == staticData.sensorChannelMap.end())
         break;
-
-      auto sensor = chan->second.find(m.address);
-      if(sensor == chan->second.end())
-        break;
-
-      std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-
-      auto &sensorState = m_stateData.sensors[sensor->second];
-      const auto sensorType = staticData.sensors.at(sensor->second).type;
-      if(sensorType == Sensor::Type::PositionSensor)
-      {
-        sensorState.curTime = sensorState.maxTime;
       }
-      else if(sensorType == Sensor::Type::AxleCounter)
-      {
-        sensorState.axleCount += m.axleCount;
-        sensorState.curTime = sensorState.axleCount > 0 ? sensorState.maxTime : -sensorState.maxTime;
-      }
-
-      sensorState.value = m.value;
-
-      break;
     }
-    case OpCode::SensorBatchState:
+    break;
+  }
+  case OpCode::AccessorySetState:
+  {
+    const auto& m = static_cast<const AccessorySetState&>(message);
+    const auto count = staticData.trackSegments.size();
+    for(size_t i = 0; i < count; ++i)
     {
-      if(getSimModeUnlocked() != SimMode::Replica)
-        break; // Only sent by Master simulator
-
-      const auto& m = static_cast<const SensorBatchState&>(message);
-
-      if(m.channel != 0)
-        break; // Protocol error
-
-      const size_t firstIdx = m.batchIdx * 16;
-      const size_t idxCount = std::min(firstIdx + 16, staticData.sensors.size());
-
-      std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-
-      for(size_t idx = firstIdx; idx < idxCount; idx++)
+      const auto& segment = staticData.trackSegments[i];
+      if((segment.type == Simulator::TrackSegment::Type::Turnout || segment.type == Simulator::TrackSegment::Type::TurnoutCurved) &&
+         m.address == segment.turnout.addresses[0] && m.channel == segment.turnout.channel)
       {
-        const auto& sensor = staticData.sensors[idx];
-
-        // Axle counter sensor send diffs so there is no point in querying them
-        if(sensor.type == Sensor::Type::AxleCounter)
+        Simulator::TurnoutState::State newState = Simulator::TurnoutState::State::Unknown;
+        if(m.state == 1)
         {
-          continue;
+          newState = Simulator::TurnoutState::State::Closed;
+        }
+        else if(m.state == 2)
+        {
+          newState = Simulator::TurnoutState::State::Thrown;
+        }
+        setTurnoutState(i, newState, !isReplica);
+        break;
+      }
+      else if(segment.type == Simulator::TrackSegment::Type::Turnout3Way && (m.address == segment.turnout.addresses[0] || m.address == segment.turnout.addresses[1]))
+      {
+        // Left has preference over right, if other behavior is required add it to the json config as option.
+        //
+        //  |/ = 2nd address
+        // \|  = 1st address
+        //
+        // TurnoutState::coils = 0 0 0 0 RC RT LC LT
+
+        std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+        auto& turnoutState = m_stateData.turnouts[segment.turnout.index];
+        if(m.address == segment.turnout.addresses[0])
+        {
+          turnoutState.coils &= 0x0C;
+          turnoutState.coils |= (m.state & 0x03);
+        }
+        else if(m.address == segment.turnout.addresses[1])
+        {
+          turnoutState.coils &= 0x03;
+          turnoutState.coils |= (m.state & 0x03) << 2;
         }
 
-        auto& sensorState = m_stateData.sensors[idx];
-        sensorState.value = bitRead(m.state, idx - firstIdx);
+        switch(turnoutState.coils)
+        {
+        case 0x0A:
+          turnoutState.state = Simulator::TurnoutState::State::Closed;
+          break;
+
+        case 0x05:
+        case 0x09:
+          turnoutState.state = Simulator::TurnoutState::State::ThrownLeft;
+          break;
+
+        case 0x06:
+          turnoutState.state = Simulator::TurnoutState::State::ThrownRight;
+          break;
+        }
+
+        // TODO: move all inside setTurnoutState()
+        if(getSimModeUnlocked() == SimMode::Master)
+        {
+          for(const auto& connection : m_repliacas)
+          {
+            connection->send(m);
+          }
+        }
+        break;
+      }
+    }
+    break;
+  }
+  case OpCode::SensorChanged:
+  {
+    if(!isReplica)
+      break; // Only sent by Master simulator
+
+    const auto& m = static_cast<const SensorChanged&>(message);
+
+    auto chan = staticData.sensorChannelMap.find(m.channel);
+    if(chan == staticData.sensorChannelMap.end())
+      break;
+
+    auto sensor = chan->second.find(m.address);
+    if(sensor == chan->second.end())
+      break;
+
+    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+
+    auto &sensorState = m_stateData.sensors[sensor->second];
+    const auto sensorType = staticData.sensors.at(sensor->second).type;
+    if(sensorType == Sensor::Type::PositionSensor)
+    {
+      sensorState.curTime = sensorState.maxTime;
+    }
+    else if(sensorType == Sensor::Type::AxleCounter)
+    {
+      sensorState.axleCount += m.axleCount;
+      sensorState.curTime = sensorState.axleCount > 0 ? sensorState.maxTime : -sensorState.maxTime;
+    }
+
+    sensorState.value = m.value;
+
+    break;
+  }
+  case OpCode::SensorBatchState:
+  {
+    if(!isReplica)
+      break; // Only sent by Master simulator
+
+    const auto& m = static_cast<const SensorBatchState&>(message);
+
+    if(m.channel != 0)
+      break; // Protocol error
+
+    const size_t firstIdx = m.batchIdx * 16;
+    const size_t idxCount = std::min(firstIdx + 16, staticData.sensors.size());
+
+    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+
+    for(size_t idx = firstIdx; idx < idxCount; idx++)
+    {
+      const auto& sensor = staticData.sensors[idx];
+
+      // Axle counter sensor send diffs so there is no point in querying them
+      if(sensor.type == Sensor::Type::AxleCounter)
+      {
+        continue;
+      }
+
+      auto& sensorState = m_stateData.sensors[idx];
+      sensorState.value = bitRead(m.state, idx - firstIdx);
+    }
+
+    break;
+  }
+  case OpCode::Handshake:
+  case OpCode::HandshakeResponse:
+  case OpCode::ReplicaGreeting:
+    break; // handled by SimulatorConnection already
+  case OpCode::SignalSetState:
+  {
+    const auto& m = static_cast<const SignalSetState&>(message);
+    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+    for(auto it : m_stateData.mainSignals)
+    {
+      MainSignal *s = it.second;
+      if(!isReplica && s->ownerConnectionId != fromConnId)
+        continue;
+
+      if(s->address != m.address || s->channel != m.channel)
+        continue;
+
+      bool wasBlinking = false;
+      bool isBlinking = false;
+
+      for(size_t i = 0; i < s->lights.size(); i++)
+      {
+        if(i < (sizeof(m.lights) / sizeof(m.lights[0])))
+        {
+          if(s->lights[i].state == MainSignal::State::BlikOn ||
+             s->lights[i].state == MainSignal::State::BlinkReverseOn)
+            wasBlinking = true;
+
+          s->lights[i].color = MainSignal::Light::Color(m.lights[i].color);
+          s->lights[i].state = MainSignal::State(m.lights[i].state);
+
+          if(s->lights[i].state == MainSignal::State::BlikOn ||
+             s->lights[i].state == MainSignal::State::BlinkReverseOn)
+            isBlinking = true;
+        }
+        else
+        {
+          s->lights[i].color = MainSignal::Light::Color::Red;
+          s->lights[i].state = MainSignal::State::Off;
+        }
+      }
+
+      s->maxSpeed = m.speed;
+
+      if(s->fixedLimit == Simulator::MainSignal::FixedLimit::Limit60)
+      {
+        s->maxSpeed = std::min(s->maxSpeed, 60.0);
+      }
+      else if(s->fixedLimit == Simulator::MainSignal::FixedLimit::Limit30)
+      {
+        s->maxSpeed = std::min(s->maxSpeed, 30.0);
+      }
+
+      // If just started blinking, sync with current blink phase
+      if(isBlinking && !wasBlinking)
+        s->setSignalBlinkStart(false, m_stateData.signalBlinkState);
+
+      s->setArrowLightOn(m.isArrowLightOn());
+      s->directionIndicatorText = m.directionIndication;
+      s->rappelState = Simulator::MainSignal::RappelState(m.rappelState);
+
+      MainSignal::State advanceSignalState = s->getAdvanceSignalState();
+      if(advanceSignalState == MainSignal::State::BlikOn ||
+         advanceSignalState == MainSignal::State::BlinkReverseOn)
+        wasBlinking = true;
+
+      advanceSignalState = MainSignal::State(m.getAdvanceSignalState());
+      s->setAdvanceSignalState(advanceSignalState);
+
+      if(advanceSignalState == MainSignal::State::BlikOn ||
+         advanceSignalState == MainSignal::State::BlinkReverseOn)
+        isBlinking = true;
+
+      if(isBlinking && !wasBlinking)
+        s->setSignalBlinkStart(true, m_stateData.signalBlinkState);
+
+      if(getSimModeUnlocked() == SimMode::Master)
+      {
+        sendReplicas(m);
       }
 
       break;
     }
-    case OpCode::Handshake:
-    case OpCode::HandshakeResponse:
-    case OpCode::ReplicaGreeting:
-      break; // handled by SimulatorConnection already
-    case OpCode::SignalSetState:
+    break;
+  }
+  case OpCode::AuxSignalSetState:
+  {
+    const auto& m = static_cast<const AuxSignalSetState&>(message);
+    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+    for(auto it : m_stateData.auxSignals)
     {
-      const auto& m = static_cast<const SignalSetState&>(message);
-      std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+      AuxSignal *s = it.second;
+      if(!isReplica && s->ownerConnectionId != fromConnId)
+        continue;
+
+      if(s->address != m.address || s->channel != m.channel)
+        continue;
+
+      s->mLights = m.lights;
+      s->mPosition = m.position;
+
+      if(getSimModeUnlocked() == SimMode::Master)
+      {
+        sendReplicas(m);
+      }
+      break;
+    }
+    break;
+  }
+  case OpCode::OwnSignal:
+  {
+    const auto& m = static_cast<const OwnSignal&>(message);
+    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+
+    if(m.isMain)
+    {
       for(auto it : m_stateData.mainSignals)
       {
         MainSignal *s = it.second;
-        if(getSimModeUnlocked() != SimMode::Replica && s->ownerConnectionId != fromConnId)
+        if(s->ownerConnectionId != invalidIndex || s->address != m.address || s->channel != m.channel)
           continue;
 
-        if(s->address != m.address || s->channel != m.channel)
-          continue;
-
-        bool wasBlinking = false;
-        bool isBlinking = false;
-
-        for(size_t i = 0; i < s->lights.size(); i++)
-        {
-          if(i < (sizeof(m.lights) / sizeof(m.lights[0])))
-          {
-            if(s->lights[i].state == MainSignal::State::BlikOn ||
-                s->lights[i].state == MainSignal::State::BlinkReverseOn)
-              wasBlinking = true;
-
-            s->lights[i].color = MainSignal::Light::Color(m.lights[i].color);
-            s->lights[i].state = MainSignal::State(m.lights[i].state);
-
-            if(s->lights[i].state == MainSignal::State::BlikOn ||
-                s->lights[i].state == MainSignal::State::BlinkReverseOn)
-              isBlinking = true;
-          }
-          else
-          {
-            s->lights[i].color = MainSignal::Light::Color::Red;
-            s->lights[i].state = MainSignal::State::Off;
-          }
-        }
-
-        s->maxSpeed = m.speed;
-
-        if(s->fixedLimit == Simulator::MainSignal::FixedLimit::Limit60)
-        {
-          s->maxSpeed = std::min(s->maxSpeed, 60.0);
-        }
-        else if(s->fixedLimit == Simulator::MainSignal::FixedLimit::Limit30)
-        {
-          s->maxSpeed = std::min(s->maxSpeed, 30.0);
-        }
-
-        // If just started blinking, sync with current blink phase
-        if(isBlinking && !wasBlinking)
-          s->setSignalBlinkStart(false, m_stateData.signalBlinkState);
-
-        s->setArrowLightOn(m.isArrowLightOn());
-        s->directionIndicatorText = m.directionIndication;
-        s->rappelState = Simulator::MainSignal::RappelState(m.rappelState);
-
-        MainSignal::State advanceSignalState = s->getAdvanceSignalState();
-        if(advanceSignalState == MainSignal::State::BlikOn ||
-            advanceSignalState == MainSignal::State::BlinkReverseOn)
-          wasBlinking = true;
-
-        advanceSignalState = MainSignal::State(m.getAdvanceSignalState());
-        s->setAdvanceSignalState(advanceSignalState);
-
-        if(advanceSignalState == MainSignal::State::BlikOn ||
-            advanceSignalState == MainSignal::State::BlinkReverseOn)
-          isBlinking = true;
-
-        if(isBlinking && !wasBlinking)
-          s->setSignalBlinkStart(true, m_stateData.signalBlinkState);
-
-        if(getSimModeUnlocked() == SimMode::Master)
-        {
-          sendReplicas(m);
-        }
-
+        s->ownerConnectionId = fromConnId;
         break;
       }
-      break;
     }
-    case OpCode::AuxSignalSetState:
+    else
     {
-      const auto& m = static_cast<const AuxSignalSetState&>(message);
-      std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
       for(auto it : m_stateData.auxSignals)
       {
         AuxSignal *s = it.second;
-        if(getSimModeUnlocked() != SimMode::Replica && s->ownerConnectionId != fromConnId)
+        if(s->ownerConnectionId != invalidIndex || s->address != m.address || s->channel != m.channel)
           continue;
 
-        if(s->address != m.address || s->channel != m.channel)
-          continue;
-
-        s->mLights = m.lights;
-        s->mPosition = m.position;
-
-        if(getSimModeUnlocked() == SimMode::Master)
-        {
-          sendReplicas(m);
-        }
+        s->ownerConnectionId = fromConnId;
         break;
+      }
+    }
+    break;
+  }
+  case OpCode::RequestChannel:
+  {
+    const auto& m = static_cast<const RequestChannel&>(message);
+    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+
+    if(staticData.sensorChannelMap.find(m.channel) == staticData.sensorChannelMap.end())
+      break;
+
+    for(const std::shared_ptr<SimulatorConnection>& connection : m_connections)
+    {
+      if(connection->connectionId() != fromConnId)
+        continue;
+
+      // Subscribe client to this channel
+      if(!vec_contains(connection->subscribedChannels, m.channel))
+        connection->subscribedChannels.push_back(m.channel);
+
+      const auto& channelMap = staticData.sensorChannelMap.at(m.channel);
+
+      size_t batchIdx = 0;
+      bool sensorFound = false;
+
+      uint16_t stateBuf = 0;
+      std::map<size_t, size_t>::const_iterator it;
+
+      while(true)
+      {
+        const size_t firstAddress = batchIdx * 16 + 1;
+        const size_t lastAddress = (batchIdx + 1) * 16;
+
+        it = channelMap.lower_bound(firstAddress);
+        stateBuf = 0;
+        sensorFound = false;
+
+        while(it != channelMap.end())
+        {
+          if(it->first > lastAddress)
+            break;
+
+          const auto& sensor = staticData.sensors[it->second];
+
+          // Axle counter sensor send diffs so there is no point in querying them
+          if(sensor.type == Sensor::Type::AxleCounter)
+          {
+            it++;
+            continue;
+          }
+
+          const auto& sensorState = m_stateData.sensors[it->second];
+          if(sensorState.value)
+            bitSet(stateBuf, sensor.address - firstAddress);
+
+          sensorFound = true;
+          it++;
+        }
+
+        if(sensorFound)
+          connection->send(SimulatorProtocol::SensorBatchState(m.channel, m_stateData.powerOn ? batchIdx : 0, stateBuf));
+
+        if(it == channelMap.end())
+          break;
+
+        // Go to next batch
+        batchIdx = it->first / 16;
       }
       break;
     }
-    case OpCode::OwnSignal:
-    {
-      const auto& m = static_cast<const OwnSignal&>(message);
-      std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-
-      if(m.isMain)
-      {
-        for(auto it : m_stateData.mainSignals)
-        {
-          MainSignal *s = it.second;
-          if(s->ownerConnectionId != invalidIndex || s->address != m.address || s->channel != m.channel)
-            continue;
-
-          s->ownerConnectionId = fromConnId;
-          break;
-        }
-      }
-      else
-      {
-        for(auto it : m_stateData.auxSignals)
-        {
-          AuxSignal *s = it.second;
-          if(s->ownerConnectionId != invalidIndex || s->address != m.address || s->channel != m.channel)
-            continue;
-
-          s->ownerConnectionId = fromConnId;
-          break;
-        }
-      }
+    break;
+  }
+  case OpCode::SensorEncodingChanged:
+  {
+    const auto& m = static_cast<const SensorEncodingChanged&>(message);
+    if(m.encoding > uint8_t(SensorState::Encoding::Code270))
       break;
-    }
-    case OpCode::RequestChannel:
+
+    auto chan = staticData.sensorChannelMap.find(m.channel);
+    if(chan == staticData.sensorChannelMap.end())
+      break;
+
+    auto sensor = chan->second.find(m.address);
+    if(sensor == chan->second.end())
+      break;
+
+    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+    if(getSimModeUnlocked() == SimMode::Master)
     {
-      const auto& m = static_cast<const RequestChannel&>(message);
-      std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+      for(const auto& connection : m_repliacas)
+      {
+        connection->send(m);
+      }
+    }
 
-      if(staticData.sensorChannelMap.find(m.channel) == staticData.sensorChannelMap.end())
-        break;
+    m_stateData.sensors[sensor->second].encoding = SensorState::Encoding(m.encoding);
+    break;
+  }
+  case OpCode::OwnSpawn:
+  {
+    const auto& m = static_cast<const OwnSpawn&>(message);
+    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+    for(auto it : m_stateData.spawns)
+    {
+      Spawn *s = it.second;
+      if(s->ownerConnectionId != invalidIndex || s->address != m.address)
+        continue;
 
-      for(const std::shared_ptr<SimulatorConnection>& connection : m_connections)
+      s->ownerConnectionId = fromConnId;
+
+      s->state = (s->waitingResetCount > 0) ?
+            Spawn::State::WaitingReset :
+            Spawn::State::Ready;
+
+      for(const auto& connection : m_connections)
       {
         if(connection->connectionId() != fromConnId)
           continue;
 
-        // Subscribe client to this channel
-        if(!vec_contains(connection->subscribedChannels, m.channel))
-          connection->subscribedChannels.push_back(m.channel);
+        uint8_t state = SpawnStateChange::Reset;
+        if(s->state == Spawn::State::Ready)
+          state = SpawnStateChange::Ready;
+        else if(s->state == Spawn::State::WaitingReset)
+          state = SpawnStateChange::WaitingReset;
 
-        const auto& channelMap = staticData.sensorChannelMap.at(m.channel);
-
-        size_t batchIdx = 0;
-        bool sensorFound = false;
-
-        uint16_t stateBuf = 0;
-        std::map<size_t, size_t>::const_iterator it;
-
-        while(true)
-        {
-          const size_t firstAddress = batchIdx * 16 + 1;
-          const size_t lastAddress = (batchIdx + 1) * 16;
-
-          it = channelMap.lower_bound(firstAddress);
-          stateBuf = 0;
-          sensorFound = false;
-
-          while(it != channelMap.end())
-          {
-            if(it->first > lastAddress)
-              break;
-
-            const auto& sensor = staticData.sensors[it->second];
-
-            // Axle counter sensor send diffs so there is no point in querying them
-            if(sensor.type == Sensor::Type::AxleCounter)
-            {
-              it++;
-              continue;
-            }
-
-            const auto& sensorState = m_stateData.sensors[it->second];
-            if(sensorState.value)
-              bitSet(stateBuf, sensor.address - firstAddress);
-
-            sensorFound = true;
-            it++;
-          }
-
-          if(sensorFound)
-            connection->send(SimulatorProtocol::SensorBatchState(m.channel, m_stateData.powerOn ? batchIdx : 0, stateBuf));
-
-          if(it == channelMap.end())
-            break;
-
-          // Go to next batch
-          batchIdx = it->first / 16;
-        }
+        connection->send(SimulatorProtocol::SpawnStateChange(s->address, state));
         break;
       }
+
       break;
     }
-    case OpCode::SensorEncodingChanged:
+    break;
+  }
+  case OpCode::SpawnStateChange:
+  {
+    const auto& m = static_cast<const SpawnStateChange&>(message);
+    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+    for(auto it : m_stateData.spawns)
     {
-      const auto& m = static_cast<const SensorEncodingChanged&>(message);
-      if(m.encoding > uint8_t(SensorState::Encoding::Code270))
-        break;
+      Spawn *s = it.second;
+      if(s->ownerConnectionId != fromConnId || s->address != m.address)
+        continue;
 
-      auto chan = staticData.sensorChannelMap.find(m.channel);
-      if(chan == staticData.sensorChannelMap.end())
-        break;
-
-      auto sensor = chan->second.find(m.address);
-      if(sensor == chan->second.end())
-        break;
-
-      std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-      if(getSimModeUnlocked() == SimMode::Master)
+      if(s->state == Spawn::State::WaitingReset && s->waitingResetCount == Spawn::MAX_WAITING_RESET)
       {
-        for(const auto& connection : m_repliacas)
-        {
-          connection->send(m);
-        }
+        if(m.state == SpawnStateChange::Reset) // Start resetting
+          s->waitingResetCount = Spawn::START_WAITING_RESET;
+        continue;
       }
 
-      m_stateData.sensors[sensor->second].encoding = SensorState::Encoding(m.encoding);
-      break;
-    }
-    case OpCode::OwnSpawn:
-    {
-      const auto& m = static_cast<const OwnSpawn&>(message);
-      std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-      for(auto it : m_stateData.spawns)
+      if(s->state != Spawn::State::Ready || m.state != SpawnStateChange::RequestActivate)
+        continue;
+
+      doSpawnTrain(s);
+
+      for(const auto& connection : m_connections)
       {
-        Spawn *s = it.second;
-        if(s->ownerConnectionId != invalidIndex || s->address != m.address)
+        if(connection->connectionId() != fromConnId)
           continue;
 
-        s->ownerConnectionId = fromConnId;
+        uint8_t state = SpawnStateChange::Reset;
+        if(s->state == Spawn::State::Ready)
+          state = SpawnStateChange::Ready;
+        else if(s->state == Spawn::State::WaitingReset)
+          state = SpawnStateChange::WaitingReset;
 
-        s->state = (s->waitingResetCount > 0) ?
-              Spawn::State::WaitingReset :
-              Spawn::State::Ready;
-
-        for(const auto& connection : m_connections)
-        {
-          if(connection->connectionId() != fromConnId)
-            continue;
-
-          uint8_t state = SpawnStateChange::Reset;
-          if(s->state == Spawn::State::Ready)
-            state = SpawnStateChange::Ready;
-          else if(s->state == Spawn::State::WaitingReset)
-            state = SpawnStateChange::WaitingReset;
-
-          connection->send(SimulatorProtocol::SpawnStateChange(s->address, state));
-          break;
-        }
-
+        connection->send(SimulatorProtocol::SpawnStateChange(s->address, state));
         break;
       }
+    }
+    break;
+  }
+  case OpCode::TrainSpeedFactorChanged:
+  {
+    if(!isReplica)
+      break;
+
+    const auto& m = static_cast<const TrainSpeedFactorChanged&>(message);
+    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+    setTrainSpeedFactor(m.trainSpeedFactor);
+    break;
+  }
+  case OpCode::TrainRequestSetMode:
+  {
+    if(!isReplica)
+      break;
+
+    const auto& m = static_cast<const TrainRequestSetMode&>(message);
+    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+
+    auto it = m_stateData.trains.find(m.trainId);
+    if(it == m_stateData.trains.end())
+      break;
+
+    setTrainMode(it->second, m.mode);
+    break;
+  }
+  case OpCode::TrainRequestSetDirection:
+  {
+    if(!isReplica)
+      break;
+
+    const auto& m = static_cast<const TrainRequestSetDirection&>(message);
+    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+
+    auto it = m_stateData.trains.find(m.trainId);
+    if(it == m_stateData.trains.end())
+      break;
+
+    setTrainDirection(it->second, m.reverse);
+    break;
+  }
+  case OpCode::TrainRequestChangeSpeed:
+  {
+    if(!isReplica)
+      break;
+
+    const auto& m = static_cast<const TrainRequestChangeSpeed&>(message);
+    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+
+    auto it = m_stateData.trains.find(m.trainId);
+    if(it == m_stateData.trains.end())
+      break;
+
+    // NOTE: match what SimulatorView does
+    switch (m.step)
+    {
+    case TrainRequestChangeSpeed::Stop:
+    {
+      setTrainMode(it->second, Simulator::TrainState::Mode::Manual);
+      setTrainSpeed(it->second, 0.0f, true);
       break;
     }
-    case OpCode::SpawnStateChange:
+    case TrainRequestChangeSpeed::IncreaseStep:
     {
-      const auto& m = static_cast<const SpawnStateChange&>(message);
-      std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-      for(auto it : m_stateData.spawns)
-      {
-        Spawn *s = it.second;
-        if(s->ownerConnectionId != fromConnId || s->address != m.address)
-          continue;
-
-        if(s->state == Spawn::State::WaitingReset && s->waitingResetCount == Spawn::MAX_WAITING_RESET)
-        {
-          if(m.state == SpawnStateChange::Reset) // Start resetting
-            s->waitingResetCount = Spawn::START_WAITING_RESET;
-          continue;
-        }
-
-        if(s->state != Spawn::State::Ready || m.state != SpawnStateChange::RequestActivate)
-          continue;
-
-        doSpawnTrain(s);
-
-        for(const auto& connection : m_connections)
-        {
-          if(connection->connectionId() != fromConnId)
-            continue;
-
-          uint8_t state = SpawnStateChange::Reset;
-          if(s->state == Spawn::State::Ready)
-            state = SpawnStateChange::Ready;
-          else if(s->state == Spawn::State::WaitingReset)
-            state = SpawnStateChange::WaitingReset;
-
-          connection->send(SimulatorProtocol::SpawnStateChange(s->address, state));
-          break;
-        }
-      }
+      applyTrainSpeedDelta(it->second, it->second->speedMax / 20);
       break;
     }
-    case OpCode::TrainSpeedFactorChanged:
+    case TrainRequestChangeSpeed::DecreaseStep:
     {
-      const auto& m = static_cast<const TrainSpeedFactorChanged&>(message);
-      std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-      if(getSimModeUnlocked() == SimMode::Replica)
-        setTrainSpeedFactor(m.trainSpeedFactor);
+      applyTrainSpeedDelta(it->second, - it->second->speedMax / 20);
       break;
     }
-    case OpCode::TrainAdded:
-    case OpCode::TrainStateRefresh:
-    case OpCode::VehiclesRemoved:
-    case OpCode::TrainRemoved:
-    case OpCode::TrainChangedVehicles:
-    {
-      // Variable size messages
-      if(getSimMode() == SimMode::Replica)
-      {
-        receiveVariableSize(message);
-      }
+    default:
+      break;
     }
+    break;
+  }
+  case OpCode::TrainRequestCoupleSplit:
+  {
+    break; // TODO:
+  }
+  case OpCode::TrainRequestRemove:
+  {
+    if(!isReplica)
+      break;
+
+    const auto& m = static_cast<const TrainRemoved&>(message);
+    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+
+    auto it = m_stateData.trains.find(m.trainId);
+    if(it == m_stateData.trains.end())
+      break;
+
+    removeTrain(it->second->trainId, true);
+    break;
+  }
+  case OpCode::TrainRemoved:
+  {
+    break; // TODO:
+  }
+  case OpCode::TrainAdded:
+  case OpCode::TrainStateRefresh:
+  case OpCode::TrainChangedVehicles:
+  {
+    // Variable size messages sent by Master
+    if(isReplica)
+    {
+      receiveVariableSize(message);
+    }
+    break;
+  }
+  case OpCode::TrainRequestAdd:
+  {
+    // Variable size messages sent by replica
+    if(!isReplica)
+    {
+      receiveVariableSize(message);
+    }
+    break;
+  }
   }
 }
 
@@ -1380,7 +1525,7 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
   {
     std::vector<Simulator::Train::VehicleItemFull> vehicles;
     std::string trainName;
-    quint64 trainId = 0;
+    quint32 trainId = 0;
     Simulator::TrainState trainState;
     float speedMax = 0.0f;
 
@@ -1484,7 +1629,7 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
   {
     std::vector<Simulator::Train::VehicleItemFull> vehicles;
     std::string trainName;
-    quint64 trainId = 0;
+    quint32 trainId = 0;
     Simulator::TrainState trainState;
     float speedMax = 0.0f;
 
@@ -1519,9 +1664,9 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
 
     break;
   }
-  case OpCode::VehiclesRemoved:
-  case OpCode::TrainRemoved:
   case OpCode::TrainChangedVehicles:
+  case OpCode::TrainRequestAdd:
+  case OpCode::TrainRemoved:
   default:
     break;
   }
@@ -4402,7 +4547,24 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
   return true;
 }
 
-bool Simulator::removeTrain(quint64 trainId, bool removeWagons)
+bool Simulator::removeTrainUser(quint32 trainId)
+{
+  std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+  if(!m_stateData.trains.contains(trainId))
+    return false;
+
+  if(getSimModeUnlocked() == SimMode::Replica)
+  {
+    send(SimulatorProtocol::TrainRemoved(trainId, true));
+    return true;
+  }
+  else
+  {
+    return removeTrain(trainId, true);
+  }
+}
+
+bool Simulator::removeTrain(quint32 trainId, bool removeWagons)
 {
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
