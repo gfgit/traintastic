@@ -709,6 +709,7 @@ private:
   constexpr static auto signalBlinkRate = std::chrono::milliseconds(275);
   constexpr static auto syncSensorRate = std::chrono::milliseconds(150);
   constexpr static auto syncReplicaRate = std::chrono::milliseconds(220);
+  constexpr static auto syncReplicaFullRate = std::chrono::milliseconds(1500);
   constexpr static auto garbageCollectRate = std::chrono::milliseconds(500);
 
   constexpr static float defaultSpeedKmH = 200;
@@ -726,6 +727,7 @@ private:
   boost::asio::steady_timer m_signalBlinkStateTimer;
   boost::asio::steady_timer m_syncSensorStateTimer;
   boost::asio::steady_timer m_syncReplicaStateTimer;
+  boost::asio::steady_timer m_syncReplicaTrainFullStateTimer;
   boost::asio::steady_timer m_garbageCollectTimer;
 
   std::thread m_thread;
@@ -739,6 +741,8 @@ private:
   std::list<std::shared_ptr<SimulatorConnection>> m_connections;
   std::list<std::shared_ptr<SimulatorConnection>> m_repliacas;
   size_t mLastSpawnSyncIdx = 0;
+  quint32 mLastTrainSyncId = invalidTrainId;
+  quint32 mLastTrainSyncFullId = invalidTrainId;
 
   TrainTypeInterface *trainTypeInterface = nullptr;
 
@@ -756,6 +760,7 @@ private:
   void blinkSignals();
   void syncSensorState();
   void syncReplicaState();
+  void syncReplicaTrainFull();
   void garbageCollectSegmentState();
 
   void updateTrainPositions();

@@ -392,6 +392,7 @@ Simulator::Simulator(const nlohmann::json& world, TrainTypeInterface *iface)
   , m_signalBlinkStateTimer{m_ioContext}
   , m_syncSensorStateTimer{m_ioContext}
   , m_syncReplicaStateTimer{m_ioContext}
+  , m_syncReplicaTrainFullStateTimer{m_ioContext}
   , m_garbageCollectTimer{m_ioContext}
   , trainTypeInterface(iface)
 {
@@ -547,6 +548,7 @@ void Simulator::stop()
   m_signalBlinkStateTimer.cancel();
   m_syncSensorStateTimer.cancel();
   m_syncReplicaStateTimer.cancel();
+  m_syncReplicaTrainFullStateTimer.cancel();
   m_garbageCollectTimer.cancel();
   if(m_thread.joinable())
   {
@@ -2293,6 +2295,27 @@ void Simulator::syncReplicaState()
     return;
 
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+  Train *trainToSync = nullptr;
+  {
+    auto it = m_stateData.trains.find(mLastTrainSyncId);
+    if(it == m_stateData.trains.end())
+      it = m_stateData.trains.begin();
+
+    if(it != m_stateData.trains.end())
+    {
+      trainToSync = it->second;
+      it++;
+
+      if(it != m_stateData.trains.end())
+        mLastTrainSyncId = it->first;
+      else
+        mLastTrainSyncId = invalidTrainId;
+    }
+  }
+
+  if(trainToSync)
+    sendTrainStateRefreshReplica(trainToSync);
+
   for(const std::shared_ptr<SimulatorConnection>& connection : m_repliacas)
   {
     size_t firstIdx = connection->m_nextSyncBatchIdx * 16;
@@ -2325,6 +2348,47 @@ void Simulator::syncReplicaState()
     connection->send(SimulatorProtocol::SensorBatchState(0, connection->m_nextSyncBatchIdx, stateBuf));
     connection->m_nextSyncBatchIdx++;
   }
+}
+
+void Simulator::syncReplicaTrainFull()
+{
+  // Less often we send full train state
+
+  m_syncReplicaTrainFullStateTimer.expires_after(syncReplicaFullRate);
+  m_syncReplicaTrainFullStateTimer.async_wait(
+      [this](std::error_code ec)
+      {
+        if(!ec)
+        {
+          syncReplicaTrainFull();
+        }
+      });
+
+  if(staticData.sensorChannelMap.empty())
+    return;
+
+  std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+  Train *trainToSync = nullptr;
+  {
+    auto it = m_stateData.trains.find(mLastTrainSyncFullId);
+    if(it == m_stateData.trains.end())
+      it = m_stateData.trains.begin();
+
+    if(it != m_stateData.trains.end())
+    {
+      trainToSync = it->second;
+      it++;
+
+      if(it != m_stateData.trains.end())
+        mLastTrainSyncFullId = it->first;
+      else
+        mLastTrainSyncFullId = invalidTrainId;
+    }
+  }
+
+  if(trainToSync)
+    sendTrainFullRefreshReplica(SimulatorProtocol::OpCode::TrainChangedVehicles,
+                                trainToSync);
 }
 
 void Simulator::garbageCollectSegmentState()
@@ -5698,6 +5762,7 @@ void Simulator::setSimMode(SimMode m)
   if(oldMode != SimMode::Master)
   {
     m_syncReplicaStateTimer.cancel();
+    m_syncReplicaTrainFullStateTimer.cancel();
 
     while(!m_repliacas.empty())
     {
@@ -5710,6 +5775,7 @@ void Simulator::setSimMode(SimMode m)
   if(mSimMode == SimMode::Master)
   {
     syncReplicaState();
+    syncReplicaTrainFull();
   }
   else if(mSimMode == SimMode::Replica)
   {
