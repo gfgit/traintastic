@@ -684,7 +684,7 @@ public:
                           float *outDistance = nullptr);
 
   bool splitTrain(Train *trainToSplit, const size_t vehicleIdx, const bool fwd, quint32 &trainIdOut);
-  bool coupleTrain(Train *train, bool fwd, size_t &removedTrainIdxOut);
+  bool coupleTrain(Train *train, bool fwd, quint32 &removedTrainIdOut);
 
   void liftRestrictions(bool val)
   {

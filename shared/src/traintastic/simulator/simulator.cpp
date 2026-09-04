@@ -1467,7 +1467,46 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
   }
   case OpCode::TrainRequestCoupleSplit:
   {
-    break; // TODO:
+    if(!isReplica)
+      break;
+
+    const auto& m = static_cast<const TrainRequestCoupleSplit&>(message);
+    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+
+    auto it = m_stateData.trains.find(m.trainId);
+    if(it == m_stateData.trains.end())
+      break;
+
+    quint32 otherTrainId = invalidTrainId;
+
+    // NOTE: match what SimulatorView does
+    switch (m.coupleOp)
+    {
+    case TrainRequestCoupleSplit::CoupleFront:
+    {
+      coupleTrain(it->second, true, otherTrainId);
+      break;
+    }
+    case TrainRequestCoupleSplit::CoupleRear:
+    {
+      coupleTrain(it->second, false, otherTrainId);
+      break;
+    }
+    case TrainRequestCoupleSplit::SplitFront:
+    {
+      splitTrain(it->second, m.vehicleIdx,
+                 true, otherTrainId);
+      break;
+    }
+    case TrainRequestCoupleSplit::SplitRear:
+    {
+      splitTrain(it->second, m.vehicleIdx,
+                 false, otherTrainId);
+      break;
+    }
+    }
+
+    break;
   }
   case OpCode::TrainRequestRemove:
   {
@@ -2397,6 +2436,13 @@ void Simulator::updateTrainPositions()
         destroyTrain(it->second, true);
         it = m_stateData.trains.erase(it);
         onTrainAddedRemoved(false, trainId);
+
+        if(getSimModeUnlocked() == SimMode::Master)
+        {
+          // TODO: suggest new active train
+          sendReplicas(SimulatorProtocol::TrainRemoved(trainId, false));
+        }
+
         continue;
       }
     }
@@ -5257,6 +5303,15 @@ bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const b
   if((vehicleIdx == 0 && fwd) || (vehicleIdx == (trainToSplit->vehicles.size() - 1) && !fwd))
     return false; // Cannot split before first or after last vehicle
 
+  if(getSimModeUnlocked() == SimMode::Replica)
+  {
+    const auto coupleOp = fwd ?
+                              SimulatorProtocol::TrainRequestCoupleSplit::SplitFront :
+                              SimulatorProtocol::TrainRequestCoupleSplit::SplitRear;
+    send(SimulatorProtocol::TrainRequestCoupleSplit(trainToSplit->trainId, vehicleIdx, coupleOp));
+    return true;
+  }
+
   std::unique_ptr<Train> remainingTrain(new Train);
 
   // Put a name
@@ -5319,17 +5374,32 @@ bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const b
 
   remainingTrain->trainId = m_stateData.mLastTrainId++;
   trainIdOut = remainingTrain->trainId;
-  m_stateData.trains.insert({remainingTrain->trainId, remainingTrain.release()});
+  auto pair = m_stateData.trains.insert({remainingTrain->trainId, remainingTrain.release()});
 
   onTrainAddedRemoved(true, trainIdOut);
+
+  if(getSimModeUnlocked() == SimMode::Master)
+  {
+    sendTrainFullRefreshReplica(SimulatorProtocol::OpCode::TrainAdded,
+                                pair.first->second);
+  }
 
   return true;
 }
 
-bool Simulator::coupleTrain(Train *train, bool fwd, size_t& removedTrainIdxOut)
+bool Simulator::coupleTrain(Train *train, bool fwd, quint32& removedTrainIdOut)
 {
   if(!train->state.isManualAndStopped() || train->vehicles.empty())
     return false; // Train must be Manual and stopped
+
+  if(getSimModeUnlocked() == SimMode::Replica)
+  {
+    const auto coupleOp = fwd ?
+                              SimulatorProtocol::TrainRequestCoupleSplit::CoupleFront :
+                              SimulatorProtocol::TrainRequestCoupleSplit::CoupleRear;
+    send(SimulatorProtocol::TrainRequestCoupleSplit(train->trainId, 0, coupleOp));
+    return true;
+  }
 
   const Train::VehicleItem itemToCouple = fwd ? train->vehicles.front() : train->vehicles.back(); // Deep copy, vehicles could realloc on resize
   const VehicleState::Face &faceToCouple = (itemToCouple.reversed != fwd) ? itemToCouple.vehicle->state.front : itemToCouple.vehicle->state.rear;
@@ -5520,9 +5590,15 @@ bool Simulator::coupleTrain(Train *train, bool fwd, size_t& removedTrainIdxOut)
   else
     train->vehicles.insert(train->vehicles.end(), vehiclesToAdd.begin(), vehiclesToAdd.end());
 
+  if(getSimModeUnlocked() == SimMode::Master)
+  {
+    sendTrainFullRefreshReplica(SimulatorProtocol::OpCode::TrainChangedVehicles,
+                                train);
+  }
+
   if(trainToRemove)
   {
-    removedTrainIdxOut = trainToRemove->trainId;
+    removedTrainIdOut = trainToRemove->trainId;
     removeTrain(trainToRemove->trainId, false);
   }
 

@@ -472,18 +472,20 @@ struct TrainRequestCoupleSplit : Message
     SplitRear = 3
   };
 
-  TrainRequestCoupleSplit(quint32 trainId_, CoupleOp coupleOp_)
+  TrainRequestCoupleSplit(quint32 trainId_, size_t vehicleIdx_, CoupleOp coupleOp_)
     : Message(OpCode::TrainRequestCoupleSplit,
               sizeof(TrainRequestCoupleSplit))
     , trainId(trainId_)
+    , vehicleIdx(vehicleIdx_)
     , coupleOp(coupleOp_)
   {
   }
 
   quint32 trainId;
-  CoupleOp coupleOp;
+  size_t vehicleIdx = 0;
+  CoupleOp coupleOp = CoupleOp::CoupleFront;
 } ATTRIBUTE_PACKED;
-static_assert(sizeof(TrainRequestCoupleSplit) == 8);
+static_assert(sizeof(TrainRequestCoupleSplit) == 16);
 
 struct TrainRemoved : Message
 {

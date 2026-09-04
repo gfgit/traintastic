@@ -2613,8 +2613,8 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
           fwd = !fwd;
 
         // NOTE: this might remove active train, if so set active train to trainToCouple
-        const size_t oldActiveTrain = m_currentTrainId;
-        size_t removedTrainIdx = Simulator::invalidTrainId;
+        const quint32 oldActiveTrain = m_currentTrainId;
+        quint32 removedTrainIdx = Simulator::invalidTrainId;
         if(m_simulator->coupleTrain(trainToCouple, fwd, removedTrainIdx))
         {
           if(oldActiveTrain == removedTrainIdx)
