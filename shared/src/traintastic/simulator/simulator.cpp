@@ -1636,6 +1636,7 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
         vehicle->activeTrain = nullptr;
         vehiclesToRemove.insert(vehicle->vehicleId);
         train->vehicles.pop_back();
+        nVehiclesToRemove--;
       }
     }
 
@@ -1690,7 +1691,7 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
 
     for(const Simulator::Train::VehicleItem &v : train->vehicles)
     {
-      if(v.vehicle->activeTrain != train)
+      if(v.vehicle->activeTrain && v.vehicle->activeTrain != train)
       {
         auto &otherVehicles = v.vehicle->activeTrain->vehicles;
         if(otherVehicles.size() == 1 && otherVehicles.front().vehicle == v.vehicle)
@@ -1701,16 +1702,15 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
         }
         else
         {
-          // Vehicle *vehicle = v.vehicle;
-          // auto it = std::find(otherVehicles.begin(), otherVehicles.end(), [vehicle](const Simulator::Train::VehicleItem &item) -> bool
-          //                     {
-          //                       return item.vehicle == vehicle;
-          //                     });
-          // if(it != otherVehicles.end())
-          // {
-          //   otherVehicles.erase(it);
-          //   v.vehicle->activeTrain = nullptr;
-          // }
+          for(auto it = otherVehicles.begin(); it != otherVehicles.end(); it++)
+          {
+            if(it->vehicle == v.vehicle)
+            {
+              otherVehicles.erase(it);
+              v.vehicle->activeTrain = nullptr;
+              break;
+            }
+          }
         }
       }
 
