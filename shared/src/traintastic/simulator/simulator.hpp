@@ -673,7 +673,8 @@ public:
   void destroyTrain(Train *train, bool removeWagons);
 
   Vehicle *addVehicle(float length, Color color,
-                      size_t typeIdx = invalidIndex);
+                      size_t typeIdx = invalidIndex,
+                      quint32 suggestId = invalidTrainId);
   bool removeVehicle(Vehicle *vehicle);
 
   void sendTrainFullRefreshReplica(SimulatorProtocol::OpCode op, Train *train);

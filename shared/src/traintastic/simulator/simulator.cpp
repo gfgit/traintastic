@@ -1467,7 +1467,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
   }
   case OpCode::TrainRequestCoupleSplit:
   {
-    if(!isReplica)
+    if(isReplica)
       break;
 
     const auto& m = static_cast<const TrainRequestCoupleSplit&>(message);
@@ -1575,7 +1575,10 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
   switch(message.opCode)
   {
   case OpCode::TrainAdded:
+  case OpCode::TrainChangedVehicles:
   {
+    bool isNewTrain = (message.opCode == OpCode::TrainAdded);
+
     std::vector<Simulator::Train::VehicleItemFull> vehicles;
     std::string trainName;
     quint32 trainId = 0;
@@ -1588,15 +1591,31 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
 
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
+    Train *train = nullptr;
+
     {
       auto it = m_stateData.trains.find(trainId);
       if(it != m_stateData.trains.end())
       {
-        removeTrain(trainId, true);
+        if(isNewTrain || vehicles.empty())
+          removeTrain(trainId, true);
+        else
+          train = it->second;
       }
     }
 
-    std::unique_ptr<Train> train(new Train);
+    if(vehicles.empty())
+      return;
+
+    std::unique_ptr<Train> guard;
+
+    if(!train)
+    {
+      train = new Train;
+      guard.reset(train);
+      isNewTrain = true;
+    }
+
     train->address = 3;
     train->protocol = DecoderProtocol::DCCShort;
     train->trainId = trainId;
@@ -1604,9 +1623,23 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
     train->speedMax = speedMax;
     train->state = trainState;
 
-    bool empty = true;
-    train->vehicles.reserve(vehicles.size());
+    std::unordered_set<quint32> vehiclesToRemove;
 
+    if(train->vehicles.size() < vehicles.size())
+      train->vehicles.reserve(vehicles.size());
+    else
+    {
+      size_t nVehiclesToRemove = train->vehicles.size() - vehicles.size();
+      while (nVehiclesToRemove > 0)
+      {
+        Vehicle *vehicle = train->vehicles.back().vehicle;
+        vehicle->activeTrain = nullptr;
+        vehiclesToRemove.insert(vehicle->vehicleId);
+        train->vehicles.pop_back();
+      }
+    }
+
+    size_t idx = 0;
     for(const Simulator::Train::VehicleItemFull &v : vehicles)
     {
       Vehicle *result = nullptr;
@@ -1621,8 +1654,12 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
       }
       else
       {
-        result = addVehicle(v.vehicle.length, v.vehicle.color, v.vehicle.typeIdx);
+        result = addVehicle(v.vehicle.length, v.vehicle.color, v.vehicle.typeIdx,
+                            v.vehicle.vehicleId);
       }
+
+      if(vehiclesToRemove.contains(result->vehicleId))
+        vehiclesToRemove.erase(vehiclesToRemove.find(result->vehicleId));
 
       if(trainTypeInterface && result->typeIdx != invalidIndex)
         trainTypeInterface->fillVehicleProperties(result);
@@ -1631,17 +1668,29 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
       result->state = v.vehicle.state;
       updateReplicaTracking(result, oldState);
 
-      train->vehicles.push_back({result, v.reversed});
-      train->length += result->length + (empty ? 0.0f : staticData.trainCouplingLength);
-      empty = false;
+      if(isNewTrain || idx >= train->vehicles.size())
+        train->vehicles.push_back({result, v.reversed});
+      else
+      {
+        Train::VehicleItem &item = train->vehicles[idx];
+        if(item.vehicle->vehicleId != result->vehicleId)
+        {
+          vehiclesToRemove.insert(item.vehicle->vehicleId);
+          item.vehicle = result;
+        }
+
+        item.reversed = v.reversed;
+      }
+      train->length += result->length + (idx == 0 ? 0.0f : staticData.trainCouplingLength);
+      idx++;
     }
 
-    if(empty)
+    if(idx == 0)
       break;
 
     for(const Simulator::Train::VehicleItem &v : train->vehicles)
     {
-      if(v.vehicle->activeTrain)
+      if(v.vehicle->activeTrain != train)
       {
         auto &otherVehicles = v.vehicle->activeTrain->vehicles;
         if(otherVehicles.size() == 1 && otherVehicles.front().vehicle == v.vehicle)
@@ -1665,17 +1714,27 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
         }
       }
 
-      v.vehicle->activeTrain = train.get();
+      v.vehicle->activeTrain = train;
     }
+
+    for(quint32 vehicleId : vehiclesToRemove)
+    {
+      auto it = m_stateData.vehicles.find(vehicleId);
+      if(it == m_stateData.vehicles.end())
+        continue;
+
+      removeVehicle(it->second);
+    }
+    vehiclesToRemove.clear();
 
     if(trainTypeInterface)
     {
-      trainTypeInterface->setupTrainSpeedPowered(train.get());
+      trainTypeInterface->setupTrainSpeedPowered(train);
     }
 
-    auto pair = m_stateData.trains.insert({train->trainId, train.release()});
-    onTrainAddedRemoved(true, pair.first->second->trainId);
-
+    guard.release();
+    m_stateData.trains.insert({train->trainId, train});
+    onTrainAddedRemoved(true, train->trainId);
     break;
   }
   case OpCode::TrainStateRefresh:
@@ -1717,7 +1776,6 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
 
     break;
   }
-  case OpCode::TrainChangedVehicles:
   case OpCode::TrainRequestAdd:
   case OpCode::TrainRemoved:
   default:
@@ -4311,6 +4369,9 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
 {
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
+  if(getSimModeUnlocked() == SimMode::Replica)
+    return false; // Only add trains if received command from master
+
   if(name.empty())
     return false;
 
@@ -4646,12 +4707,17 @@ bool Simulator::removeTrain(quint32 trainId, bool removeWagons)
     return true;
 }
 
-Simulator::Vehicle *Simulator::addVehicle(float length, Color color, size_t typeIdx)
+Simulator::Vehicle *Simulator::addVehicle(float length, Color color, size_t typeIdx, quint32 suggestId)
 {    
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
     Vehicle *vehicle = new Vehicle;
-    vehicle->vehicleId = m_stateData.mLastVehicleId++;
+
+    if(suggestId == invalidTrainId)
+      vehicle->vehicleId = m_stateData.mLastVehicleId++;
+    else
+      vehicle->vehicleId = suggestId;
+
     vehicle->length = length;
     vehicle->color = color;
     vehicle->typeIdx = typeIdx;
@@ -5378,8 +5444,12 @@ bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const b
 
   onTrainAddedRemoved(true, trainIdOut);
 
+
   if(getSimModeUnlocked() == SimMode::Master)
   {
+    sendTrainFullRefreshReplica(SimulatorProtocol::OpCode::TrainChangedVehicles,
+                                trainToSplit);
+
     sendTrainFullRefreshReplica(SimulatorProtocol::OpCode::TrainAdded,
                                 pair.first->second);
   }
