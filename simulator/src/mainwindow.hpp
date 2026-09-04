@@ -67,6 +67,7 @@ private:
   QAction* m_showToolBar;
   QAction* m_showStatusBar;
   QAction* m_followActiveTrain;
+  QAction* m_followActiveTrainRotation;
   QLabel* m_tickActive;
   QMenu *imagesMenu;
   QSpinBox *mSignalZoomSpin;

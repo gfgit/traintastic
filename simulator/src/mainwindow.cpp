@@ -143,6 +143,16 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
     });
     m_view->setFollowActiveTrain(m_followActiveTrain->isChecked());
 
+    m_followActiveTrainRotation = menu->addAction("Follow train rotation");
+    m_followActiveTrainRotation->setCheckable(true);
+    m_followActiveTrainRotation->setChecked(false);
+    connect(m_followActiveTrainRotation, &QAction::toggled,
+            this, [this](bool val)
+    {
+      m_view->setFollowTrainRotation(val);
+    });
+    m_view->setFollowTrainRotation(m_followActiveTrainRotation->isChecked());
+
     menu = menuBar()->addMenu("Help");
     menu->addAction("About...", this, &MainWindow::showAbout);
 

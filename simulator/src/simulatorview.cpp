@@ -802,14 +802,30 @@ void SimulatorView::paintEvent(QPaintEvent */*e*/)
   {
     // TODO: it glitches often on segment change
     // FIXME: it does not play well with rotation
-    const auto startPt = getCurrentTrainStartPt();
+    qreal vehicleAngle = 0;
+    const auto startPt = getCurrentTrainStartPt(m_followTrainRotation ?
+                                                  &vehicleAngle :
+                                                  nullptr);
     if(startPt.second)
     {
+      if(m_followTrainRotation)
+      {
+        // Make it compensate rotation
+        vehicleAngle = -vehicleAngle;
+
+        const qreal oldRotation = m_rotation;
+        m_rotation = qRadiansToDegrees(vehicleAngle);
+
+        m_transform.rotate(m_rotation - oldRotation);
+
+        if(m_rotation < 0.0)
+          m_rotation += 360.0;
+        else if(m_rotation >= 360.0)
+          m_rotation -= 360.0;
+      }
+
       const Simulator::Point oldCenter = mapToSim({width() / 2.0, height() / 2.0});
-
-      //qDebug() << "S" << startPt.first << "Old cx:" << oldCenter.x << "Old cy:" << oldCenter.y;
-
-      Simulator::Point diff = oldCenter - startPt.first;
+      const Simulator::Point diff = oldCenter - startPt.first;
 
       // TODO: animate big changes???
       // if(diff.x > 50 || diff.y > 50)
@@ -817,9 +833,7 @@ void SimulatorView::paintEvent(QPaintEvent */*e*/)
       //   diff = (oldCenter * 4.0 - startPt.first) / 5.0;
       // }
 
-      m_transform.rotate(-m_rotation);
       m_transform.translate(diff.x, diff.y);
-      m_transform.rotate(m_rotation);
       m_zoomFit = false; // Do not follow center when resizing view
     }
   }
@@ -2127,7 +2141,7 @@ void SimulatorView::drawMisc(QPainter *painter)
   }
 }
 
-std::pair<Simulator::Point, bool> SimulatorView::getCurrentTrainStartPt() const
+std::pair<Simulator::Point, bool> SimulatorView::getCurrentTrainStartPt(qreal *angleOut) const
 {
   if(!m_simulator)
     return {Simulator::Point(), false};
@@ -2150,6 +2164,12 @@ std::pair<Simulator::Point, bool> SimulatorView::getCurrentTrainStartPt() const
 
   if(!centerPt.isFinite())
     return {Simulator::Point(), false};
+
+  if(angleOut)
+  {
+    const auto delta = vehicle.vehicle->state.front.position - vehicle.vehicle->state.rear.position;
+    *angleOut = atan2f(delta.y, delta.x);
+  }
 
   return {centerPt, true};
 }
@@ -2708,6 +2728,16 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
   m_trainUnderMouseVehicleIdx = Simulator::invalidTrainId;
 }
 
+bool SimulatorView::followTrainRotation() const
+{
+  return m_followTrainRotation;
+}
+
+void SimulatorView::setFollowTrainRotation(bool newFollowTrainRotation)
+{
+  m_followTrainRotation = newFollowTrainRotation;
+}
+
 bool SimulatorView::followActiveTrain() const
 {
   return m_followActiveTrain;
@@ -3029,6 +3059,11 @@ void SimulatorView::setRotation(float newRotation)
   m_transform.translate(m_lastHoverPos.x, m_lastHoverPos.y);
   m_transform.rotate(m_rotation - oldRotate);
   m_transform.translate(-m_lastHoverPos.x, -m_lastHoverPos.y);
+
+  if(m_rotation < 0.0)
+    m_rotation += 360.0;
+  else if(m_rotation >= 360.0)
+    m_rotation -= 360.0;
 
   update();
 }

@@ -118,6 +118,9 @@ public:
   bool followActiveTrain() const;
   void setFollowActiveTrain(bool newFollowActiveTrain);
 
+  bool followTrainRotation() const;
+  void setFollowTrainRotation(bool newFollowTrainRotation);
+
 signals:
   void tickActiveChanged(float value);
   void powerOnChanged(bool value);
@@ -186,6 +189,7 @@ private:
   bool m_showTrackOccupancy = true;
   bool m_thinTracks = false;
   bool m_followActiveTrain = false;
+  bool m_followTrainRotation = false;
 
   QPoint m_leftClickMousePos;
   QPoint m_middleMousePos;
@@ -212,7 +216,7 @@ private:
   void drawTrackObjects(QPainter *painter);
   void drawTrains(QPainter *painter);
   void drawMisc(QPainter *painter);
-  std::pair<Simulator::Point, bool> getCurrentTrainStartPt() const;
+  std::pair<Simulator::Point, bool> getCurrentTrainStartPt(qreal *angleOut = nullptr) const;
 
   inline void resetSegmentHover()
   {
