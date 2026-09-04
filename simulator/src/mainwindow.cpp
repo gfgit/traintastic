@@ -133,6 +133,16 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
     act->setChecked(m_view->thinTracks());
     connect(act, &QAction::toggled, m_view, &SimulatorView::setThinTracks);
 
+    m_followActiveTrain = menu->addAction("Follow active train");
+    m_followActiveTrain->setCheckable(true);
+    m_followActiveTrain->setChecked(false);
+    connect(m_followActiveTrain, &QAction::toggled,
+            this, [this](bool val)
+    {
+      m_view->setFollowActiveTrain(val);
+    });
+    m_view->setFollowActiveTrain(m_followActiveTrain->isChecked());
+
     menu = menuBar()->addMenu("Help");
     menu->addAction("About...", this, &MainWindow::showAbout);
 

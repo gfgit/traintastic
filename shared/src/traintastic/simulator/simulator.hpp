@@ -831,7 +831,12 @@ constexpr Simulator::Point operator-(const Simulator::Point lhs, const Simulator
   return {lhs.x - rhs.x, lhs.y - rhs.y};
 }
 
-constexpr Simulator::Point operator/(const Simulator::Point divided, const int divisor)
+constexpr Simulator::Point operator*(const Simulator::Point factor, const float multiplier)
+{
+  return {factor.x * multiplier, factor.y * multiplier};
+}
+
+constexpr Simulator::Point operator/(const Simulator::Point divided, const float divisor)
 {
   return {divided.x / divisor, divided.y / divisor};
 }

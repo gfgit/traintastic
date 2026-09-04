@@ -115,6 +115,9 @@ public:
 
   bool isPointPairInvertedInView(const Simulator::Point& a, const Simulator::Point &b) const;
 
+  bool followActiveTrain() const;
+  void setFollowActiveTrain(bool newFollowActiveTrain);
+
 signals:
   void tickActiveChanged(float value);
   void powerOnChanged(bool value);
@@ -182,6 +185,7 @@ private:
   bool m_zoomFit = false;
   bool m_showTrackOccupancy = true;
   bool m_thinTracks = false;
+  bool m_followActiveTrain = false;
 
   QPoint m_leftClickMousePos;
   QPoint m_middleMousePos;
@@ -208,7 +212,7 @@ private:
   void drawTrackObjects(QPainter *painter);
   void drawTrains(QPainter *painter);
   void drawMisc(QPainter *painter);
-  std::pair<QPointF, bool> getCurrentTrainStartPt() const;
+  std::pair<Simulator::Point, bool> getCurrentTrainStartPt() const;
 
   inline void resetSegmentHover()
   {
