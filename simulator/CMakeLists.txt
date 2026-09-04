@@ -20,17 +20,30 @@ endif()
 add_executable(traintastic-simulator
   gfx/common.qrc
   src/main.cpp
+  src/mainwindow.hpp
   src/mainwindow.cpp
+
+  src/simulatorview.hpp
   src/simulatorview.cpp
-  src/trainsmodel.cpp
+
+  src/trainsmodel.h src/trainsmodel.cpp
   src/vehicletypesmodel.h src/vehicletypesmodel.cpp
   src/trainvehiclelistmodel.h src/trainvehiclelistmodel.cpp
   src/vehicleslistdelegate.h src/vehicleslistdelegate.cpp
   src/addtraindialog.h src/addtraindialog.cpp
 
+  ../shared/src/traintastic/simulator/serialization.hpp
+  ../shared/src/traintastic/simulator/protocol.hpp
+
+  ../shared/src/traintastic/simulator/simulator.hpp
   ../shared/src/traintastic/simulator/simulator.cpp
+
+  ../shared/src/traintastic/simulator/simulatorconnection.hpp
   ../shared/src/traintastic/simulator/simulatorconnection.cpp
+
+  ../shared/src/traintastic/utils/standardpaths.hpp
   ../shared/src/traintastic/utils/standardpaths.cpp
+
   src/traintypelistmodel.h src/traintypelistmodel.cpp
 )
 
