@@ -798,6 +798,31 @@ void SimulatorView::setCamera(const Simulator::Point &cameraPt)
 
 void SimulatorView::paintEvent(QPaintEvent */*e*/)
 {
+  if(false && m_simulator)
+  {
+    const auto startPt = getCurrentTrainStartPt();
+    if(startPt.second)
+    {
+      const QPointF viewCenter = rect().center();
+
+      auto simP = mapToSim(viewCenter);
+      QPointF tmp(simP.x, simP.y);
+
+      qDebug() << "START:" << startPt.first << "VIEW CENTER:" << viewCenter << "unmap" << tmp << "Rec" << rect();
+      qDebug() << "MAP START:" << m_transform.map(startPt.first) << "VIEW CENTER:" << viewCenter;
+
+      const QPointF diff = m_transform.map(startPt.first) - viewCenter;
+
+      m_transform.rotate(-m_rotation);
+      m_transform.translate(-diff.x() / m_zoomLevel, -diff.y() / m_zoomLevel);
+      m_transform.rotate(m_rotation);
+
+      simP = mapToSim(viewCenter);
+      tmp = QPointF(simP.x, simP.y);
+      qDebug() << "Diff:" << diff << "Z:" << diff / m_zoomLevel << "unmap" << tmp;
+    }
+  }
+
   QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing, true);
   painter.setTransform(m_transform);
@@ -1954,7 +1979,7 @@ void SimulatorView::drawTrains(QPainter *painter)
       const Simulator::Train::VehicleItem trainTail = train->getTail();
 
       const QPointF frontPt((length + trainCouplingLength) / 2.0, 0);
-      const QPointF backPt(-(length + trainCouplingLength) / 2.0,   0);
+      const QPointF backPt(-(length + trainCouplingLength) / 2.0, 0);
 
       if(train->isPowered && train->isHeadOrTail(vehicle))
       {
@@ -2099,6 +2124,35 @@ void SimulatorView::drawMisc(QPainter *painter)
       break;
     }
   }
+}
+
+std::pair<QPointF, bool> SimulatorView::getCurrentTrainStartPt() const
+{
+  if(!m_simulator)
+    return {QPointF(), false};
+
+  // We need to access simulator data
+  std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
+
+  const Simulator::Train *const activeTrain = m_simulator->getTrainById(m_currentTrainId);
+  if(!activeTrain)
+    return {QPointF(), false};
+
+  auto vehicle = activeTrain->state.reverse ?
+                     activeTrain->getTail() :
+                     activeTrain->getHead();
+
+  if(!vehicle.vehicle)
+    return {QPointF(), false};
+
+  const float trainCouplingLength = m_simulator->staticData.trainCouplingLength;
+  const QPointF frontPt((vehicle.vehicle->length + trainCouplingLength) / 2.0, 0);
+  const QPointF backPt(-(vehicle.vehicle->length + trainCouplingLength) / 2.0, 0);
+
+  const QPointF& startPt = (activeTrain->state.reverse == vehicle.reversed) ?
+                               frontPt :
+                               backPt;
+  return {startPt, true};
 }
 
 bool SimulatorView::event(QEvent *e)

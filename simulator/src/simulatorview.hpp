@@ -208,6 +208,7 @@ private:
   void drawTrackObjects(QPainter *painter);
   void drawTrains(QPainter *painter);
   void drawMisc(QPainter *painter);
+  std::pair<QPointF, bool> getCurrentTrainStartPt() const;
 
   inline void resetSegmentHover()
   {
