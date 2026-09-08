@@ -615,10 +615,10 @@ void SimulatorView::setSimulator(std::shared_ptr<Simulator> value,
       QMetaObject::invokeMethod(this, &SimulatorView::tick, Qt::QueuedConnection);
     }));
     m_simulatorConnections.emplace_back(m_simulator->onTrainAddedRemoved.connect(
-        [this](bool add, quint32 trainId)
+        [this](bool add, quint32 trainId, quint32 suggestedTrainId)
         {
           // NOTE: invoked in simulator working thread
-          trainAddedRemoved(add, trainId);
+          trainAddedRemoved(add, trainId, suggestedTrainId);
         }));
 
     m_simulator->enableServer(localOnly);
@@ -2686,15 +2686,10 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
           fwd = !fwd;
 
         // NOTE: this might remove active train, if so set active train to trainToCouple
-        const quint32 oldActiveTrain = m_currentTrainId;
         quint32 removedTrainIdx = Simulator::invalidTrainId;
-        if(m_simulator->coupleTrain(trainToCouple, fwd, removedTrainIdx))
+        if(!m_simulator->coupleTrain(trainToCouple, fwd, removedTrainIdx))
         {
-          if(oldActiveTrain == removedTrainIdx)
-          {
-            // We removed active train, set it again
-            m_currentTrainId = trainToCouple->trainId;
-          }
+          // TODO: show error
         }
       }
     }
@@ -3131,14 +3126,15 @@ void SimulatorView::tick()
   update();
 }
 
-void SimulatorView::trainAddedRemoved(bool add, quint32 trainId)
+void SimulatorView::trainAddedRemoved(bool add, quint32 trainId, quint32 suggestedTrainId)
 {
   std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
 
   if(!add && trainId != Simulator::invalidTrainId)
   {
     if(m_currentTrainId == trainId)
-      m_currentTrainId = Simulator::invalidTrainId;
+      m_currentTrainId = suggestedTrainId;
+
     if(m_trainUnderMouseId == trainId)
       m_trainUnderMouseId = Simulator::invalidTrainId;
     if(m_trainToBeRemovedId == trainId)

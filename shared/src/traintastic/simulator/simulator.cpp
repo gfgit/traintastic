@@ -1537,9 +1537,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
     if(it == m_stateData.trains.end())
       break;
 
-    removeTrain(it->second->trainId, true);
-
-    // TODO: change current active train to suggested
+    removeTrain(it->second->trainId, true, m.nextSelectedTrainId);
 
     break;
   }
@@ -1600,7 +1598,7 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
       if(it != m_stateData.trains.end())
       {
         if(isNewTrain || vehicles.empty())
-          removeTrain(trainId, true);
+          removeTrain(trainId, true, trainId);
         else
           train = it->second;
       }
@@ -1699,7 +1697,7 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
         if(otherVehicles.size() == 1 && otherVehicles.front().vehicle == v.vehicle)
         {
           // After removing this vehicle, train will be empty
-          removeTrain(v.vehicle->activeTrain->trainId, false);
+          removeTrain(v.vehicle->activeTrain->trainId, false, train->trainId);
           v.vehicle->activeTrain = nullptr;
         }
         else
@@ -1736,7 +1734,7 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
 
     guard.release();
     m_stateData.trains.insert({train->trainId, train});
-    onTrainAddedRemoved(true, train->trainId);
+    onTrainAddedRemoved(true, train->trainId, invalidTrainId);
     break;
   }
   case OpCode::TrainStateRefresh:
@@ -2557,7 +2555,7 @@ void Simulator::updateTrainPositions()
         const quint32 trainId = it->second->trainId;
         destroyTrain(it->second, true);
         it = m_stateData.trains.erase(it);
-        onTrainAddedRemoved(false, trainId);
+        onTrainAddedRemoved(false, trainId, invalidTrainId);
 
         if(getSimModeUnlocked() == SimMode::Master)
         {
@@ -4721,7 +4719,7 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
   trainIdOut = train->trainId;
   auto pair = m_stateData.trains.insert({train->trainId, train.release()});
 
-  onTrainAddedRemoved(true, trainIdOut);
+  onTrainAddedRemoved(true, trainIdOut, invalidTrainId);
 
   if(getSimModeUnlocked() == SimMode::Master)
   {
@@ -4749,7 +4747,7 @@ bool Simulator::removeTrainUser(quint32 trainId)
   }
 }
 
-bool Simulator::removeTrain(quint32 trainId, bool removeWagons)
+bool Simulator::removeTrain(quint32 trainId, bool removeWagons, quint32 suggestedTrainId)
 {
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
@@ -4757,15 +4755,18 @@ bool Simulator::removeTrain(quint32 trainId, bool removeWagons)
     if(it == m_stateData.trains.end())
         return false;
 
+    if(!m_stateData.trains.contains(suggestedTrainId))
+      suggestedTrainId = invalidTrainId;
+
     Train *train = it->second;
     destroyTrain(train, removeWagons);
     it = m_stateData.trains.erase(it);
-    onTrainAddedRemoved(false, trainId);
+    onTrainAddedRemoved(false, trainId, suggestedTrainId);
 
     if(getSimModeUnlocked() == SimMode::Master)
     {
       // TODO: suggest new active train
-      sendReplicas(SimulatorProtocol::TrainRemoved(trainId, false));
+      sendReplicas(SimulatorProtocol::TrainRemoved(trainId, false, suggestedTrainId));
     }
 
     return true;
@@ -5506,7 +5507,7 @@ bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const b
   trainIdOut = remainingTrain->trainId;
   auto pair = m_stateData.trains.insert({remainingTrain->trainId, remainingTrain.release()});
 
-  onTrainAddedRemoved(true, trainIdOut);
+  onTrainAddedRemoved(true, trainIdOut, invalidTrainId);
 
 
   if(getSimModeUnlocked() == SimMode::Master)
@@ -5733,7 +5734,7 @@ bool Simulator::coupleTrain(Train *train, bool fwd, quint32& removedTrainIdOut)
   if(trainToRemove)
   {
     removedTrainIdOut = trainToRemove->trainId;
-    removeTrain(trainToRemove->trainId, false);
+    removeTrain(trainToRemove->trainId, false, train->trainId);
   }
 
   if(trainTypeInterface)

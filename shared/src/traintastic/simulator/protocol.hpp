@@ -72,6 +72,8 @@ enum class TrainMode : uint8_t
   Automatic = 2
 };
 
+static constexpr auto invalidTrainId = std::numeric_limits<quint32>::max();
+
 PRAGMA_PACK_PUSH_1
 
 struct Message
@@ -489,7 +491,7 @@ static_assert(sizeof(TrainRequestCoupleSplit) == 16);
 
 struct TrainRemoved : Message
 {
-  TrainRemoved(quint32 trainId_, bool request, quint32 nextSelectedTrainId_ = 0)
+  TrainRemoved(quint32 trainId_, bool request, quint32 nextSelectedTrainId_ = invalidTrainId)
     : Message(request ? OpCode::TrainRequestRemove : OpCode::TrainRemoved,
               sizeof(TrainRemoved))
     , trainId(trainId_)
@@ -498,7 +500,7 @@ struct TrainRemoved : Message
   }
 
   quint32 trainId;
-  quint32 nextSelectedTrainId = 0;
+  quint32 nextSelectedTrainId;
 } ATTRIBUTE_PACKED;
 static_assert(sizeof(TrainRemoved) == 11);
 

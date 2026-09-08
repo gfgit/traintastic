@@ -606,7 +606,7 @@ private:
 public:
   const StaticData staticData;
   boost::signals2::signal<void()> onTick;
-  boost::signals2::signal<void(bool add, quint32 trainId)> onTrainAddedRemoved;
+  boost::signals2::signal<void(bool add, quint32 trainId, quint32 suggestedTrainId)> onTrainAddedRemoved;
 
   Simulator(const nlohmann::json& world, TrainTypeInterface *iface);
   ~Simulator();
@@ -668,7 +668,7 @@ public:
                 const std::vector<Train::VehicleItem> &vehicles, size_t segmentIndex,
                 quint32 &trainIdOut, float startPos = -1.0, TrainPlacement placement = TrainPlacement::PlaceCenter);
 
-  bool removeTrain(quint32 trainId, bool removeWagons);
+  bool removeTrain(quint32 trainId, bool removeWagons, quint32 suggestedTrainId = invalidTrainId);
   bool removeTrainUser(quint32 trainId);
   void destroyTrain(Train *train, bool removeWagons);
 
