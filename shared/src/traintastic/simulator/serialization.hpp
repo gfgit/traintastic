@@ -140,6 +140,30 @@ QDataStream &operator>>(QDataStream &stream, Simulator::Vehicle &vehicle)
   return stream;
 }
 
+void serializeVehicleDescr(QDataStream &stream, const Simulator::Vehicle &vehicle)
+{
+  stream << quint64(vehicle.typeIdx);
+
+  if(vehicle.typeIdx == Simulator::invalidIndex)
+  {
+    stream << vehicle.color;
+    stream << vehicle.length;
+  }
+}
+
+void deserializeVehicleDescr(QDataStream &stream, Simulator::Vehicle &vehicle)
+{
+  quint64 idx = 0;
+  stream >> idx;
+  vehicle.typeIdx = idx;
+
+  if(vehicle.typeIdx == Simulator::invalidIndex)
+  {
+    stream >> vehicle.color;
+    stream >> vehicle.length;
+  }
+}
+
 void serializeVehicleList(QDataStream &stream, const std::vector<Simulator::Train::VehicleItem> &vehicles, bool full)
 {
   stream << quint64(vehicles.size());
@@ -226,6 +250,55 @@ void deserializeTrain(QDataStream &stream, std::vector<Simulator::Train::Vehicle
   stream >> trainState;
 
   deserializeVehicleList(stream, vehicles, full);
+}
+
+void serializeTrainAddRequest(QDataStream &stream,
+                              const std::string& name,
+                              const std::vector<Simulator::Train::VehicleItemFull> &vehicles,
+                              size_t segmentIndex, quint32 tokenId, float startPos, Simulator::TrainPlacement placement)
+{
+  stream << name;
+
+  stream << quint64(vehicles.size());
+  for(const auto &item : vehicles)
+  {
+    serializeVehicleDescr(stream, item.vehicle);
+    stream << item.reversed;
+  }
+
+  stream << quint64(segmentIndex);
+  stream << tokenId;
+  stream << startPos;
+  stream << uint8_t(placement);
+}
+
+void deserializeTrainAddRequest(QDataStream &stream,
+                                std::string& name,
+                                std::vector<Simulator::Train::VehicleItemFull> &vehicles,
+                                size_t &segmentIndex, quint32 &tokenId, float &startPos, Simulator::TrainPlacement &placement)
+{
+  stream >> name;
+
+  quint64 sz = 0;
+  stream >> sz;
+  vehicles.reserve(sz);
+
+  for(size_t i = 0; i < sz; i++)
+  {
+    Simulator::Train::VehicleItemFull item;
+    deserializeVehicleDescr(stream, item.vehicle);
+    stream >> item.reversed;
+    vehicles.push_back(item);
+  }
+
+  stream >> sz;
+  segmentIndex = sz;
+  stream >> tokenId;
+  stream >> startPos;
+
+  uint8_t tmp1 = 0;
+  stream >> tmp1;
+  placement = Simulator::TrainPlacement(tmp1);
 }
 
 

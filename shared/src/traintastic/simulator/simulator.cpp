@@ -1778,7 +1778,9 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
     break;
   }
   case OpCode::TrainRequestAdd:
-  case OpCode::TrainRemoved:
+  {
+    break;
+  }
   default:
     break;
   }

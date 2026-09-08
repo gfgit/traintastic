@@ -656,7 +656,7 @@ public:
 
   inline std::recursive_mutex& stateMutex() { return m_stateMutex; }
 
-  enum class TrainPlacement
+  enum class TrainPlacement : uint8_t
   {
     PlaceCenter = 0,
     PlaceStart = 1,
