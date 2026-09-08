@@ -50,8 +50,8 @@
 class QByteArray;
 
 namespace SimulatorProtocol {
-  enum class OpCode : uint8_t;
-  struct Message;
+enum class OpCode : uint8_t;
+struct Message;
 }
 
 class SimulatorConnection;
@@ -127,34 +127,34 @@ public:
 
     struct Object
     {
-        enum class AllowedDirections
-        {
-            Both = 0,
-            Forward = 1,
-            Backwards = 2
-        };
+      enum class AllowedDirections
+      {
+        Both = 0,
+        Forward = 1,
+        Backwards = 2
+      };
 
-        enum class Type
-        {
-            PositionSensor = 0,
-            MainSignal = 1,
-            ReverseDirection = 2,
-            RemoveTrain = 3,
-            SpawnTrain = 4,
-            AuxSignal = 5,
-            StationStopPoint = 6
-        };
+      enum class Type
+      {
+        PositionSensor = 0,
+        MainSignal = 1,
+        ReverseDirection = 2,
+        RemoveTrain = 3,
+        SpawnTrain = 4,
+        AuxSignal = 5,
+        StationStopPoint = 6
+      };
 
-        Point pos;
-        float rotation = 0.0f;
-        float position = 0.0f;
-        float lateralDiff = 3.0f;
+      Point pos;
+      float rotation = 0.0f;
+      float position = 0.0f;
+      float lateralDiff = 3.0f;
 
-        size_t sensorIndex = invalidIndex;
-        AllowedDirections allowedDirection = AllowedDirections::Both;
-        bool dirForward = true;
-        Type type = Type::PositionSensor;
-        std::string_view signalName;
+      size_t sensorIndex = invalidIndex;
+      AllowedDirections allowedDirection = AllowedDirections::Both;
+      bool dirForward = true;
+      Type type = Type::PositionSensor;
+      std::string_view signalName;
     };
     std::vector<Object> objects;
 
@@ -372,14 +372,14 @@ public:
 
     struct Light
     {
-        enum class Color
-        {
-            Red = 0,
-            Yellow,
-            Green
-        } color = Color::Red;
+      enum class Color
+      {
+        Red = 0,
+        Yellow,
+        Green
+      } color = Color::Red;
 
-        State state = State::Off;
+      State state = State::Off;
     };
 
     std::vector<Light> lights;
@@ -811,9 +811,8 @@ public:
   virtual size_t getRandomTrainType(const std::vector<size_t>& allowList,
                                     const std::vector<size_t>& blackList) = 0;
 
-  virtual std::vector<Simulator::Train::VehicleItem> createTrainOfType(size_t typeIdx,
-                                                                       Simulator *simulator,
-                                                                       bool &canInvert, size_t &invertLoco) = 0;
+  virtual std::vector<Simulator::Train::VehicleItemFull> createTrainOfType(size_t typeIdx,
+                                                                           bool &canInvert, size_t &invertLoco) = 0;
 
   virtual void setupTrainSpeedPowered(Simulator::Train *train) = 0;
   

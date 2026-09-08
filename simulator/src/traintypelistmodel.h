@@ -46,9 +46,8 @@ public:
   size_t getRandomTrainType(const std::vector<size_t>& allowList,
                             const std::vector<size_t>& blackList) override;
 
-  std::vector<Simulator::Train::VehicleItem> createTrainOfType(size_t typeIdx,
-                                                               Simulator *simulator,
-                                                               bool &canInvert, size_t &invertLoco) override;
+  std::vector<Simulator::Train::VehicleItemFull> createTrainOfType(size_t typeIdx,
+                                                                   bool &canInvert, size_t &invertLoco) override;
 
   void setupTrainSpeedPowered(Simulator::Train *train) override;
 

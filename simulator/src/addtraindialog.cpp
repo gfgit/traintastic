@@ -201,7 +201,7 @@ std::vector<Simulator::Train::VehicleItemFull> AddTrainDialog::createTrain()
         vehicles = mVehiclesListModel->vehicles();
     }
 
-    std::vector<Simulator::Train::VehicleItem> result;
+    std::vector<Simulator::Train::VehicleItemFull> result;
     result.reserve(vehicles.size());
 
     for(const TrainVehicleListModel::Vehicle &vehicle : vehicles)
@@ -230,7 +230,7 @@ std::vector<Simulator::Train::VehicleItemFull> AddTrainDialog::createTrain()
     {
         // !invert, make first element go to the right
         std::reverse(result.begin(), result.end());
-        for(TrainVehicleListModel::Vehicle &vehicle : result)
+        for(auto &vehicle : result)
         {
             vehicle.reversed = !vehicle.reversed;
         }
@@ -273,16 +273,14 @@ void AddTrainDialog::done(int result)
                                    !invert, placement,
                                    &errStr))
         {
-            for(const auto &item : vehicles)
-            {
-                mTrainsModel->simulator()->removeVehicle(item.vehicle);
-            }
             vehicles.clear();
 
             QMessageBox::warning(this, tr("Cannot add Train"),
                                  errStr);
             return;
         }
+
+        vehicles.clear();
     }
 
     QDialog::done(result);

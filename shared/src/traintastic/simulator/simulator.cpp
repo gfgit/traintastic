@@ -3316,7 +3316,7 @@ void Simulator::doSpawnTrain(Spawn *spawn)
     // Create composition
     bool reversible = false;
     size_t locoReversible = 0;
-    vehicles = trainTypeInterface->createTrainOfType(trainTypeIdx, this,
+    vehicles = trainTypeInterface->createTrainOfType(trainTypeIdx,
                                                      reversible, locoReversible);
     if(!vehicles.empty())
     {
@@ -3360,8 +3360,9 @@ void Simulator::doSpawnTrain(Spawn *spawn)
 
     for(size_t i = 0; i < numWagons; i++)
     {
-      Simulator::Train::VehicleItem item;
-      item.vehicle = addVehicle(spawn->wagonLength, Color::Aqua);
+      Simulator::Train::VehicleItemFull item;
+      item.vehicle.length = spawn->wagonLength;
+      item.vehicle.color = Color::Aqua;
       item.reversed = false;
       vehicles.push_back(item);
     }
@@ -3387,13 +3388,6 @@ void Simulator::doSpawnTrain(Spawn *spawn)
     // Wait reset
     spawn->state = Spawn::State::WaitingReset;
     spawn->waitingResetCount = Spawn::MAX_WAITING_RESET;
-  }
-  else
-  {
-    for(const auto &item : vehicles)
-    {
-      removeVehicle(item.vehicle);
-    }
   }
 }
 
@@ -4447,10 +4441,7 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
   bool empty = true;
   for(const auto& item : vehicles)
   {
-    if(!item.vehicle || item.vehicle->activeTrain)
-      continue;
-
-    train->length += item.vehicle->length + (empty ? 0.0f : staticData.trainCouplingLength);
+    train->length += item.vehicle.length + (empty ? 0.0f : staticData.trainCouplingLength);
     empty = false;
   }
 
@@ -5184,7 +5175,7 @@ void Simulator::loadTrains(const nlohmann::json &world)
         vehicles.push_back(item);
       }
 
-      quint32 unused1 = invalidTrainId;
+      // quint32 unused1 = invalidTrainId;
       // addTrain(name,
       //          stringToEnum<DecoderProtocol>(object.value<std::string_view>("protocol", {})).value_or(DecoderProtocol::None),
       //          object.value("address", 3),

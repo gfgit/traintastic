@@ -157,14 +157,13 @@ size_t TrainTypeListModel::getRandomTrainType(const std::vector<size_t> &allowLi
   return typeIdx;
 }
 
-std::vector<Simulator::Train::VehicleItem> TrainTypeListModel::createTrainOfType(size_t typeIdx,
-                                                                                 Simulator *simulator,
-                                                                                 bool &canInvert, size_t &invertLoco)
+std::vector<Simulator::Train::VehicleItemFull> TrainTypeListModel::createTrainOfType(size_t typeIdx,
+                                                                                     bool &canInvert, size_t &invertLoco)
 {
   if(typeIdx == invalidIndex || typeIdx >= size_t(mTrains.size()))
     return {};
 
-  std::vector<Simulator::Train::VehicleItem> result;
+  std::vector<Simulator::Train::VehicleItemFull> result;
 
   const Train& train = mTrains.at(typeIdx);
   canInvert = train.reversible;
@@ -172,19 +171,19 @@ std::vector<Simulator::Train::VehicleItem> TrainTypeListModel::createTrainOfType
 
   for(const auto& vehicle : train.vehicles)
   {
-    Simulator::Train::VehicleItem item;
+    Simulator::Train::VehicleItemFull item;
     item.reversed = vehicle.reversed;
 
     if(vehicle.vehicleTypeIndex == VehicleTypesModel::invalidIndex)
-        continue;
+      continue;
 
     VehicleTypesModel::VehicleType vehicleType = vehicleTypesModel->getTypeAt(vehicle.vehicleTypeIndex);
     if(vehicleType.name.isEmpty())
-        continue;
+      continue;
 
-    item.vehicle = simulator->addVehicle(vehicleType.length,
-                                         Color::Blue,
-                                         vehicle.vehicleTypeIndex);
+    item.vehicle.length = vehicleType.length;
+    item.vehicle.color = Color::Blue;
+    item.vehicle.typeIdx = vehicle.vehicleTypeIndex;
 
     result.push_back(item);
   }
