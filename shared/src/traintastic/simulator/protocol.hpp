@@ -28,8 +28,29 @@
 
 #include <QtGlobal>
 
+
 namespace SimulatorProtocol
 {
+
+static constexpr inline size_t htoleSz(size_t val)
+{
+  if constexpr (sizeof(size_t) == sizeof(quint32))
+    return htole32(val);
+  else if constexpr (sizeof(size_t) == sizeof(quint64))
+    return htole64(val);
+  else
+    static_assert(sizeof(size_t) == sizeof(quint64));
+}
+
+static constexpr inline size_t leSztoh(size_t val)
+{
+  if constexpr (sizeof(size_t) == sizeof(quint32))
+    return le32toh(val);
+  else if constexpr (sizeof(size_t) == sizeof(quint64))
+    return le64toh(val);
+  else
+    static_assert(sizeof(size_t) == sizeof(quint64));
+}
 
 enum class OpCode : uint8_t
 {
@@ -417,10 +438,12 @@ struct TrainRequestSetMode : Message
   TrainRequestSetMode(quint32 trainId_, TrainMode mode_)
     : Message(OpCode::TrainRequestSetMode,
               sizeof(TrainRequestSetMode))
-    , trainId(trainId_)
+    , trainId(htole32(trainId_))
     , mode(mode_)
   {
   }
+
+  inline quint32 getTrainId() const { return le32toh(trainId); }
 
   quint32 trainId;
   TrainMode mode;
@@ -432,10 +455,12 @@ struct TrainRequestSetDirection : Message
   TrainRequestSetDirection(quint32 trainId_, bool reverse_)
     : Message(OpCode::TrainRequestSetDirection,
               sizeof(TrainRequestSetDirection))
-    , trainId(trainId_)
+    , trainId(htole32(trainId_))
     , reverse(reverse_)
   {
   }
+
+  inline quint32 getTrainId() const { return le32toh(trainId); }
 
   quint32 trainId;
   bool reverse;
@@ -454,10 +479,12 @@ struct TrainRequestChangeSpeed : Message
   TrainRequestChangeSpeed(quint32 trainId_, SpeedStep step_)
     : Message(OpCode::TrainRequestChangeSpeed,
               sizeof(TrainRequestChangeSpeed))
-    , trainId(trainId_)
+    , trainId(htole32(trainId_))
     , step(step_)
   {
   }
+
+  inline quint32 getTrainId() const { return le32toh(trainId); }
 
   quint32 trainId;
   SpeedStep step;
@@ -477,11 +504,14 @@ struct TrainRequestCoupleSplit : Message
   TrainRequestCoupleSplit(quint32 trainId_, size_t vehicleIdx_, CoupleOp coupleOp_)
     : Message(OpCode::TrainRequestCoupleSplit,
               sizeof(TrainRequestCoupleSplit))
-    , trainId(trainId_)
-    , vehicleIdx(vehicleIdx_)
+    , trainId(htole32(trainId_))
+    , vehicleIdx(htoleSz(vehicleIdx_))
     , coupleOp(coupleOp_)
   {
   }
+
+  inline quint32 getTrainId() const { return le32toh(trainId); }
+  inline quint32 getVehicleIdx() const { return leSztoh(vehicleIdx); }
 
   quint32 trainId;
   size_t vehicleIdx = 0;
@@ -494,10 +524,13 @@ struct TrainRemoved : Message
   TrainRemoved(quint32 trainId_, bool request, quint32 nextSelectedTrainId_ = invalidTrainId)
     : Message(request ? OpCode::TrainRequestRemove : OpCode::TrainRemoved,
               sizeof(TrainRemoved))
-    , trainId(trainId_)
-    , nextSelectedTrainId(request ? 0 : nextSelectedTrainId_)
+    , trainId(htole32(trainId_))
+    , nextSelectedTrainId(htole32(request ? 0 : nextSelectedTrainId_))
   {
   }
+
+  inline quint32 getTrainId() const { return le32toh(trainId); }
+  inline quint32 getNextSelectedTrainId() const { return le32toh(nextSelectedTrainId); }
 
   quint32 trainId;
   quint32 nextSelectedTrainId;

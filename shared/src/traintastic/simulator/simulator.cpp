@@ -1409,7 +1409,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
     const auto& m = static_cast<const TrainRequestSetMode&>(message);
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-    auto it = m_stateData.trains.find(m.trainId);
+    auto it = m_stateData.trains.find(m.getTrainId());
     if(it == m_stateData.trains.end())
       break;
 
@@ -1424,7 +1424,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
     const auto& m = static_cast<const TrainRequestSetDirection&>(message);
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-    auto it = m_stateData.trains.find(m.trainId);
+    auto it = m_stateData.trains.find(m.getTrainId());
     if(it == m_stateData.trains.end())
       break;
 
@@ -1439,7 +1439,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
     const auto& m = static_cast<const TrainRequestChangeSpeed&>(message);
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-    auto it = m_stateData.trains.find(m.trainId);
+    auto it = m_stateData.trains.find(m.getTrainId());
     if(it == m_stateData.trains.end())
       break;
 
@@ -1475,7 +1475,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
     const auto& m = static_cast<const TrainRequestCoupleSplit&>(message);
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-    auto it = m_stateData.trains.find(m.trainId);
+    auto it = m_stateData.trains.find(m.getTrainId());
     if(it == m_stateData.trains.end())
       break;
 
@@ -1496,13 +1496,13 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
     }
     case TrainRequestCoupleSplit::SplitFront:
     {
-      splitTrain(it->second, m.vehicleIdx,
+      splitTrain(it->second, m.getVehicleIdx(),
                  true, otherTrainId);
       break;
     }
     case TrainRequestCoupleSplit::SplitRear:
     {
-      splitTrain(it->second, m.vehicleIdx,
+      splitTrain(it->second, m.getVehicleIdx(),
                  false, otherTrainId);
       break;
     }
@@ -1518,7 +1518,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
     const auto& m = static_cast<const TrainRemoved&>(message);
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-    auto it = m_stateData.trains.find(m.trainId);
+    auto it = m_stateData.trains.find(m.getTrainId());
     if(it == m_stateData.trains.end())
       break;
 
@@ -1533,11 +1533,11 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
     const auto& m = static_cast<const TrainRemoved&>(message);
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-    auto it = m_stateData.trains.find(m.trainId);
+    auto it = m_stateData.trains.find(m.getTrainId());
     if(it == m_stateData.trains.end())
       break;
 
-    removeTrain(it->second->trainId, true, m.nextSelectedTrainId);
+    removeTrain(it->second->trainId, true, m.getNextSelectedTrainId());
 
     break;
   }
@@ -1571,6 +1571,7 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
   QByteArray buf = QByteArray::fromRawData(reinterpret_cast<const char *>(&message) + sizeof(SimulatorProtocol::Message),
                                            message.size() - sizeof(SimulatorProtocol::Message));
   QDataStream stream(buf);
+  stream.setByteOrder(QDataStream::LittleEndian);
 
   switch(message.opCode)
   {
@@ -4845,6 +4846,7 @@ void Simulator::sendTrainFullRefreshReplica(SimulatorProtocol::OpCode op, Train 
   buf.reserve(100);
 
   QDataStream stream(&buf, QIODeviceBase::WriteOnly);
+  stream.setByteOrder(QDataStream::LittleEndian);
   stream << uint8_t(op);
   stream << uint16_t(0); // Size placeholder
   serializeTrain(stream, *train, true);
@@ -4858,6 +4860,7 @@ void Simulator::sendTrainStateRefreshReplica(Train *train)
   buf.reserve(100);
 
   QDataStream stream(&buf, QIODeviceBase::WriteOnly);
+  stream.setByteOrder(QDataStream::LittleEndian);
   stream << uint8_t(SimulatorProtocol::OpCode::TrainStateRefresh);
   stream << uint16_t(0); // Size placeholder
   serializeTrain(stream, *train, false);
