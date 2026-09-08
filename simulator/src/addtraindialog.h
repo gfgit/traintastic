@@ -39,7 +39,7 @@ public:
 private:
     void setMode(Mode newMode);
 
-    std::vector<Simulator::Train::VehicleItem> createTrain();
+  std::vector<Simulator::Train::VehicleItemFull> createTrain();
 
 protected:
     void done(int result);

@@ -3308,7 +3308,7 @@ void Simulator::doSpawnTrain(Spawn *spawn)
   // Spawn a train
   const std::string trainName = std::string("spawn") + std::to_string(spawn->address) + std::string("_");
 
-  std::vector<Simulator::Train::VehicleItem> vehicles;
+  std::vector<Simulator::Train::VehicleItemFull> vehicles;
   size_t trainTypeIdx = trainTypeInterface->getRandomTrainType(spawn->allowList, spawn->blackList);
 
   if(trainTypeIdx != invalidIndex)
@@ -4427,7 +4427,7 @@ Simulator::StaticData Simulator::load(const nlohmann::json& world, StateData& st
 }
 
 bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, uint16_t addr,
-                         const std::vector<Train::VehicleItem> &vehicles, size_t segmentIndex,
+                         const std::vector<Train::VehicleItemFull> &vehicles, size_t segmentIndex,
                          quint32 &trainIdOut, float startPos, TrainPlacement placement)
 {
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
@@ -4646,12 +4646,14 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
   };
 
   // Add wagons to train only when sure train will be added
-  for(const auto& item : vehicles)
+  for(const Train::VehicleItemFull& item : vehicles)
   {
-    if(!item.vehicle || item.vehicle->activeTrain)
+    Vehicle *vehicle = addVehicle(item.vehicle.length, item.vehicle.color, item.vehicle.typeIdx);
+
+    if(!vehicle)
       continue;
 
-    train->vehicles.push_back(item);
+    train->vehicles.push_back({vehicle, item.reversed});
   }
 
   // Place wagons in segments
@@ -5183,12 +5185,12 @@ void Simulator::loadTrains(const nlohmann::json &world)
       }
 
       quint32 unused1 = invalidTrainId;
-      addTrain(name,
-               stringToEnum<DecoderProtocol>(object.value<std::string_view>("protocol", {})).value_or(DecoderProtocol::None),
-               object.value("address", 3),
-               vehicles,
-               segmentIndex,
-               unused1);
+      // addTrain(name,
+      //          stringToEnum<DecoderProtocol>(object.value<std::string_view>("protocol", {})).value_or(DecoderProtocol::None),
+      //          object.value("address", 3),
+      //          vehicles,
+      //          segmentIndex,
+      //          unused1);
     }
   }
 }

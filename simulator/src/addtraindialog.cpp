@@ -177,13 +177,13 @@ void AddTrainDialog::setMode(Mode newMode)
     modeCombo->setCurrentIndex(mode);
 }
 
-std::vector<Simulator::Train::VehicleItem> AddTrainDialog::createTrain()
+std::vector<Simulator::Train::VehicleItemFull> AddTrainDialog::createTrain()
 {
     if(mode == Mode::CustomVehicle)
     {
-        Simulator::Train::VehicleItem item;
-        item.vehicle = mTrainsModel->simulator()->addVehicle(customLengthSpin->value(),
-                                                             Color::Blue);
+        Simulator::Train::VehicleItemFull item;
+        item.vehicle.length = customLengthSpin->value();
+        item.vehicle.color = Color::Blue;
         return {item};
     }
 
@@ -204,9 +204,9 @@ std::vector<Simulator::Train::VehicleItem> AddTrainDialog::createTrain()
     std::vector<Simulator::Train::VehicleItem> result;
     result.reserve(vehicles.size());
 
-    for(const auto &vehicle : vehicles)
+    for(const TrainVehicleListModel::Vehicle &vehicle : vehicles)
     {
-        Simulator::Train::VehicleItem item;
+        Simulator::Train::VehicleItemFull item;
         item.reversed = vehicle.reversed;
 
         if(vehicle.vehicleTypeIndex == VehicleTypesModel::invalidIndex)
@@ -216,9 +216,9 @@ std::vector<Simulator::Train::VehicleItem> AddTrainDialog::createTrain()
         if(vehicleType.name.isEmpty())
             continue;
 
-        item.vehicle = mTrainsModel->simulator()->addVehicle(vehicleType.length,
-                                                             Color::Blue,
-                                                             vehicle.vehicleTypeIndex);
+        item.vehicle.length = vehicleType.length;
+        item.vehicle.color = Color::Blue;
+        item.vehicle.typeIdx = vehicle.vehicleTypeIndex;
         result.push_back(item);
     }
 
@@ -230,7 +230,7 @@ std::vector<Simulator::Train::VehicleItem> AddTrainDialog::createTrain()
     {
         // !invert, make first element go to the right
         std::reverse(result.begin(), result.end());
-        for(auto &vehicle : result)
+        for(TrainVehicleListModel::Vehicle &vehicle : result)
         {
             vehicle.reversed = !vehicle.reversed;
         }
@@ -243,7 +243,7 @@ void AddTrainDialog::done(int result)
 {
     if(result == QDialog::Accepted)
     {
-        std::vector<Simulator::Train::VehicleItem> vehicles = createTrain();
+        std::vector<Simulator::Train::VehicleItemFull> vehicles = createTrain();
         if(vehicles.empty())
         {
             QMessageBox::warning(this, tr("Empty Train"), tr("Cannot add empty train"));

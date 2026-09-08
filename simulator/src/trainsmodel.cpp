@@ -71,7 +71,7 @@ QVariant TrainsModel::data(const QModelIndex &idx, int role) const
 }
 
 bool TrainsModel::addTrain(const QString &name,
-                           const std::vector<Simulator::Train::VehicleItem> &vehicles,
+                           const std::vector<Simulator::Train::VehicleItemFull> &vehicles,
                            size_t segmentIdx, const float startPos, bool invert, Simulator::TrainPlacement placement, QString *errOut)
 {
     if(!mSimulator)

@@ -510,9 +510,9 @@ public:
     Train *activeTrain = nullptr;
     VehicleState state;
     quint32 vehicleId = invalidTrainId;
-    float length;
+    float length = 0.0f;
     size_t typeIdx = invalidIndex;
-    Color color;
+    Color color = Color::Blue;
   };
 
   struct Train
@@ -665,7 +665,7 @@ public:
 
   bool addTrain(const std::string_view& name,
                 DecoderProtocol proto, uint16_t addr,
-                const std::vector<Train::VehicleItem> &vehicles, size_t segmentIndex,
+                const std::vector<Train::VehicleItemFull> &vehicles, size_t segmentIndex,
                 quint32 &trainIdOut, float startPos = -1.0, TrainPlacement placement = TrainPlacement::PlaceCenter);
 
   bool removeTrain(quint32 trainId, bool removeWagons, quint32 suggestedTrainId = invalidTrainId);

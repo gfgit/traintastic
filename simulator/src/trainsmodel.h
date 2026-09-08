@@ -34,7 +34,7 @@ public:
     QVariant data(const QModelIndex &idx, int role = Qt::DisplayRole) const override;
 
     bool addTrain(const QString& name,
-                  const std::vector<Simulator::Train::VehicleItem> &vehicles,
+                  const std::vector<Simulator::Train::VehicleItemFull> &vehicles,
                   size_t segmentIdx, const float startPos, bool invert,
                   Simulator::TrainPlacement placement,
                   QString *errOut);
