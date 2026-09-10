@@ -1,10 +1,13 @@
 #include "traintypelistmodel.h"
 
+#include "trainsmodel.h"
+
 #include <QRandomGenerator>
 
-TrainTypeListModel::TrainTypeListModel(VehicleTypesModel *m, QObject *parent)
+TrainTypeListModel::TrainTypeListModel(VehicleTypesModel *m, TrainsModel *trains, QObject *parent)
   : QAbstractListModel(parent)
   , vehicleTypesModel(m)
+  , mTrainsModel(trains)
 {
 }
 
@@ -227,4 +230,9 @@ void TrainTypeListModel::fillVehicleProperties(Simulator::Vehicle *vehicle)
   const VehicleTypesModel::VehicleType vehicleType = vehicleTypesModel->getTypeAt(vehicle->typeIdx);
   vehicle->length = vehicleType.length;
   vehicle->color = Color::Blue;
+}
+
+void TrainTypeListModel::onAddTrainReply(quint32 trainId, quint32 token, bool isError)
+{
+  mTrainsModel->onAddTrainReply(trainId, token, isError);
 }

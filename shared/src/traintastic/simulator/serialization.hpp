@@ -255,7 +255,8 @@ void deserializeTrain(QDataStream &stream, std::vector<Simulator::Train::Vehicle
 void serializeTrainAddRequest(QDataStream &stream,
                               const std::string& name,
                               const std::vector<Simulator::Train::VehicleItemFull> &vehicles,
-                              size_t segmentIndex, quint32 tokenId, float startPos, Simulator::TrainPlacement placement)
+                              size_t segmentIndex, quint32 tokenId, float startPos,
+                              Simulator::TrainPlacement placement, bool invertDir)
 {
   stream << name;
 
@@ -270,12 +271,14 @@ void serializeTrainAddRequest(QDataStream &stream,
   stream << tokenId;
   stream << startPos;
   stream << uint8_t(placement);
+  stream << invertDir;
 }
 
 void deserializeTrainAddRequest(QDataStream &stream,
                                 std::string& name,
                                 std::vector<Simulator::Train::VehicleItemFull> &vehicles,
-                                size_t &segmentIndex, quint32 &tokenId, float &startPos, Simulator::TrainPlacement &placement)
+                                size_t &segmentIndex, quint32 &tokenId, float &startPos,
+                                Simulator::TrainPlacement &placement, bool &invertDir)
 {
   stream >> name;
 
@@ -299,6 +302,7 @@ void deserializeTrainAddRequest(QDataStream &stream,
   uint8_t tmp1 = 0;
   stream >> tmp1;
   placement = Simulator::TrainPlacement(tmp1);
+  stream >> invertDir;
 }
 
 

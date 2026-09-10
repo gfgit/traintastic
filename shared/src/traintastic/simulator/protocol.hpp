@@ -84,6 +84,7 @@ enum class OpCode : uint8_t
   TrainRequestCoupleSplit = 24,
   TrainRequestRemove = 25,
   TrainRemoved = 26,
+  TrainRequestAddReply = 27,
 };
 
 enum class TrainMode : uint8_t
@@ -536,6 +537,26 @@ struct TrainRemoved : Message
   quint32 nextSelectedTrainId;
 } ATTRIBUTE_PACKED;
 static_assert(sizeof(TrainRemoved) == 11);
+
+struct TrainRequestAddReply : Message
+{
+  TrainRequestAddReply(quint32 token_, bool isError_ = false, quint32 trainId_ = invalidTrainId)
+    : Message(OpCode::TrainRequestAddReply,
+              sizeof(TrainRequestAddReply))
+    , trainId(htole32(trainId_))
+    , token(htole32(token_))
+    , isError(isError_)
+  {
+  }
+
+  inline quint32 getTrainId() const { return le32toh(trainId); }
+  inline quint32 getToken() const { return le32toh(token); }
+
+  quint32 trainId;
+  quint32 token;
+  bool isError;
+} ATTRIBUTE_PACKED;
+static_assert(sizeof(TrainRequestAddReply) == 12);
 
 PRAGMA_PACK_POP
 

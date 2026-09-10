@@ -4,6 +4,7 @@
 #include <QAbstractTableModel>
 
 #include <QMap>
+#include <QBasicTimer>
 
 #include <traintastic/enum/color.hpp>
 #include <traintastic/simulator/simulator.hpp>
@@ -45,8 +46,14 @@ public:
 
     Simulator *simulator() const;
 
+    void onAddTrainReply(quint32 trainId, quint32 token, bool isError);
+
+  protected:
+    void timerEvent(QTimerEvent *ev) override;
+
 signals:
-    void setCurrentTrain(size_t trainIdx);
+    void setCurrentTrain(quint32 trainId);
+    void trainReplicaAddError(); // TODO: error string
 
 private:
     Simulator *mSimulator = nullptr;
@@ -58,6 +65,9 @@ private:
     };
 
     QMap<QString, Train> mTrains;
+
+    QBasicTimer mTokenExpire;
+    quint32 mCurrentToken = 0;
 };
 
 #endif // TRAINSMODEL_H

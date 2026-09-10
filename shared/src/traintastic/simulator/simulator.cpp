@@ -900,6 +900,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
   using namespace SimulatorProtocol;
 
   const bool isReplica = getSimMode() == SimMode::Replica;
+  const bool isMaster = getSimMode() == SimMode::Master;
 
   switch(message.opCode)
   {
@@ -1403,7 +1404,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
   }
   case OpCode::TrainRequestSetMode:
   {
-    if(isReplica)
+    if(!isMaster)
       break;
 
     const auto& m = static_cast<const TrainRequestSetMode&>(message);
@@ -1418,7 +1419,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
   }
   case OpCode::TrainRequestSetDirection:
   {
-    if(isReplica)
+    if(!isMaster)
       break;
 
     const auto& m = static_cast<const TrainRequestSetDirection&>(message);
@@ -1433,7 +1434,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
   }
   case OpCode::TrainRequestChangeSpeed:
   {
-    if(isReplica)
+    if(!isMaster)
       break;
 
     const auto& m = static_cast<const TrainRequestChangeSpeed&>(message);
@@ -1469,7 +1470,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
   }
   case OpCode::TrainRequestCoupleSplit:
   {
-    if(isReplica)
+    if(!isMaster)
       break;
 
     const auto& m = static_cast<const TrainRequestCoupleSplit&>(message);
@@ -1512,7 +1513,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
   }
   case OpCode::TrainRequestRemove:
   {
-    if(isReplica)
+    if(!isMaster)
       break;
 
     const auto& m = static_cast<const TrainRemoved&>(message);
@@ -1541,6 +1542,18 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
 
     break;
   }
+  case OpCode::TrainRequestAddReply:
+  {
+    if(!isReplica)
+      break;
+
+    const auto& m = static_cast<const TrainRequestAddReply&>(message);
+
+    if(trainTypeInterface)
+      trainTypeInterface->onAddTrainReply(m.getTrainId(), m.getToken(), m.isError);
+
+    break;
+  }
   case OpCode::TrainAdded:
   case OpCode::TrainStateRefresh:
   case OpCode::TrainChangedVehicles:
@@ -1549,22 +1562,22 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
     if(!isReplica)
       break;
 
-    receiveVariableSize(message);
+    receiveVariableSize(message, fromConnId);
     break;
   }
   case OpCode::TrainRequestAdd:
   {
     // Variable size messages sent by replica
-    if(isReplica)
+    if(!isMaster)
       break;
 
-    receiveVariableSize(message);
+    receiveVariableSize(message, fromConnId);
     break;
   }
   }
 }
 
-void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
+void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message, size_t fromConnId)
 {
   using namespace SimulatorProtocol;
 
@@ -1779,6 +1792,62 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message)
   }
   case OpCode::TrainRequestAdd:
   {
+    std::vector<Simulator::Train::VehicleItemFull> vehicles;
+    std::string trainName;
+    size_t segmentIndex = invalidIndex;
+    quint32 token = 0;
+    float startPos = 0.0f;
+    TrainPlacement placement = TrainPlacement::PlaceCenter;
+    bool invertDir = false;
+
+    deserializeTrainAddRequest(stream, trainName, vehicles,
+                               segmentIndex, token, startPos,
+                               placement, invertDir);
+
+    if(trainName.empty() || segmentIndex == invalidIndex || segmentIndex >= staticData.trackSegments.size()
+        || vehicles.empty())
+    {
+      for(const std::shared_ptr<SimulatorConnection>& connection : m_repliacas)
+      {
+        if(connection->connectionId() != fromConnId)
+          continue;
+
+        connection->send(SimulatorProtocol::TrainRequestAddReply(token, true));
+        break;
+      }
+      break;
+    }
+
+    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+
+    quint32 trainId = invalidTrainId;
+    if(!addTrain(trainName, DecoderProtocol::DCCShort, 3,
+                  vehicles, segmentIndex, trainId, startPos, placement))
+    {
+      for(const std::shared_ptr<SimulatorConnection>& connection : m_repliacas)
+      {
+        if(connection->connectionId() != fromConnId)
+          continue;
+
+        connection->send(SimulatorProtocol::TrainRequestAddReply(token, true));
+        break;
+      }
+      break;
+    }
+
+    // Set direction
+    if(invertDir)
+      setTrainDirection(m_stateData.trains.at(trainId), true);
+
+    // Success
+    for(const std::shared_ptr<SimulatorConnection>& connection : m_repliacas)
+    {
+      if(connection->connectionId() != fromConnId)
+        continue;
+
+      connection->send(SimulatorProtocol::TrainRequestAddReply(token, false, trainId));
+      break;
+    }
     break;
   }
   default:
@@ -4723,6 +4792,26 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
                                 pair.first->second);
   }
 
+  return true;
+}
+
+bool Simulator::requestAddTrain(const std::string &name, const std::vector<Train::VehicleItemFull> &vehicles,
+                                size_t segmentIndex, quint32 token, float startPos,
+                                TrainPlacement placement, bool invertDir)
+{
+  if(getSimMode() != SimMode::Replica)
+    return false;
+
+  QByteArray buf;
+  buf.reserve(100);
+
+  QDataStream stream(&buf, QIODeviceBase::WriteOnly);
+  stream.setByteOrder(QDataStream::LittleEndian);
+  stream << uint8_t(SimulatorProtocol::OpCode::TrainRequestAdd);
+  stream << uint16_t(0); // Size placeholder
+  serializeTrainAddRequest(stream, name, vehicles, segmentIndex, token, startPos, placement, invertDir);
+
+  sendReplicas(buf);
   return true;
 }
 

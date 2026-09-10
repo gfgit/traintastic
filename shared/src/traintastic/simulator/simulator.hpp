@@ -646,7 +646,7 @@ public:
 
   void send(const SimulatorProtocol::Message& message);
   void receive(const SimulatorProtocol::Message& message, size_t fromConnId);
-  void receiveVariableSize(const SimulatorProtocol::Message& message);
+  void receiveVariableSize(const SimulatorProtocol::Message& message, size_t fromConnId);
 
   void setConnectionAsReplica(const std::shared_ptr<SimulatorConnection>& connection);
   void removeConnection(const std::shared_ptr<SimulatorConnection>& connection, bool replica);
@@ -667,6 +667,10 @@ public:
                 DecoderProtocol proto, uint16_t addr,
                 const std::vector<Train::VehicleItemFull> &vehicles, size_t segmentIndex,
                 quint32 &trainIdOut, float startPos = -1.0, TrainPlacement placement = TrainPlacement::PlaceCenter);
+
+  bool requestAddTrain(const std::string &name,
+                       const std::vector<Train::VehicleItemFull> &vehicles, size_t segmentIndex,
+                       quint32 token, float startPos = -1.0, TrainPlacement placement = TrainPlacement::PlaceCenter, bool invertDir = false);
 
   bool removeTrain(quint32 trainId, bool removeWagons, quint32 suggestedTrainId = invalidTrainId);
   bool removeTrainUser(quint32 trainId);
@@ -817,6 +821,8 @@ public:
   virtual void setupTrainSpeedPowered(Simulator::Train *train) = 0;
   
   virtual void fillVehicleProperties(Simulator::Vehicle *vehicle) = 0;
+
+  virtual void onAddTrainReply(quint32 trainId, quint32 token, bool isError) = 0;
 };
 
 

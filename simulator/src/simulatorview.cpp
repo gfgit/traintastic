@@ -555,9 +555,14 @@ SimulatorView::SimulatorView(QWidget* parent)
   mTrainsModel = new TrainsModel(this);
   connect(mTrainsModel, &TrainsModel::setCurrentTrain,
           this, &SimulatorView::doSetCurrentTrainIndex);
+  connect(mTrainsModel, &TrainsModel::trainReplicaAddError,
+          this, [this]()
+          {
+            QMessageBox::warning(this, tr("Train Add Error"), tr("Train Add failed"));
+          });
 
   mVehicleTypesModel = new VehicleTypesModel(this);
-  mTrainTypesModel = new TrainTypeListModel(mVehicleTypesModel, this);
+  mTrainTypesModel = new TrainTypeListModel(mVehicleTypesModel, mTrainsModel, this);
 
   // Dark gray background
   QPalette p = palette();

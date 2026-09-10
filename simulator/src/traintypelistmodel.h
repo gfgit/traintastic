@@ -4,6 +4,8 @@
 #include "trainvehiclelistmodel.h"
 #include <traintastic/simulator/simulator.hpp>
 
+class TrainsModel;
+
 class TrainTypeListModel : public QAbstractListModel, public TrainTypeInterface
 {
   Q_OBJECT
@@ -19,7 +21,7 @@ public:
     bool reversible = false;
   };
 
-  TrainTypeListModel(VehicleTypesModel *m, QObject *parent = nullptr);
+  TrainTypeListModel(VehicleTypesModel *m, TrainsModel *trains, QObject *parent = nullptr);
 
   // Basic functionality:
   int rowCount(const QModelIndex &parent = QModelIndex()) const override;
@@ -53,8 +55,11 @@ public:
 
   void fillVehicleProperties(Simulator::Vehicle *vehicle) override;
 
+  void onAddTrainReply(quint32 trainId, quint32 token, bool isError) override;
+
 private:
   VehicleTypesModel *vehicleTypesModel = nullptr;
+  TrainsModel *mTrainsModel = nullptr;
   QVector<Train> mTrains;
 };
 

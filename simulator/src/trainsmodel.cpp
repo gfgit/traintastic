@@ -2,6 +2,10 @@
 
 #include <traintastic/simulator/simulator.hpp>
 
+#include <QTimerEvent>
+
+#include <QRandomGenerator>
+
 TrainsModel::TrainsModel(QObject *parent)
     : QAbstractTableModel(parent)
 {
@@ -91,22 +95,36 @@ bool TrainsModel::addTrain(const QString &name,
         return false;
     }
 
-    quint32 trainIdx = Simulator::invalidTrainId;
+    if(mSimulator->getSimModeUnlocked() == Simulator::SimMode::Replica)
+    {
+      // Generate a token
+      do
+      {
+        mCurrentToken = QRandomGenerator::global()->generate();
+      } while(mCurrentToken == 0); // Avoid null token as result
+
+      mTokenExpire.start(1500, Qt::CoarseTimer, this);
+
+      mSimulator->requestAddTrain(name.toStdString(), vehicles, segmentIdx, mCurrentToken, startPos, placement, invert);
+      return true;
+    }
+
+    quint32 trainId = Simulator::invalidTrainId;
     if(!mSimulator->addTrain(name.toStdString(), DecoderProtocol::DCCShort, 3,
-                             vehicles, segmentIdx, trainIdx, startPos, placement))
+                             vehicles, segmentIdx, trainId, startPos, placement))
     {
         *errOut = tr("Train is too long");
         return false;
     }
 
     if(invert)
-        mSimulator->setTrainDirection(mSimulator->stateData().trains.at(trainIdx), true);
+        mSimulator->setTrainDirection(mSimulator->stateData().trains.at(trainId), true);
 
     beginResetModel();
     mTrains.insert(name, Train{name, 0.0});
     endResetModel();
 
-    emit setCurrentTrain(trainIdx);
+    emit setCurrentTrain(trainId);
 
     return true;
 }
@@ -130,6 +148,9 @@ void TrainsModel::setSimulator(Simulator *sim)
     beginResetModel();
     mTrains.clear();
 
+    mCurrentToken = 0;
+    mTokenExpire.stop();
+
     mSimulator = sim;
 
     if(mSimulator)
@@ -152,4 +173,45 @@ void TrainsModel::setSimulator(Simulator *sim)
 Simulator *TrainsModel::simulator() const
 {
     return mSimulator;
+}
+
+void TrainsModel::onAddTrainReply(quint32 trainId, quint32 token, bool isError)
+{
+  if(token != mCurrentToken && mCurrentToken != 0)
+    return;
+
+  mCurrentToken = 0;
+  mTokenExpire.stop();
+
+  if(trainId == Simulator::invalidTrainId)
+    isError = true;
+
+  {
+    std::lock_guard<std::recursive_mutex> lock(mSimulator->stateMutex());
+    if(!mSimulator->stateData().trains.contains(trainId))
+    {
+      isError = true;
+      trainId = Simulator::invalidTrainId;
+    }
+  }
+
+  if(!isError)
+  {
+    emit setCurrentTrain(trainId);
+    return;
+  }
+
+
+}
+
+void TrainsModel::timerEvent(QTimerEvent *ev)
+{
+  if(ev->timerId() == mTokenExpire.timerId())
+  {
+    mTokenExpire.stop();
+    mCurrentToken = 0;
+    return;
+  }
+
+  QAbstractTableModel::timerEvent(ev);
 }
