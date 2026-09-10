@@ -653,6 +653,7 @@ public:
 
   void sendReplicas(const SimulatorProtocol::Message& message);
   void sendReplicas(QByteArray &buf);
+  void sendToMaster(QByteArray &buf);
 
   inline std::recursive_mutex& stateMutex() { return m_stateMutex; }
 

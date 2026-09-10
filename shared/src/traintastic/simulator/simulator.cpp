@@ -895,6 +895,21 @@ void Simulator::sendReplicas(QByteArray &buf)
   }
 }
 
+void Simulator::sendToMaster(QByteArray &buf)
+{
+  if(getSimModeUnlocked() != SimMode::Replica)
+    return;
+
+  SimulatorProtocol::Message& message = *reinterpret_cast<SimulatorProtocol::Message *>(buf.data());
+  message.setSize(buf.size());
+
+  for(const auto& connection : m_connections)
+  {
+    if(connection->send(message))
+      break;
+  }
+}
+
 void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromConnId)
 {
   using namespace SimulatorProtocol;
@@ -1907,22 +1922,61 @@ void Simulator::onConnectionRemoved(const std::shared_ptr<SimulatorConnection>& 
 
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-  // Turn off encoded tracks
-  // TODO: multiple connection could subscribe to same channel...
-  // But only one must be allowed to set encoding
-  for(uint16_t channel : connection->subscribedChannels)
-  {
-    auto channelMap = staticData.sensorChannelMap.find(channel);
-    if(channelMap == staticData.sensorChannelMap.end())
-      continue;
+  const bool isReplica = getSimModeUnlocked() == SimMode::Replica;
+  if(isReplica && !m_connections.empty())
+    return; // We still have another connection to master
+  // TODO: does not seem to be called when master connection gets closed???
 
-    for(auto sensor : channelMap->second)
+  // Turn off encoded tracks
+  if(isReplica)
+  {
+    for(size_t idx = 0; idx < m_stateData.sensors.size(); idx++)
     {
-      if(staticData.sensors[sensor.second].channel != channel)
+      m_stateData.sensors[idx].encoding = SensorState::Encoding::CodeAbsent;
+    }
+
+    // Also power off world
+    m_stateData.powerOn = false;
+
+    // Now remove all trains
+    {
+      auto it = m_stateData.trains.begin();
+      while(it != m_stateData.trains.end())
+      {
+        Train *train = it->second;
+        destroyTrain(train, false);
+        it = m_stateData.trains.erase(it);
+      }
+    }
+
+    {
+      auto it = m_stateData.vehicles.begin();
+      while(it != m_stateData.vehicles.end())
+      {
+        assert(!it->second->activeTrain);
+        delete it->second;
+        it = m_stateData.vehicles.erase(it);
+      }
+    }
+  }
+  else
+  {
+    // TODO: multiple connection could subscribe to same channel...
+    // But only one must be allowed to set encoding
+    for(uint16_t channel : connection->subscribedChannels)
+    {
+      auto channelMap = staticData.sensorChannelMap.find(channel);
+      if(channelMap == staticData.sensorChannelMap.end())
         continue;
 
-      // TODO: update vehicles when they will listen to encoding
-      m_stateData.sensors[sensor.second].encoding = SensorState::Encoding::CodeAbsent;
+      for(auto sensor : channelMap->second)
+      {
+        if(staticData.sensors[sensor.second].channel != channel)
+          continue;
+
+        // TODO: update vehicles when they will listen to encoding
+        m_stateData.sensors[sensor.second].encoding = SensorState::Encoding::CodeAbsent;
+      }
     }
   }
 
@@ -1930,7 +1984,7 @@ void Simulator::onConnectionRemoved(const std::shared_ptr<SimulatorConnection>& 
   for(auto it : m_stateData.mainSignals)
   {
     MainSignal *s = it.second;
-    if(s->ownerConnectionId != connId)
+    if(isReplica || s->ownerConnectionId != connId)
       continue;
 
     s->ownerConnectionId = invalidIndex;
@@ -1950,7 +2004,7 @@ void Simulator::onConnectionRemoved(const std::shared_ptr<SimulatorConnection>& 
   for(auto it : m_stateData.auxSignals)
   {
     AuxSignal *s = it.second;
-    if(s->ownerConnectionId != connId)
+    if(isReplica || s->ownerConnectionId != connId)
       continue;
 
     s->ownerConnectionId = invalidIndex;
@@ -1962,7 +2016,7 @@ void Simulator::onConnectionRemoved(const std::shared_ptr<SimulatorConnection>& 
   for(auto it : m_stateData.spawns)
   {
     Spawn *s = it.second;
-    if(s->ownerConnectionId != connId)
+    if(isReplica || s->ownerConnectionId != connId)
       continue;
 
     s->ownerConnectionId = invalidIndex;
@@ -4811,7 +4865,7 @@ bool Simulator::requestAddTrain(const std::string &name, const std::vector<Train
   stream << uint16_t(0); // Size placeholder
   serializeTrainAddRequest(stream, name, vehicles, segmentIndex, token, startPos, placement, invertDir);
 
-  sendReplicas(buf);
+  sendToMaster(buf);
   return true;
 }
 
