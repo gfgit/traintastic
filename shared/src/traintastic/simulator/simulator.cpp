@@ -1885,40 +1885,61 @@ void Simulator::setConnectionAsReplica(const std::shared_ptr<SimulatorConnection
   }
 }
 
-void Simulator::removeConnection(const std::shared_ptr<SimulatorConnection>& connection, bool replica)
+void Simulator::removeConnection(const std::shared_ptr<SimulatorConnection>& connection, bool replica, bool remove)
 {
   if(replica)
   {
-    if(auto it = std::find(m_repliacas.begin(), m_repliacas.end(), connection); it != m_repliacas.end())
+    if(remove)
     {
-      m_repliacas.erase(it);
-      onReplicaRemoved(connection);
-    }
-  }
-  else
-  {
-    if(auto it = std::find(m_connections.begin(), m_connections.end(), connection); it != m_connections.end())
-    {
-      m_connections.erase(it);
-      if(getSimMode() == SimMode::Replica)
+      if(auto it = std::find(m_repliacas.begin(), m_repliacas.end(), connection); it != m_repliacas.end())
       {
-        if(m_connections.empty())
-        {
-          doSendReplicaDiscover();
-          doReceiveReplicaDiscover();
-        }
+        m_repliacas.erase(it);
       }
       else
       {
-        onConnectionRemoved(connection);
+        return;
       }
+    }
+
+    connection->stop();
+
+    onReplicaRemoved(connection);
+  }
+  else
+  {
+    if(remove)
+    {
+      if(auto it = std::find(m_connections.begin(), m_connections.end(), connection); it != m_connections.end())
+      {
+        m_connections.erase(it);
+      }
+      else
+      {
+        return;
+      }
+    }
+
+    connection->stop();
+
+    if(getSimMode() == SimMode::Replica)
+    {
+      if(m_connections.empty())
+      {
+        doSendReplicaDiscover();
+        doReceiveReplicaDiscover();
+        onConnectionRemoved({});
+      }
+    }
+    else
+    {
+      onConnectionRemoved(connection);
     }
   }
 }
 
 void Simulator::onConnectionRemoved(const std::shared_ptr<SimulatorConnection>& connection)
 {
-  const size_t connId = connection->connectionId();
+  const size_t connId = connection ? connection->connectionId() : invalidIndex;
 
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
@@ -1928,7 +1949,7 @@ void Simulator::onConnectionRemoved(const std::shared_ptr<SimulatorConnection>& 
   // TODO: does not seem to be called when master connection gets closed???
 
   // Turn off encoded tracks
-  if(isReplica)
+  if(isReplica || !connection)
   {
     for(size_t idx = 0; idx < m_stateData.sensors.size(); idx++)
     {
@@ -2232,20 +2253,8 @@ void Simulator::handShake()
     {
       std::shared_ptr<SimulatorConnection> conn = *it;
       it = m_connections.erase(it);
-      conn->stop();
 
-      if(getSimMode() == SimMode::Replica)
-      {
-        if(m_connections.empty())
-        {
-          doSendReplicaDiscover();
-          doReceiveReplicaDiscover();
-        }
-      }
-      else
-      {
-        onConnectionRemoved(conn);
-      }
+      removeConnection(conn, false, false);
       continue;
     }
 
@@ -2262,8 +2271,8 @@ void Simulator::handShake()
     {
       std::shared_ptr<SimulatorConnection> conn = *it;
       it = m_repliacas.erase(it);
-      conn->stop();
-      onReplicaRemoved(conn);
+
+      removeConnection(conn, true, false);
       continue;
     }
 

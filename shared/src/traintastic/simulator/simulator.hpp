@@ -649,7 +649,7 @@ public:
   void receiveVariableSize(const SimulatorProtocol::Message& message, size_t fromConnId);
 
   void setConnectionAsReplica(const std::shared_ptr<SimulatorConnection>& connection);
-  void removeConnection(const std::shared_ptr<SimulatorConnection>& connection, bool replica);
+  void removeConnection(const std::shared_ptr<SimulatorConnection>& connection, bool replica, bool remove = true);
 
   void sendReplicas(const SimulatorProtocol::Message& message);
   void sendReplicas(QByteArray &buf);
