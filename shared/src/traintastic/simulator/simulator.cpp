@@ -1819,6 +1819,15 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message, s
                                segmentIndex, token, startPos,
                                placement, invertDir);
 
+    if(trainTypeInterface)
+    {
+      for(Train::VehicleItemFull &item : vehicles)
+      {
+        if(item.vehicle.typeIdx != invalidIndex)
+          trainTypeInterface->fillVehicleProperties(&item.vehicle);
+      }
+    }
+
     if(trainName.empty() || segmentIndex == invalidIndex || segmentIndex >= staticData.trackSegments.size()
         || vehicles.empty())
     {
