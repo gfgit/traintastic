@@ -93,7 +93,7 @@ install(TARGETS traintastic-simulator
 
 if(LINUX)
   install(FILES ${CMAKE_SOURCE_DIR}/debian/traintastic-simulator.desktop DESTINATION share/applications)
-  install(FILES ${CMAKE_SOURCE_DIR}/debian/traintastic-simulator_256.png DESTINATION "/opt/traintastic/icons/")
+  install(FILES ${CMAKE_SOURCE_DIR}/debian/traintastic-simulator_256.png DESTINATION share/icons)
 endif()
 
 ### BUILD TYPE ###
