@@ -721,7 +721,8 @@ public:
 private:
   friend struct TrainState;
   constexpr static auto tickRate = std::chrono::milliseconds(1000 / 30);
-  constexpr static auto handShakeRate = std::chrono::milliseconds(3000);
+  constexpr static auto handShakeRateSend = std::chrono::milliseconds(3000);
+  constexpr static auto handShakeRateRecv = std::chrono::milliseconds(10000);
   constexpr static auto signalBlinkRate = std::chrono::milliseconds(275);
   constexpr static auto syncSensorRate = std::chrono::milliseconds(150);
   constexpr static auto syncReplicaRate = std::chrono::milliseconds(220);
@@ -735,7 +736,8 @@ private:
 
   boost::asio::io_context m_ioContext;
   boost::asio::steady_timer m_tickTimer;
-  boost::asio::steady_timer m_handShakeTimer;
+  boost::asio::steady_timer m_handShakeSendTimer;
+  boost::asio::steady_timer m_handShakeRecvTimer;
   boost::asio::ip::tcp::acceptor m_acceptor;
   boost::asio::ip::udp::socket m_socketUDP;
   std::array<char, 8> m_udpBuffer;
@@ -776,7 +778,8 @@ private:
   void onReplicaRemoved(const std::shared_ptr<SimulatorConnection> &connection);
 
   void tick();
-  void handShake();
+  void handShakeSend();
+  void handShakeRecv();
   void blinkSignals();
   void syncSensorState();
   void syncReplicaState();

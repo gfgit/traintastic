@@ -27,6 +27,7 @@
 #include <random>
 #include <algorithm>
 #include <chrono>
+#include <iostream>
 #include "protocol.hpp"
 
 #include "serialization.hpp"
@@ -386,7 +387,8 @@ void clearTrainSignalCache(Simulator::StateData &data, Simulator::Train &train, 
 Simulator::Simulator(const nlohmann::json& world, TrainTypeInterface *iface)
   : staticData(load(world, m_stateData, iface))
   , m_tickTimer{m_ioContext}
-  , m_handShakeTimer{m_ioContext}
+  , m_handShakeSendTimer{m_ioContext}
+  , m_handShakeRecvTimer{m_ioContext}
   , m_acceptor{m_ioContext}
   , m_socketUDP{m_ioContext}
   , m_signalBlinkStateTimer{m_ioContext}
@@ -499,7 +501,8 @@ void Simulator::start(bool discoverable)
       }
 
       tick();
-      handShake();
+      handShakeSend();
+      handShakeRecv();
       //blinkSignals();
       syncSensorState();
       garbageCollectSegmentState();
@@ -533,7 +536,8 @@ void Simulator::stop()
   m_acceptor.close(ec);
 
   m_tickTimer.cancel();
-  m_handShakeTimer.cancel();
+  m_handShakeSendTimer.cancel();
+  m_handShakeRecvTimer.cancel();
   m_signalBlinkStateTimer.cancel();
   m_syncSensorStateTimer.cancel();
   m_syncReplicaStateTimer.cancel();
@@ -2240,15 +2244,43 @@ void Simulator::tick()
   }
 }
 
-void Simulator::handShake()
+void Simulator::handShakeSend()
 {
-  m_handShakeTimer.expires_after(handShakeRate);
-  m_handShakeTimer.async_wait(
+  m_handShakeSendTimer.expires_after(handShakeRateSend);
+  m_handShakeSendTimer.async_wait(
     [this](std::error_code ec)
     {
       if(!ec)
       {
-        handShake();
+        handShakeSend();
+      }
+    });
+
+  auto it = m_connections.begin();
+  while(it != m_connections.end())
+  {
+    if(getSimMode() != SimMode::Replica)
+      (*it)->send(SimulatorProtocol::HandShake(false));
+    it++;
+  }
+
+  it = m_repliacas.begin();
+  while(it != m_repliacas.end())
+  {
+    (*it)->send(SimulatorProtocol::HandShake(false));
+    it++;
+  }
+}
+
+void Simulator::handShakeRecv()
+{
+  m_handShakeRecvTimer.expires_after(handShakeRateRecv);
+  m_handShakeRecvTimer.async_wait(
+    [this](std::error_code ec)
+    {
+      if(!ec)
+      {
+        handShakeRecv();
       }
     });
 
@@ -2260,13 +2292,12 @@ void Simulator::handShake()
       std::shared_ptr<SimulatorConnection> conn = *it;
       it = m_connections.erase(it);
 
+      std::cout << "Hit HANDSHAKE " << conn->remoteEndpoint() << std::endl;
       removeConnection(conn, false, false);
       continue;
     }
 
     (*it)->setHandShakeResponseReceived(false);
-    if(getSimMode() != SimMode::Replica)
-      (*it)->send(SimulatorProtocol::HandShake(false));
     it++;
   }
 
@@ -2283,7 +2314,6 @@ void Simulator::handShake()
     }
 
     (*it)->setHandShakeResponseReceived(false);
-    (*it)->send(SimulatorProtocol::HandShake(false));
     it++;
   }
 }
