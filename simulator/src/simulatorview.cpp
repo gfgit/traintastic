@@ -2482,6 +2482,9 @@ void SimulatorView::timerEvent(QTimerEvent *e)
 
 void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
 {
+  if(!m_simulator)
+    return;
+
   if(e->modifiers() == Qt::AltModifier)
     return; // Keep right click with Alt for panning
 

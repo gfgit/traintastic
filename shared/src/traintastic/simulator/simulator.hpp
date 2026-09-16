@@ -710,7 +710,7 @@ public:
 private:
   friend struct TrainState;
   constexpr static auto tickRate = std::chrono::milliseconds(1000 / 30);
-  constexpr static auto handShakeRate = std::chrono::milliseconds(1000);
+  constexpr static auto handShakeRate = std::chrono::milliseconds(3000);
   constexpr static auto signalBlinkRate = std::chrono::milliseconds(275);
   constexpr static auto syncSensorRate = std::chrono::milliseconds(150);
   constexpr static auto syncReplicaRate = std::chrono::milliseconds(220);
