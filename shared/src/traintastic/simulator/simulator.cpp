@@ -430,18 +430,15 @@ Simulator::~Simulator()
       while(it != m_stateData.trains.end())
       {
         Train *train = it->second;
-        destroyTrain(train, false);
+        destroyTrain(train, true);
         it = m_stateData.trains.erase(it);
       }
     }
 
     {
-      auto it = m_stateData.vehicles.begin();
-      while(it != m_stateData.vehicles.end())
+      while(!m_stateData.vehicles.empty())
       {
-        assert(!it->second->activeTrain);
-        delete it->second;
-        it = m_stateData.vehicles.erase(it);
+        removeVehicle(m_stateData.vehicles.begin()->second);
       }
     }
 
@@ -1977,18 +1974,15 @@ void Simulator::onConnectionRemoved(const std::shared_ptr<SimulatorConnection>& 
       while(it != m_stateData.trains.end())
       {
         Train *train = it->second;
-        destroyTrain(train, false);
+        destroyTrain(train, true);
         it = m_stateData.trains.erase(it);
       }
     }
 
     {
-      auto it = m_stateData.vehicles.begin();
-      while(it != m_stateData.vehicles.end())
+      while(!m_stateData.vehicles.empty())
       {
-        assert(!it->second->activeTrain);
-        delete it->second;
-        it = m_stateData.vehicles.erase(it);
+        removeVehicle(m_stateData.vehicles.begin()->second);
       }
     }
   }
@@ -5966,6 +5960,8 @@ void Simulator::setSimMode(SimMode m)
   }
   else if(mSimMode == SimMode::Replica)
   {
+    m_stateData.powerOn = false; // Wait Master
+
     // Stop UDP discovery
     boost::system::error_code ec;
     m_socketUDP.close(ec);
