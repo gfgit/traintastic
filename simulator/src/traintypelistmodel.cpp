@@ -3,6 +3,7 @@
 #include "trainsmodel.h"
 
 #include <QRandomGenerator>
+#include <QNetworkInterface>
 
 TrainTypeListModel::TrainTypeListModel(VehicleTypesModel *m, TrainsModel *trains, QObject *parent)
   : QAbstractListModel(parent)
@@ -235,4 +236,21 @@ void TrainTypeListModel::fillVehicleProperties(Simulator::Vehicle *vehicle)
 void TrainTypeListModel::onAddTrainReply(quint32 trainId, quint32 token, bool isError)
 {
   mTrainsModel->onAddTrainReply(trainId, token, isError);
+}
+
+void TrainTypeListModel::getBroadcastAddresses(std::vector<boost::asio::ip::address> &broadcastAddresses) const
+{
+  const QList<QNetworkInterface> ifaces = QNetworkInterface::allInterfaces();
+  for(const QNetworkInterface &iface : ifaces)
+  {
+    const QList<QNetworkAddressEntry> entries = iface.addressEntries();
+    for(const QNetworkAddressEntry &entry : entries)
+    {
+      QHostAddress broadcast = entry.broadcast();
+      if(!broadcast.isNull() && broadcast.protocol() == QHostAddress::IPv4Protocol)
+      {
+        broadcastAddresses.push_back(boost::asio::ip::address_v4(broadcast.toIPv4Address()));
+      }
+    }
+  }
 }

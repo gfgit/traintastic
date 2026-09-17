@@ -715,6 +715,7 @@ private:
   constexpr static auto syncSensorRate = std::chrono::milliseconds(150);
   constexpr static auto syncReplicaRate = std::chrono::milliseconds(220);
   constexpr static auto syncReplicaFullRate = std::chrono::milliseconds(1500);
+  constexpr static auto replicaDiscoverSendRate = std::chrono::milliseconds(1000);
   constexpr static auto garbageCollectRate = std::chrono::milliseconds(500);
 
   constexpr static float defaultSpeedKmH = 200;
@@ -729,11 +730,14 @@ private:
   std::array<char, 8> m_udpBuffer;
   boost::asio::ip::udp::endpoint m_remoteEndpoint;
 
+  std::vector<boost::asio::ip::address> broadcastAddresses;
+
   boost::asio::steady_timer m_signalBlinkStateTimer;
   boost::asio::steady_timer m_syncSensorStateTimer;
   boost::asio::steady_timer m_syncReplicaStateTimer;
   boost::asio::steady_timer m_syncReplicaTrainFullStateTimer;
   boost::asio::steady_timer m_garbageCollectTimer;
+  boost::asio::steady_timer m_replicaDiscoverSendTimer;
 
   std::thread m_thread;
   mutable std::recursive_mutex m_stateMutex;
@@ -824,6 +828,8 @@ public:
   virtual void fillVehicleProperties(Simulator::Vehicle *vehicle) = 0;
 
   virtual void onAddTrainReply(quint32 trainId, quint32 token, bool isError) = 0;
+
+  virtual void getBroadcastAddresses(std::vector<boost::asio::ip::address> &broadcastAddresses) const = 0;
 };
 
 

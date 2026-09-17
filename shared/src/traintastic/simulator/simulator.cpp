@@ -394,6 +394,7 @@ Simulator::Simulator(const nlohmann::json& world, TrainTypeInterface *iface)
   , m_syncReplicaStateTimer{m_ioContext}
   , m_syncReplicaTrainFullStateTimer{m_ioContext}
   , m_garbageCollectTimer{m_ioContext}
+  , m_replicaDiscoverSendTimer{m_ioContext}
   , trainTypeInterface(iface)
 {
   loadTrains(world);
@@ -550,6 +551,7 @@ void Simulator::stop()
   m_syncReplicaStateTimer.cancel();
   m_syncReplicaTrainFullStateTimer.cancel();
   m_garbageCollectTimer.cancel();
+  m_replicaDiscoverSendTimer.cancel();
   if(m_thread.joinable())
   {
     m_thread.join();
@@ -1934,6 +1936,7 @@ void Simulator::removeConnection(const std::shared_ptr<SimulatorConnection>& con
     {
       if(m_connections.empty())
       {
+        broadcastAddresses.clear();
         doSendReplicaDiscover();
         doReceiveReplicaDiscover();
         onConnectionRemoved({});
@@ -2144,17 +2147,29 @@ void Simulator::doSendReplicaDiscover()
   if(!m_connections.empty())
     return;
 
-  boost::asio::ip::udp::endpoint udpServer(boost::asio::ip::address_v4::broadcast(), defaultPort);
+  m_replicaDiscoverSendTimer.expires_after(replicaDiscoverSendRate);
+  m_replicaDiscoverSendTimer.async_wait(
+      [this](std::error_code ec)
+      {
+        if(!ec)
+        {
+          doSendReplicaDiscover();
+        }
+      });
 
-  m_socketUDP.async_send_to(boost::asio::buffer(ReplicaRequestMessage, sizeof(ReplicaRequestMessage)),
-                            udpServer,
-                            [this](const boost::system::error_code& ec2, std::size_t bytesTransferred)
+  if(broadcastAddresses.empty() && trainTypeInterface)
+    trainTypeInterface->getBroadcastAddresses(broadcastAddresses);
+
+  for(const auto &address : broadcastAddresses)
   {
-    assert(!ec2);
-
-    if(!ec2 && bytesTransferred == sizeof(ReplicaRequestMessage))
-      doSendReplicaDiscover();
-  });
+    boost::asio::ip::udp::endpoint udpServer(address, defaultPort);
+    m_socketUDP.async_send_to(boost::asio::buffer(ReplicaRequestMessage, sizeof(ReplicaRequestMessage)),
+                              udpServer,
+                              [this](const boost::system::error_code& /*ec2*/, std::size_t /*bytesTransferred*/)
+                              {
+                                // no-op
+                              });
+  }
 }
 
 void Simulator::doReceiveReplicaDiscover()
@@ -2313,6 +2328,9 @@ void Simulator::blinkSignals()
 
 void Simulator::syncSensorState()
 {
+  if(getSimMode() == SimMode::Replica)
+    return;
+
   m_syncSensorStateTimer.expires_after(syncSensorRate);
   m_syncSensorStateTimer.async_wait(
     [this](std::error_code ec)
@@ -5932,6 +5950,15 @@ void Simulator::setSimMode(SimMode m)
     }
   }
 
+  if(oldMode == SimMode::Replica)
+  {
+    m_replicaDiscoverSendTimer.cancel();
+  }
+  else
+  {
+    m_syncSensorStateTimer.cancel();
+  }
+
   if(mSimMode == SimMode::Master)
   {
     syncReplicaState();
@@ -5961,8 +5988,14 @@ void Simulator::setSimMode(SimMode m)
     if(ec)
       assert(false);
 
+    broadcastAddresses.clear();
     doSendReplicaDiscover();
     doReceiveReplicaDiscover();
+  }
+
+  if(mSimMode != SimMode::Replica)
+  {
+    syncSensorState();
   }
 }
 

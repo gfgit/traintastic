@@ -57,6 +57,8 @@ public:
 
   void onAddTrainReply(quint32 trainId, quint32 token, bool isError) override;
 
+  void getBroadcastAddresses(std::vector<boost::asio::ip::address> &broadcastAddresses) const override;
+
 private:
   VehicleTypesModel *vehicleTypesModel = nullptr;
   TrainsModel *mTrainsModel = nullptr;
