@@ -1982,7 +1982,7 @@ void SimulatorView::drawTrains(QPainter *painter)
   for(auto it : m_simulator->stateData().vehicles)
   {
     const Simulator::Vehicle* vehicle = it.second;
-    const Simulator::Train *const train = vehicle->activeTrain;
+    const Simulator::Train *train = m_simulator->stateData().getTrainById_unlocked(vehicle->activeTrainId);
     const auto& vehicleState = vehicle->state;
     const float length = vehicle->length;
 
@@ -2506,16 +2506,17 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
     std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
 
     Simulator::Vehicle *vehicle = m_simulator->getVehicleNear(idx, posInSeg, 5);
-    if(vehicle && vehicle->activeTrain)
+    if(vehicle && vehicle->activeTrainId != Simulator::invalidTrainId)
     {
-      m_trainUnderMouseId = vehicle->activeTrain->trainId;
+      m_trainUnderMouseId = vehicle->activeTrainId;
       m_trainUnderMouseVehicleIdx = Simulator::invalidIndex;
 
-      trainName = QString::fromStdString(vehicle->activeTrain->name);
-      isManualModeStopped = vehicle->activeTrain->state.isManualAndStopped();
+      Simulator::Train *train = m_simulator->stateData().getTrainById_unlocked(vehicle->activeTrainId);
+      trainName = QString::fromStdString(train->name);
+      isManualModeStopped = train->state.isManualAndStopped();
 
       size_t vehicleIdx = 0;
-      for(const Simulator::Train::VehicleItem& item : vehicle->activeTrain->vehicles)
+      for(const Simulator::Train::VehicleItem& item : train->vehicles)
       {
         if(item.vehicle == vehicle)
         {
@@ -2525,11 +2526,11 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
         vehicleIdx++;
       }
 
-      if(isManualModeStopped && !vehicle->activeTrain->vehicles.empty())
+      if(isManualModeStopped && !train->vehicles.empty())
       {
         auto findNearVehicleToCouple = [&](bool isTrainHead) -> bool
         {
-          const Simulator::Train::VehicleItem &item = isTrainHead ? vehicle->activeTrain->vehicles.front() : vehicle->activeTrain->vehicles.back();
+          const Simulator::Train::VehicleItem &item = isTrainHead ? train->vehicles.front() : train->vehicles.back();
           Simulator::VehicleState::Face &coupleFace = (item.reversed != isTrainHead) ?
                                                          vehicle->state.front :
                                                          vehicle->state.rear;
@@ -2550,26 +2551,27 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
 
           // TODO: check if distance is trainCouplingLength
 
-          if(!otherVehicle->activeTrain)
+          if(otherVehicle->activeTrainId == Simulator::invalidTrainId)
             return true;
 
-          if(vehicle->activeTrain == otherVehicle->activeTrain)
+          if(vehicle->activeTrainId == otherVehicle->activeTrainId)
             return false;
 
-          return otherVehicle->activeTrain->state.isManualAndStopped();
+          Simulator::Train *otherTrain = m_simulator->stateData().getTrainById_unlocked(otherVehicle->activeTrainId);
+          return otherTrain->state.isManualAndStopped();
         };
 
-        if(vehicle == vehicle->activeTrain->vehicles.front().vehicle)
+        if(vehicle == train->vehicles.front().vehicle)
           canCoupleFwd = findNearVehicleToCouple(true);
         else
           canSplitFwd = true;
 
-        if(vehicle == vehicle->activeTrain->vehicles.back().vehicle)
+        if(vehicle == train->vehicles.back().vehicle)
           canCoupleRear = findNearVehicleToCouple(false);
         else
           canSplitRear = true;
 
-        if(vehicle->activeTrain->state.reverse)
+        if(train->state.reverse)
         {
           std::swap(canCoupleFwd, canCoupleRear);
           std::swap(canSplitFwd, canSplitRear);

@@ -507,11 +507,11 @@ public:
 
   struct Vehicle
   {
-    Train *activeTrain = nullptr;
     VehicleState state;
     quint32 vehicleId = invalidTrainId;
     float length = 0.0f;
     size_t typeIdx = invalidIndex;
+    quint32 activeTrainId = invalidTrainId;
     Color color = Color::Blue;
   };
 
@@ -544,8 +544,8 @@ public:
     {
       for(const VehicleItem& item : vehicles)
       {
-        assert(item.vehicle->activeTrain == this);
-        item.vehicle->activeTrain = nullptr;
+        assert(item.vehicle->activeTrainId == trainId);
+        item.vehicle->activeTrainId = invalidTrainId;
       }
     }
 
@@ -591,6 +591,18 @@ public:
     std::unordered_map<std::string, AuxSignal *, StringHash, StringEqual> auxSignals;
     std::unordered_map<size_t, Spawn *> spawns;
     std::unordered_map<size_t, SegmentVehicles> segmentVehicles;
+
+    inline Simulator::Train *getTrainById_unlocked(quint32 trainId) const
+    {
+      if(trainId == invalidTrainId)
+        return nullptr;
+
+      auto it = trains.find(trainId);
+      if(it == trains.end())
+        return nullptr;
+
+      return it->second;
+    }
   };
 
   enum class SimMode

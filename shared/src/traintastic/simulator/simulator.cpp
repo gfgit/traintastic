@@ -1661,7 +1661,7 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message, s
       while (nVehiclesToRemove > 0)
       {
         Vehicle *vehicle = train->vehicles.back().vehicle;
-        vehicle->activeTrain = nullptr;
+        vehicle->activeTrainId = invalidTrainId;
         vehiclesToRemove.insert(vehicle->vehicleId);
         train->vehicles.pop_back();
         nVehiclesToRemove--;
@@ -1719,14 +1719,15 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message, s
 
     for(const Simulator::Train::VehicleItem &v : train->vehicles)
     {
-      if(v.vehicle->activeTrain && v.vehicle->activeTrain != train)
+      if(v.vehicle->activeTrainId != invalidTrainId && v.vehicle->activeTrainId != train->trainId)
       {
-        auto &otherVehicles = v.vehicle->activeTrain->vehicles;
+        Train *otherTrain = m_stateData.getTrainById_unlocked(v.vehicle->activeTrainId);
+        auto &otherVehicles = otherTrain->vehicles;
         if(otherVehicles.size() == 1 && otherVehicles.front().vehicle == v.vehicle)
         {
           // After removing this vehicle, train will be empty
-          removeTrain(v.vehicle->activeTrain->trainId, false, train->trainId);
-          v.vehicle->activeTrain = nullptr;
+          removeTrain(v.vehicle->activeTrainId, false, train->trainId);
+          v.vehicle->activeTrainId = invalidTrainId;
         }
         else
         {
@@ -1735,14 +1736,14 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message, s
             if(it->vehicle == v.vehicle)
             {
               otherVehicles.erase(it);
-              v.vehicle->activeTrain = nullptr;
+              v.vehicle->activeTrainId = invalidTrainId;
               break;
             }
           }
         }
       }
 
-      v.vehicle->activeTrain = train;
+      v.vehicle->activeTrainId = train->trainId;
     }
 
     for(quint32 vehicleId : vehiclesToRemove)
@@ -1860,7 +1861,7 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message, s
 
     // Set direction
     if(invertDir)
-      setTrainDirection(m_stateData.trains.at(trainId), true);
+      setTrainDirection(m_stateData.getTrainById_unlocked(trainId), true);
 
     // Success
     for(const std::shared_ptr<SimulatorConnection>& connection : m_repliacas)
@@ -3021,11 +3022,11 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
       }
     }
 
-    if(!isReplica && isFirst_ && vehicle->activeTrain)
+    if(!isReplica && isFirst_ && vehicle->activeTrainId != invalidTrainId)
     {
       // We are train head, check other trains for collision
 
-      auto scanSegment = [&](Train *activeTrain, size_t faceSegmentIndex,
+      auto scanSegment = [&](quint32 activeTrainId, size_t faceSegmentIndex,
                              bool goForward, float startDistance, float endDistance) -> bool
       {
         auto it = m_stateData.segmentVehicles.find(faceSegmentIndex);
@@ -3037,7 +3038,7 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
 
         for(Vehicle *otherVehicle : segVec.vehicles)
         {
-          if(otherVehicle->activeTrain == activeTrain)
+          if(otherVehicle->activeTrainId == activeTrainId)
             continue; // Same train, skip
 
           otherTrainExists = true;
@@ -3072,7 +3073,7 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
 
       if(!train_.state.skipCollisionDetection)
       {
-        if(!scanSegment(vehicle->activeTrain, face.segmentIndex, dirFwd, face.distance, distance))
+        if(!scanSegment(vehicle->activeTrainId, face.segmentIndex, dirFwd, face.distance, distance))
           train_.state.skipCollisionDetection = true; // We are the only train in segment, skip further checks
       }
 
@@ -3088,7 +3089,7 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
           goForward = nextSegment.nextSegmentIndex[0] == otherSegmentIdx;
 
           const float segLength = getSegmentLength(nextSegment, m_stateData);
-          scanSegment(vehicle->activeTrain, nextSegmentIndex,
+          scanSegment(vehicle->activeTrainId, nextSegmentIndex,
                       goForward, goForward ? -startDistance : (segLength + startDistance), goForward ? -endDistance : (segLength + endDistance));
 
           searchDist -= segLength;
@@ -3326,11 +3327,12 @@ void Simulator::maybeAddVehicleSegment(Vehicle *vehicle, size_t segmentIdx)
 
   for(Vehicle *other : seg.vehicles)
   {
-    if(!other->activeTrain || other->activeTrain == vehicle->activeTrain)
+    if(other->activeTrainId == invalidTrainId || other->activeTrainId == vehicle->activeTrainId)
       continue;
 
     // Notify other trains we are in same segment so they need to check again
-    other->activeTrain->state.skipCollisionDetection = false;
+    Train *otherTrain = m_stateData.getTrainById_unlocked(other->activeTrainId);
+    otherTrain->state.skipCollisionDetection = false;
   }
 
   seg.vehicles.insert(vehicle);
@@ -3532,7 +3534,7 @@ void Simulator::doSpawnTrain(Spawn *spawn)
               vehicles, spawn->segmentIndex, outTrainId, spawn->posInSegment, placement))
   {
     // DONE!
-    Train *train = m_stateData.trains.at(outTrainId);
+    Train *train = m_stateData.getTrainById_unlocked(outTrainId);
     setTrainDirection(train, !spawn->forward);
     setTrainMode(train, TrainState::Mode::Automatic);
 
@@ -4791,6 +4793,9 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
     }
   };
 
+  // Generate Train ID
+  train->trainId = m_stateData.mLastTrainId++;
+
   // Add wagons to train only when sure train will be added
   for(const Train::VehicleItemFull& item : vehicles)
   {
@@ -4799,6 +4804,7 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
     if(!vehicle)
       continue;
 
+    vehicle->activeTrainId = train->trainId;
     train->vehicles.push_back({vehicle, item.reversed});
   }
 
@@ -4849,8 +4855,6 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
     {
       std::swap(vehicleState.front, vehicleState.rear);
     }
-
-    item.vehicle->activeTrain = train.get();
   }
 
   if(train->speedMax < 0.0001)
@@ -4864,7 +4868,6 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
       train->state.mode = TrainState::Mode::Manual;
   }
 
-  train->trainId = m_stateData.mLastTrainId++;
   trainIdOut = train->trainId;
   auto pair = m_stateData.trains.insert({train->trainId, train.release()});
 
@@ -4970,7 +4973,7 @@ bool Simulator::removeVehicle(Vehicle *vehicle)
     if(it->second != vehicle)
         return false;
 
-    if(vehicle->activeTrain)
+    if(vehicle->activeTrainId != invalidTrainId)
         return false;
 
     // Free track sensors
@@ -5174,7 +5177,7 @@ void Simulator::destroyTrain(Train *train, bool removeWagons)
 
   for(const auto &item : train->vehicles)
   {
-      item.vehicle->activeTrain = nullptr;
+      item.vehicle->activeTrainId = invalidTrainId;
       if(removeWagons)
           removeVehicle(item.vehicle);
   }
@@ -5341,7 +5344,7 @@ void Simulator::loadTrains(const nlohmann::json &world)
         //if(const auto it = m_stateData.vehicles.find(vehicleName); it != m_stateData.vehicles.end())
         //  vehicle = it->second;
 
-        if(!vehicle || vehicle->activeTrain)
+        if(!vehicle || vehicle->activeTrainId != invalidTrainId)
           continue;
 
         Train::VehicleItem item{vehicle, false};
@@ -5623,6 +5626,7 @@ bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const b
   remainingTrain->speedMax = trainToSplit->speedMax;
   remainingTrain->state.mode = TrainState::Mode::Manual;
   remainingTrain->state.reverse = trainToSplit->state.reverse;
+  remainingTrain->trainId = m_stateData.mLastTrainId++;
 
   if(fwd)
   {
@@ -5631,7 +5635,7 @@ bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const b
     for(size_t i = 0; i < vehicleIdx; i++)
     {
       remainingTrain->vehicles.push_back(trainToSplit->vehicles.at(i));
-      remainingTrain->vehicles.back().vehicle->activeTrain = remainingTrain.get();
+      remainingTrain->vehicles.back().vehicle->activeTrainId = remainingTrain->trainId;
     }
 
     trainToSplit->vehicles.erase(trainToSplit->vehicles.begin(), trainToSplit->vehicles.begin() + vehicleIdx);
@@ -5643,7 +5647,7 @@ bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const b
     for(size_t i = vehicleIdx + 1; i < trainToSplit->vehicles.size(); i++)
     {
       remainingTrain->vehicles.push_back(trainToSplit->vehicles.at(i));
-      remainingTrain->vehicles.back().vehicle->activeTrain = remainingTrain.get();
+      remainingTrain->vehicles.back().vehicle->activeTrainId = remainingTrain->trainId;
     }
 
     trainToSplit->vehicles.erase(trainToSplit->vehicles.begin() + (vehicleIdx + 1), trainToSplit->vehicles.end());
@@ -5674,7 +5678,6 @@ bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const b
     trainTypeInterface->setupTrainSpeedPowered(remainingTrain.get());
   }
 
-  remainingTrain->trainId = m_stateData.mLastTrainId++;
   trainIdOut = remainingTrain->trainId;
   auto pair = m_stateData.trains.insert({remainingTrain->trainId, remainingTrain.release()});
 
@@ -5721,10 +5724,10 @@ bool Simulator::coupleTrain(Train *train, bool fwd, quint32& removedTrainIdOut)
     newDist += (-halfCouplingLength - 0.01);
 
   Simulator::Vehicle *otherVehicle = getVehicleNear(faceToCouple.segmentIndex, newDist, halfCouplingLength);
-  if(!otherVehicle || otherVehicle->activeTrain == train)
+  if(!otherVehicle || otherVehicle->activeTrainId == train->trainId)
     return false;
 
-  Train *trainToRemove = otherVehicle->activeTrain;
+  Train *trainToRemove = m_stateData.getTrainById_unlocked(otherVehicle->activeTrainId);
   if(trainToRemove && !trainToRemove->state.isManualAndStopped())
     return false;
 
@@ -5822,7 +5825,7 @@ bool Simulator::coupleTrain(Train *train, bool fwd, quint32& removedTrainIdOut)
     vehiclesToAdd = std::move(sourceVehicles);
     for(Train::VehicleItem &item : vehiclesToAdd)
     {
-      item.vehicle->activeTrain = train;
+      item.vehicle->activeTrainId = train->trainId;
       if(flipList)
       {
         // When flipping list, also flip each vehicle and flit its segment orientation
@@ -5884,7 +5887,7 @@ bool Simulator::coupleTrain(Train *train, bool fwd, quint32& removedTrainIdOut)
       otherVehicle->state.rear.segmentDirectionInverted = !otherVehicle->state.rear.segmentDirectionInverted;
     }
 
-    otherVehicle->activeTrain = train;
+    otherVehicle->activeTrainId = train->trainId;
     vehiclesToAdd.push_back({otherVehicle, flipList});
     train->length += otherVehicle->length;
   }
