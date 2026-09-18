@@ -2565,7 +2565,7 @@ void Simulator::garbageCollectSegmentState()
   auto it = m_stateData.segmentVehicles.begin();
   while(it != m_stateData.segmentVehicles.end())
   {
-    if(it->second.vehicles.empty())
+    if(it->second.vehicleIDs.empty())
       it = m_stateData.segmentVehicles.erase(it);
     else
       it++;
@@ -3036,9 +3036,10 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
         const SegmentVehicles &segVec = it->second;
         bool otherTrainExists = false;
 
-        for(Vehicle *otherVehicle : segVec.vehicles)
+        for(quint32 otherId : segVec.vehicleIDs)
         {
-          if(otherVehicle->activeTrainId == activeTrainId)
+          Vehicle *otherVehicle = m_stateData.vehicles.at(otherId);
+          if(!otherVehicle || otherVehicle->activeTrainId == activeTrainId)
             continue; // Same train, skip
 
           otherTrainExists = true;
@@ -3322,12 +3323,13 @@ void Simulator::maybeAddVehicleSegment(Vehicle *vehicle, size_t segmentIdx)
     it = m_stateData.segmentVehicles.insert({segmentIdx, {}}).first;
 
   SegmentVehicles &seg = it->second;
-  if(seg.vehicles.contains(vehicle))
+  if(seg.vehicleIDs.contains(vehicle->vehicleId))
     return;
 
-  for(Vehicle *other : seg.vehicles)
+  for(quint32 otherId : seg.vehicleIDs)
   {
-    if(other->activeTrainId == invalidTrainId || other->activeTrainId == vehicle->activeTrainId)
+    Vehicle *other = m_stateData.vehicles.at(otherId);
+    if(!other || other->activeTrainId == invalidTrainId || other->activeTrainId == vehicle->activeTrainId)
       continue;
 
     // Notify other trains we are in same segment so they need to check again
@@ -3335,7 +3337,7 @@ void Simulator::maybeAddVehicleSegment(Vehicle *vehicle, size_t segmentIdx)
     otherTrain->state.skipCollisionDetection = false;
   }
 
-  seg.vehicles.insert(vehicle);
+  seg.vehicleIDs.insert(vehicle->vehicleId);
 }
 
 void Simulator::maybeRemoveVehicleSegment(Vehicle *vehicle, size_t segmentIdx)
@@ -3348,9 +3350,9 @@ void Simulator::maybeRemoveVehicleSegment(Vehicle *vehicle, size_t segmentIdx)
     return;
 
   SegmentVehicles &seg = it->second;
-  auto it2 = seg.vehicles.find(vehicle);
-  if(it2 != seg.vehicles.end())
-    seg.vehicles.erase(it2);
+  auto it2 = seg.vehicleIDs.find(vehicle->vehicleId);
+  if(it2 != seg.vehicleIDs.end())
+    seg.vehicleIDs.erase(it2);
 }
 
 void Simulator::updateSensors()
@@ -5372,11 +5374,15 @@ Simulator::Vehicle *Simulator::getVehicleNearHelper(size_t segmentIdx, float pos
     return nullptr;
 
   SegmentVehicles &seg = it->second;
-  if(seg.vehicles.empty())
+  if(seg.vehicleIDs.empty())
     return nullptr;
 
-  for(Vehicle *vehicle : seg.vehicles)
+  for(quint32 otherId : seg.vehicleIDs)
   {
+    Vehicle *vehicle = m_stateData.vehicles.at(otherId);
+    if(!vehicle)
+      continue;
+
     const VehicleState::Face &front = vehicle->state.front;
     const VehicleState::Face &rear = vehicle->state.rear;
 

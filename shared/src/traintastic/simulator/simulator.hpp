@@ -569,7 +569,7 @@ public:
 
   struct SegmentVehicles
   {
-    std::unordered_set<Vehicle *> vehicles;
+    std::unordered_set<quint32> vehicleIDs;
   };
 
   struct StateData
