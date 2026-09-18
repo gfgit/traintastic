@@ -158,9 +158,9 @@ void TrainsModel::setSimulator(Simulator *sim)
         for(const auto& it : mSimulator->stateData().trains)
         {
             Train train;
-            train.name = QString::fromStdString(it.second.name);
-            train.speedKmH = it.second.state.speed;
-            if(it.second.state.reverse)
+            train.name = QString::fromStdString(it.second->name);
+            train.speedKmH = it.second->state.speed;
+            if(it.second->state.reverse)
                 train.speedKmH = -train.speedKmH;
 
             mTrains.insert(train.name, train);
