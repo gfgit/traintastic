@@ -230,7 +230,7 @@ private:
 private slots:
   void tick();
   void trainAddedRemoved(bool add, quint32 trainId, quint32 suggestedTrainId);
-  void userAskRemoveTrain(size_t trainIdx);
+  void userAskRemoveTrain(quint32 trainId);
   void doSetCurrentTrainIndex(quint32 newTrainId);
 };
 
