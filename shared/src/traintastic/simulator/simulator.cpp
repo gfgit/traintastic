@@ -441,15 +441,6 @@ Simulator::~Simulator()
         removeVehicle(m_stateData.vehicles.begin()->second);
       }
     }
-
-    {
-        auto it = m_stateData.spawns.begin();
-        while(it != m_stateData.spawns.end())
-        {
-            delete it->second;
-            it = m_stateData.spawns.erase(it);
-        }
-    }
   }
 }
 
@@ -1339,74 +1330,77 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
   {
     const auto& m = static_cast<const OwnSpawn&>(message);
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-    for(auto it : m_stateData.spawns)
+
+    auto it = m_stateData.spawns.find(m.address);
+    if(it == m_stateData.spawns.end())
+      break;
+
+    SpawnState &spawnState = it->second;
+    if(spawnState.ownerConnectionId != invalidIndex)
+      break;
+
+    spawnState.ownerConnectionId = fromConnId;
+    spawnState.state = (spawnState.waitingResetCount > 0) ?
+                           SpawnState::State::WaitingReset :
+                           SpawnState::State::Ready;
+
+    for(const auto& connection : m_connections)
     {
-      Spawn *s = it.second;
-      if(s->ownerConnectionId != invalidIndex || s->address != m.address)
+      if(connection->connectionId() != fromConnId)
         continue;
 
-      s->ownerConnectionId = fromConnId;
+      uint8_t state = SpawnStateChange::Reset;
+      if(spawnState.state == SpawnState::State::Ready)
+        state = SpawnStateChange::Ready;
+      else if(spawnState.state == SpawnState::State::WaitingReset)
+        state = SpawnStateChange::WaitingReset;
 
-      s->state = (s->waitingResetCount > 0) ?
-            Spawn::State::WaitingReset :
-            Spawn::State::Ready;
-
-      for(const auto& connection : m_connections)
-      {
-        if(connection->connectionId() != fromConnId)
-          continue;
-
-        uint8_t state = SpawnStateChange::Reset;
-        if(s->state == Spawn::State::Ready)
-          state = SpawnStateChange::Ready;
-        else if(s->state == Spawn::State::WaitingReset)
-          state = SpawnStateChange::WaitingReset;
-
-        connection->send(SimulatorProtocol::SpawnStateChange(s->address, state));
-        break;
-      }
-
+      connection->send(SimulatorProtocol::SpawnStateChange(m.address, state));
       break;
     }
+
     break;
   }
   case OpCode::SpawnStateChange:
   {
     const auto& m = static_cast<const SpawnStateChange&>(message);
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-    for(auto it : m_stateData.spawns)
+
+    auto it = m_stateData.spawns.find(m.address);
+    if(it == m_stateData.spawns.end())
+      break;
+
+    SpawnState &spawnState = it->second;
+    if(spawnState.ownerConnectionId != fromConnId)
+      break;
+
+    if(spawnState.state == SpawnState::State::WaitingReset && spawnState.waitingResetCount == SpawnState::MAX_WAITING_RESET)
     {
-      Spawn *s = it.second;
-      if(s->ownerConnectionId != fromConnId || s->address != m.address)
-        continue;
-
-      if(s->state == Spawn::State::WaitingReset && s->waitingResetCount == Spawn::MAX_WAITING_RESET)
-      {
-        if(m.state == SpawnStateChange::Reset) // Start resetting
-          s->waitingResetCount = Spawn::START_WAITING_RESET;
-        continue;
-      }
-
-      if(s->state != Spawn::State::Ready || m.state != SpawnStateChange::RequestActivate)
-        continue;
-
-      doSpawnTrain(s);
-
-      for(const auto& connection : m_connections)
-      {
-        if(connection->connectionId() != fromConnId)
-          continue;
-
-        uint8_t state = SpawnStateChange::Reset;
-        if(s->state == Spawn::State::Ready)
-          state = SpawnStateChange::Ready;
-        else if(s->state == Spawn::State::WaitingReset)
-          state = SpawnStateChange::WaitingReset;
-
-        connection->send(SimulatorProtocol::SpawnStateChange(s->address, state));
-        break;
-      }
+      if(m.state == SpawnStateChange::Reset) // Start resetting
+        spawnState.waitingResetCount = SpawnState::START_WAITING_RESET;
+      break;
     }
+
+    if(spawnState.state != SpawnState::State::Ready || m.state != SpawnStateChange::RequestActivate)
+      break;
+
+    doSpawnTrain(m.address);
+
+    for(const auto& connection : m_connections)
+    {
+      if(connection->connectionId() != fromConnId)
+        continue;
+
+      uint8_t state = SpawnStateChange::Reset;
+      if(spawnState.state == SpawnState::State::Ready)
+        state = SpawnStateChange::Ready;
+      else if(spawnState.state == SpawnState::State::WaitingReset)
+        state = SpawnStateChange::WaitingReset;
+
+      connection->send(SimulatorProtocol::SpawnStateChange(m.address, state));
+      break;
+    }
+
     break;
   }
   case OpCode::TrainSpeedFactorChanged:
@@ -2047,14 +2041,14 @@ void Simulator::onConnectionRemoved(const std::shared_ptr<SimulatorConnection>& 
   }
 
   // Turn off owned spawns
-  for(auto it : m_stateData.spawns)
+  for(auto &it : m_stateData.spawns)
   {
-    Spawn *s = it.second;
-    if(isReplica || s->ownerConnectionId != connId)
+    SpawnState &spawnState = it.second;
+    if(isReplica || spawnState.ownerConnectionId != connId)
       continue;
 
-    s->ownerConnectionId = invalidIndex;
-    s->state = Spawn::State::Inactive;
+    spawnState.ownerConnectionId = invalidIndex;
+    spawnState.state = SpawnState::State::Inactive;
   }
 }
 
@@ -2418,23 +2412,24 @@ void Simulator::syncSensorState()
 
   if(mLastSpawnSyncIdx < m_stateData.spawns.size())
   {
-    auto it = m_stateData.spawns.begin();
+    auto it = staticData.spawns.begin();
     std::advance(it, mLastSpawnSyncIdx);
 
-    Spawn *spawn = it->second;
+    const Spawn &spawn = it->second;
+    SpawnState &spawnState = m_stateData.spawns.at(spawn.address);
 
     for(const auto& connection : m_connections)
     {
-      if(connection->connectionId() != spawn->ownerConnectionId)
+      if(connection->connectionId() != spawnState.ownerConnectionId)
         continue;
 
       uint8_t state = SimulatorProtocol::SpawnStateChange::Reset;
-      if(spawn->state == Spawn::State::Ready)
+      if(spawnState.state == SpawnState::State::Ready)
         state = SimulatorProtocol::SpawnStateChange::Ready;
-      else if(spawn->state == Spawn::State::WaitingReset)
+      else if(spawnState.state == SpawnState::State::WaitingReset)
         state = SimulatorProtocol::SpawnStateChange::WaitingReset;
 
-      connection->send(SimulatorProtocol::SpawnStateChange(spawn->address, state));
+      connection->send(SimulatorProtocol::SpawnStateChange(spawn.address, state));
       break;
     }
   }
@@ -3443,21 +3438,26 @@ void Simulator::updateSensors()
 
 void Simulator::updateSpawns()
 {
-  for(auto it : m_stateData.spawns)
+  auto it = staticData.spawns.begin();
+  auto it2 = m_stateData.spawns.begin();
+
+  for(; it != staticData.spawns.end(); it++, it2++)
   {
-    Spawn* spawn = it.second;
-    if(spawn->waitingResetCount > 0 && spawn->waitingResetCount != Spawn::MAX_WAITING_RESET)
+    const Spawn &spawn = it->second;
+    SpawnState &spawnState = it2->second;
+
+    if(spawnState.waitingResetCount > 0 && spawnState.waitingResetCount != SpawnState::MAX_WAITING_RESET)
     {
-      spawn->waitingResetCount--;
-      if(spawn->waitingResetCount == 0 && spawn->ownerConnectionId != invalidIndex)
+      spawnState.waitingResetCount--;
+      if(spawnState.waitingResetCount == 0 && spawnState.ownerConnectionId != invalidIndex)
       {
-        spawn->state = Spawn::State::Ready;
+        spawnState.state = SpawnState::State::Ready;
         for(const auto& connection : m_connections)
         {
-          if(connection->connectionId() != spawn->ownerConnectionId)
+          if(connection->connectionId() != spawnState.ownerConnectionId)
             continue;
 
-          connection->send(SimulatorProtocol::SpawnStateChange(spawn->address,
+          connection->send(SimulatorProtocol::SpawnStateChange(spawn.address,
                                                                SimulatorProtocol::SpawnStateChange::Ready));
           break;
         }
@@ -3466,16 +3466,23 @@ void Simulator::updateSpawns()
   }
 }
 
-void Simulator::doSpawnTrain(Spawn *spawn)
+void Simulator::doSpawnTrain(uint16_t spawnAddress)
 {
-  if(spawn->state != Spawn::State::Ready)
+  auto it = staticData.spawns.find(spawnAddress);
+  if(it == staticData.spawns.end())
+    return;
+
+  const Spawn &spawn = it->second;
+  SpawnState &spawnState = m_stateData.spawns.at(spawnAddress);
+
+  if(spawnState.state != SpawnState::State::Ready)
     return;
 
   // Spawn a train
-  const std::string trainName = std::string("spawn") + std::to_string(spawn->address) + std::string("_");
+  const std::string trainName = std::string("spawn") + std::to_string(spawn.address) + std::string("_");
 
   std::vector<Simulator::Train::VehicleItemFull> vehicles;
-  size_t trainTypeIdx = trainTypeInterface->getRandomTrainType(spawn->allowList, spawn->blackList);
+  size_t trainTypeIdx = trainTypeInterface->getRandomTrainType(spawn.allowList, spawn.blackList);
 
   if(trainTypeIdx != invalidIndex)
   {
@@ -3499,7 +3506,7 @@ void Simulator::doSpawnTrain(Spawn *spawn)
 
       std::uniform_int_distribution<size_t> invertTrain(0, 10);
       bool shouldInvert = reversible && invertTrain(rng) > 5;
-      if(!spawn->forward)
+      if(!spawn.forward)
         shouldInvert = !shouldInvert;
 
       if(shouldInvert)
@@ -3514,12 +3521,12 @@ void Simulator::doSpawnTrain(Spawn *spawn)
   if(vehicles.empty())
   {
     // Create basic train
-    std::uniform_int_distribution<size_t> dist(1, spawn->maxWagons);
+    std::uniform_int_distribution<size_t> dist(1, spawn.maxWagons);
     size_t numWagons = dist(rng);
 
-    const auto& segment = staticData.trackSegments[spawn->segmentIndex];
+    const auto& segment = staticData.trackSegments[spawn.segmentIndex];
     const float segmentLength = getSegmentLength(segment, m_stateData);
-    const float avgLength = spawn->wagonLength + staticData.trainCouplingLength;
+    const float avgLength = spawn.wagonLength + staticData.trainCouplingLength;
     const size_t maxWagons = size_t(std::floor(segmentLength / avgLength));
 
     numWagons = std::min(numWagons, maxWagons);
@@ -3527,7 +3534,7 @@ void Simulator::doSpawnTrain(Spawn *spawn)
     for(size_t i = 0; i < numWagons; i++)
     {
       Simulator::Train::VehicleItemFull item;
-      item.vehicle.length = spawn->wagonLength;
+      item.vehicle.length = spawn.wagonLength;
       item.vehicle.color = Color::Aqua;
       item.reversed = false;
       vehicles.push_back(item);
@@ -3535,25 +3542,25 @@ void Simulator::doSpawnTrain(Spawn *spawn)
   }
 
   TrainPlacement placement = TrainPlacement::PlaceEnd;
-  if(!spawn->forward)
+  if(!spawn.forward)
     placement = TrainPlacement::PlaceStart;
 
   quint32 outTrainId = invalidTrainId;
   if(addTrain(trainName, DecoderProtocol::DCCLong, 3,
-              vehicles, spawn->segmentIndex, outTrainId, spawn->posInSegment, placement))
+              vehicles, spawn.segmentIndex, outTrainId, spawn.posInSegment, placement))
   {
     // DONE!
     Train *train = m_stateData.getTrainById(outTrainId);
-    setTrainDirection(train, !spawn->forward);
+    setTrainDirection(train, !spawn.forward);
     setTrainMode(train, TrainState::Mode::Automatic);
 
     // Give some default speed
-    train->state.speed = std::clamp(spawn->defaultSpeedKmH * SpeedKmHtoTick, 0.0f, train->speedMax);
+    train->state.speed = std::clamp(spawn.defaultSpeedKmH * SpeedKmHtoTick, 0.0f, train->speedMax);
     train->state.targetSpeed = std::clamp(train->speedMax * 0.8f, train->state.speed, train->speedMax);
 
     // Wait reset
-    spawn->state = Spawn::State::WaitingReset;
-    spawn->waitingResetCount = Spawn::MAX_WAITING_RESET;
+    spawnState.state = SpawnState::State::WaitingReset;
+    spawnState.waitingResetCount = SpawnState::MAX_WAITING_RESET;
   }
 }
 
@@ -3910,23 +3917,23 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                   if(spawnAddress == invalidAddress || stateData.spawns.contains(spawnAddress))
                     continue;
 
-                  Spawn *spawn = new Spawn;
-                  spawn->address = spawnAddress;
-                  spawn->segmentIndex = data.trackSegments.size(); // TODO: HACK still has to be inserted
-                  spawn->maxWagons = item.value("max_wagons", spawn->maxWagons);
-                  spawn->wagonLength = item.value("wagons_length", spawn->wagonLength);
-                  spawn->defaultSpeedKmH = item.value("speed", spawn->defaultSpeedKmH);
+                  Spawn spawn;
+                  spawn.address = spawnAddress;
+                  spawn.segmentIndex = data.trackSegments.size(); // TODO: HACK still has to be inserted
+                  spawn.maxWagons = item.value("max_wagons", spawn.maxWagons);
+                  spawn.wagonLength = item.value("wagons_length", spawn.wagonLength);
+                  spawn.defaultSpeedKmH = item.value("speed", spawn.defaultSpeedKmH);
 
                   if(auto allowList = item.find("allow_list"); allowList != item.end() && allowList->is_array())
-                    spawn->allowList = iface->convertTypeList(*allowList);
+                    spawn.allowList = iface->convertTypeList(*allowList);
 
                   if(auto blackList = item.find("black_list"); blackList != item.end() && blackList->is_array())
-                    spawn->blackList = iface->convertTypeList(*blackList);
+                    spawn.blackList = iface->convertTypeList(*blackList);
 
-                  stateData.spawns.insert({spawn->address, spawn});
+                  stateData.spawns.insert({spawn.address, SpawnState{}});
+                  data.spawns.insert({spawn.address, std::move(spawn)});
 
-                  spawn->state = Spawn::State::Inactive;
-                  trackObj.sensorIndex = spawn->address;
+                  trackObj.sensorIndex = spawn.address;
                 }
                 else if(type == "station_stop_point")
                 {
@@ -3953,9 +3960,9 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                 if(trackObj.type == TrackSegment::Object::Type::SpawnTrain)
                 {
                   // Post init
-                  Spawn *spawn = stateData.spawns.at(trackObj.sensorIndex);
-                  spawn->forward = trackObj.allowedDirection == TrackSegment::Object::AllowedDirections::Forward;
-                  spawn->posInSegment = trackObj.position;
+                  Spawn &spawn = data.spawns.at(trackObj.sensorIndex);
+                  spawn.forward = trackObj.allowedDirection == TrackSegment::Object::AllowedDirections::Forward;
+                  spawn.posInSegment = trackObj.position;
                 }
 
                 segment.objects.push_back(trackObj);

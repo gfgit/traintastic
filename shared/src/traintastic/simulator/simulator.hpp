@@ -182,6 +182,19 @@ public:
     } type = Type::TrackCircuit;
   };
 
+  struct Spawn
+  {
+    std::vector<size_t> allowList, blackList;
+
+    uint16_t address = invalidAddress;
+    size_t segmentIndex = invalidIndex;
+    size_t maxWagons = 20;
+    float wagonLength = 20.0f;
+    float defaultSpeedKmH = 0.0f;
+    float posInSegment = 0.0f;
+    bool forward = true;
+  };
+
   struct Misc
   {
     enum class Type
@@ -233,6 +246,8 @@ public:
 
     // Channel, (Address, sensor index)
     std::unordered_map<size_t, std::map<size_t, size_t>> sensorChannelMap;
+
+    std::unordered_map<size_t, Spawn> spawns;
 
     Simulator::Point defaultCenterPos = {0, 0};
     float defaultViewScale = 1.0f;
@@ -424,22 +439,13 @@ public:
     }
   };
 
-  struct Spawn
+  struct SpawnState
   {
-    std::vector<size_t> allowList, blackList;
-
-    uint16_t address = invalidAddress;
     size_t ownerConnectionId = invalidIndex;
-    size_t segmentIndex = invalidIndex;
 
     static constexpr size_t START_WAITING_RESET = 60; // Ticks, 2 seconds
     static constexpr size_t MAX_WAITING_RESET = START_WAITING_RESET + 1;
     size_t waitingResetCount = 0;
-    size_t maxWagons = 20;
-    float wagonLength = 20.0f;
-    float defaultSpeedKmH = 0.0f;
-    float posInSegment = 0.0f;
-    bool forward = true;
 
     enum class State
     {
@@ -585,7 +591,7 @@ public:
     std::map<quint32, Vehicle *> vehicles;
     std::unordered_map<std::string, MainSignal *, StringHash, StringEqual> mainSignals;
     std::unordered_map<std::string, AuxSignal *, StringHash, StringEqual> auxSignals;
-    std::unordered_map<size_t, Spawn *> spawns;
+    std::unordered_map<size_t, SpawnState> spawns;
     std::unordered_map<size_t, SegmentVehicles> segmentVehicles;
 
     inline Simulator::Train *getTrainById(quint32 trainId) const
@@ -805,7 +811,7 @@ private:
 
   void updateSensors();
   void updateSpawns();
-  void doSpawnTrain(Spawn *spawn);
+  void doSpawnTrain(uint16_t spawnAddress);
 
   bool isStraight(const TrackSegment& segment);
   bool isCurve(const TrackSegment& segment, size_t& curveIndex);

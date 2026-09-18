@@ -1883,21 +1883,19 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
           triangle[2].rx() = triangle[0].x();
         }
 
-        Simulator::Spawn::State spawnState = Simulator::Spawn::State::Inactive;
-        Simulator::Spawn *spawn = m_stateData.spawns.at(obj.sensorIndex);
-        if(spawn)
-          spawnState = spawn->state;
+        const Simulator::StateData &stateData = m_simulator->stateData();
+        const Simulator::SpawnState &spawnState = stateData.spawns.at(obj.sensorIndex);
 
-        switch (spawnState)
+        switch (spawnState.state)
         {
         default:
-        case Simulator::Spawn::State::Inactive:
+        case Simulator::SpawnState::State::Inactive:
           painter->setBrush(Qt::gray);
           break;
-        case Simulator::Spawn::State::Ready:
+        case Simulator::SpawnState::State::Ready:
           painter->setBrush(Qt::darkGreen);
           break;
-        case Simulator::Spawn::State::WaitingReset:
+        case Simulator::SpawnState::State::WaitingReset:
           painter->setBrush(Qt::darkCyan);
           break;
         }
