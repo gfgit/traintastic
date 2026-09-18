@@ -1969,12 +1969,12 @@ void SimulatorView::drawTrains(QPainter *painter)
 
   const Simulator::Train *const activeTrain = m_simulator->getTrainById(m_currentTrainId);
   const Simulator::Train *const trainUnderMouse = m_simulator->getTrainById(m_trainUnderMouseId);
-  const Simulator::Vehicle * vehicleUnderMouse = nullptr;
+  quint32 vehicleUnderMouseId = Simulator::invalidTrainId;
 
   if(trainUnderMouse && m_trainUnderMouseVehicleIdx != Simulator::invalidTrainId
       && m_trainUnderMouseVehicleIdx <= trainUnderMouse->vehicles.size())
   {
-    vehicleUnderMouse = trainUnderMouse->vehicles.at(m_trainUnderMouseVehicleIdx).vehicle;
+    vehicleUnderMouseId = trainUnderMouse->vehicles.at(m_trainUnderMouseVehicleIdx).vehicleId;
   }
 
   const float trainCouplingLength = m_simulator->staticData.trainCouplingLength;
@@ -1982,7 +1982,7 @@ void SimulatorView::drawTrains(QPainter *painter)
   for(auto it : m_simulator->stateData().vehicles)
   {
     const Simulator::Vehicle* vehicle = it.second;
-    const Simulator::Train *train = m_simulator->stateData().getTrainById_unlocked(vehicle->activeTrainId);
+    const Simulator::Train *train = m_simulator->stateData().getTrainById(vehicle->activeTrainId);
     const auto& vehicleState = vehicle->state;
     const float length = vehicle->length;
 
@@ -2008,7 +2008,7 @@ void SimulatorView::drawTrains(QPainter *painter)
         painter->setPen(Qt::NoPen);
 
         // If train is composed of only one vehicle, it's both head and tail!
-        if(trainHead.vehicle == vehicle)
+        if(trainHead.vehicleId == vehicle->vehicleId)
         {
           lightRect.moveCenter(trainHead.reversed ? backPt : frontPt);
           const bool forwardLight = !train->state.reverse;
@@ -2016,7 +2016,7 @@ void SimulatorView::drawTrains(QPainter *painter)
           painter->drawEllipse(lightRect);
         }
 
-        if(trainTail.vehicle == vehicle)
+        if(trainTail.vehicleId == vehicle->vehicleId)
         {
           lightRect.moveCenter(trainTail.reversed ? frontPt : backPt);
           const bool forwardLight = train->state.reverse;
@@ -2030,18 +2030,18 @@ void SimulatorView::drawTrains(QPainter *painter)
         painter->setPen(couplingPen);
         painter->setBrush(Qt::NoBrush);
 
-        if(trainHead.vehicle != vehicle && trainTail.vehicle != vehicle)
+        if(trainHead.vehicleId != vehicle->vehicleId && trainTail.vehicleId != vehicle->vehicleId)
         {
           // Neither head nor tail, draw front and rear coupling
           painter->drawLine(QLineF(QPointF(0.0, 0.0), frontPt));
           painter->drawLine(QLineF(QPointF(0.0, 0.0), backPt));
         }
-        else if(trainHead.vehicle == vehicle)
+        else if(trainHead.vehicleId == vehicle->vehicleId)
         {
           // Train head, draw rear coupling
           painter->drawLine(QLineF(QPointF(0.0, 0.0), trainHead.reversed ? frontPt : backPt));
         }
-        else if(trainTail.vehicle == vehicle)
+        else if(trainTail.vehicleId == vehicle->vehicleId)
         {
           // Train tail, draw front coupling
           painter->drawLine(QLineF(QPointF(0.0, 0.0), trainTail.reversed ? backPt : frontPt));
@@ -2060,7 +2060,7 @@ void SimulatorView::drawTrains(QPainter *painter)
 
     painter->setPen(Qt::NoPen);
 
-    if(vehicle == vehicleUnderMouse)
+    if(vehicle->vehicleId == vehicleUnderMouseId)
     {
       painter->fillRect(vehicleRectAdj, Qt::darkYellow);
     }
@@ -2077,7 +2077,7 @@ void SimulatorView::drawTrains(QPainter *painter)
                         QColor(color.red * 255, color.green * 255, color.blue * 255));
     }
 
-    if(vehicle != vehicleUnderMouse && activeTrain && activeTrain == train)
+    if(vehicle->vehicleId != vehicleUnderMouseId && activeTrain && activeTrain == train)
     {
       painter->setBrush(Qt::NoBrush);
 
@@ -2154,25 +2154,26 @@ std::pair<Simulator::Point, bool> SimulatorView::getCurrentTrainStartPt(qreal *a
   // We need to access simulator data
   std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
 
-  const Simulator::Train *const activeTrain = m_simulator->getTrainById(m_currentTrainId);
+  const Simulator::Train *const activeTrain = m_simulator->stateData().getTrainById(m_currentTrainId);
   if(!activeTrain)
     return {Simulator::Point(), false};
 
-  auto vehicle = activeTrain->state.reverse ?
-                     activeTrain->getTail() :
-                     activeTrain->getHead();
+  auto vehicleItem = activeTrain->state.reverse ?
+                         activeTrain->getTail() :
+                         activeTrain->getHead();
 
-  if(!vehicle.vehicle)
+  if(vehicleItem.vehicleId == Simulator::invalidTrainId)
     return {Simulator::Point(), false};
 
-  const Simulator::Point centerPt = (vehicle.vehicle->state.front.position + vehicle.vehicle->state.rear.position) / 2.0;
+  const Simulator::Vehicle *vehicle = m_simulator->stateData().getVehicleById(vehicleItem.vehicleId);
+  const Simulator::Point centerPt = (vehicle->state.front.position + vehicle->state.rear.position) / 2.0;
 
   if(!centerPt.isFinite())
     return {Simulator::Point(), false};
 
   if(angleOut)
   {
-    const auto delta = vehicle.vehicle->state.front.position - vehicle.vehicle->state.rear.position;
+    const auto delta = vehicle->state.front.position - vehicle->state.rear.position;
     *angleOut = atan2f(delta.y, delta.x);
   }
 
@@ -2511,14 +2512,14 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
       m_trainUnderMouseId = vehicle->activeTrainId;
       m_trainUnderMouseVehicleIdx = Simulator::invalidIndex;
 
-      Simulator::Train *train = m_simulator->stateData().getTrainById_unlocked(vehicle->activeTrainId);
+      Simulator::Train *train = m_simulator->stateData().getTrainById(vehicle->activeTrainId);
       trainName = QString::fromStdString(train->name);
       isManualModeStopped = train->state.isManualAndStopped();
 
       size_t vehicleIdx = 0;
       for(const Simulator::Train::VehicleItem& item : train->vehicles)
       {
-        if(item.vehicle == vehicle)
+        if(item.vehicleId == vehicle->vehicleId)
         {
           m_trainUnderMouseVehicleIdx = vehicleIdx;
           break;
@@ -2557,16 +2558,16 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
           if(vehicle->activeTrainId == otherVehicle->activeTrainId)
             return false;
 
-          Simulator::Train *otherTrain = m_simulator->stateData().getTrainById_unlocked(otherVehicle->activeTrainId);
+          Simulator::Train *otherTrain = m_simulator->stateData().getTrainById(otherVehicle->activeTrainId);
           return otherTrain->state.isManualAndStopped();
         };
 
-        if(vehicle == train->vehicles.front().vehicle)
+        if(vehicle->vehicleId == train->vehicles.front().vehicleId)
           canCoupleFwd = findNearVehicleToCouple(true);
         else
           canSplitFwd = true;
 
-        if(vehicle == train->vehicles.back().vehicle)
+        if(vehicle->vehicleId == train->vehicles.back().vehicleId)
           canCoupleRear = findNearVehicleToCouple(false);
         else
           canSplitRear = true;

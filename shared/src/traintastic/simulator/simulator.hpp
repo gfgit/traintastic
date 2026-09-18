@@ -522,7 +522,7 @@ public:
 
     struct VehicleItem
     {
-      Vehicle *vehicle = nullptr;
+      quint32 vehicleId = invalidTrainId;
       bool reversed = false;
     };
 
@@ -542,18 +542,14 @@ public:
 
     ~Train()
     {
-      for(const VehicleItem& item : vehicles)
-      {
-        assert(item.vehicle->activeTrainId == trainId);
-        item.vehicle->activeTrainId = invalidTrainId;
-      }
+      assert(vehicles.empty());
     }
 
     inline bool isHeadOrTail(const Vehicle *vehicle) const
     {
       if(vehicles.empty())
         return false;
-      return vehicle == vehicles.front().vehicle || vehicle == vehicles.back().vehicle;
+      return vehicle->vehicleId == vehicles.front().vehicleId || vehicle->vehicleId == vehicles.back().vehicleId;
     }
 
     inline VehicleItem getHead() const
@@ -592,13 +588,25 @@ public:
     std::unordered_map<size_t, Spawn *> spawns;
     std::unordered_map<size_t, SegmentVehicles> segmentVehicles;
 
-    inline Simulator::Train *getTrainById_unlocked(quint32 trainId) const
+    inline Simulator::Train *getTrainById(quint32 trainId) const
     {
       if(trainId == invalidTrainId)
         return nullptr;
 
       auto it = trains.find(trainId);
       if(it == trains.end())
+        return nullptr;
+
+      return it->second;
+    }
+
+    inline Simulator::Vehicle *getVehicleById(quint32 vehicleId) const
+    {
+      if(vehicleId == invalidTrainId)
+        return nullptr;
+
+      auto it = vehicles.find(vehicleId);
+      if(it == vehicles.end())
         return nullptr;
 
       return it->second;
@@ -835,7 +843,7 @@ public:
   virtual std::vector<Simulator::Train::VehicleItemFull> createTrainOfType(size_t typeIdx,
                                                                            bool &canInvert, size_t &invertLoco) = 0;
 
-  virtual void setupTrainSpeedPowered(Simulator::Train *train) = 0;
+  virtual void setupTrainSpeedPowered(Simulator *simulator, Simulator::Train *train) = 0;
   
   virtual void fillVehicleProperties(Simulator::Vehicle *vehicle) = 0;
 

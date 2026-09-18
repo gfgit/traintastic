@@ -51,7 +51,7 @@ public:
   std::vector<Simulator::Train::VehicleItemFull> createTrainOfType(size_t typeIdx,
                                                                    bool &canInvert, size_t &invertLoco) override;
 
-  void setupTrainSpeedPowered(Simulator::Train *train) override;
+  void setupTrainSpeedPowered(Simulator *simulator, Simulator::Train *train) override;
 
   void fillVehicleProperties(Simulator::Vehicle *vehicle) override;
 

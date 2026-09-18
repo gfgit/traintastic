@@ -195,17 +195,20 @@ std::vector<Simulator::Train::VehicleItemFull> TrainTypeListModel::createTrainOf
   return result;
 }
 
-void TrainTypeListModel::setupTrainSpeedPowered(Simulator::Train *train)
+void TrainTypeListModel::setupTrainSpeedPowered(Simulator *simulator, Simulator::Train *train)
 {
   bool isPowered = false;
   bool maxSpeedSet = false;
   float maxSpeed = 150.0f;
 
+  std::lock_guard<std::recursive_mutex> lock(simulator->stateMutex());
+
   for(const Simulator::Train::VehicleItem &item : train->vehicles)
   {
-    if(item.vehicle->typeIdx != VehicleTypesModel::invalidIndex)
+    const Simulator::Vehicle *vehicle = simulator->stateData().vehicles.at(item.vehicleId);
+    if(vehicle->typeIdx != VehicleTypesModel::invalidIndex)
     {
-      const VehicleTypesModel::VehicleType vehicleType = vehicleTypesModel->getTypeAt(item.vehicle->typeIdx);
+      const VehicleTypesModel::VehicleType vehicleType = vehicleTypesModel->getTypeAt(vehicle->typeIdx);
       if(!vehicleType.name.isEmpty())
       {
         if(vehicleType.isPowered)

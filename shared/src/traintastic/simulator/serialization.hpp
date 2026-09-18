@@ -164,15 +164,17 @@ void deserializeVehicleDescr(QDataStream &stream, Simulator::Vehicle &vehicle)
   }
 }
 
-void serializeVehicleList(QDataStream &stream, const std::vector<Simulator::Train::VehicleItem> &vehicles, bool full)
+void serializeVehicleList(QDataStream &stream, const std::vector<Simulator::Train::VehicleItem> &vehicles, bool full,
+                          const Simulator::StateData &stateData)
 {
   stream << quint64(vehicles.size());
   for(const auto &item : vehicles)
   {
+    const Simulator::Vehicle *vehicle = stateData.getVehicleById(item.vehicleId);
     if(full)
-      stream << *item.vehicle;
+      stream << *vehicle;
     else
-      stream << item.vehicle->state;
+      stream << vehicle->state;
 
     stream << item.reversed;
   }
@@ -221,7 +223,8 @@ QDataStream &operator>>(QDataStream &stream, Simulator::TrainState &trainState)
   return stream;
 }
 
-void serializeTrain(QDataStream &stream, const Simulator::Train &train, bool full)
+void serializeTrain(QDataStream &stream, const Simulator::Train &train, bool full,
+                    const Simulator::StateData &stateData)
 {
   stream << train.trainId;
 
@@ -232,7 +235,7 @@ void serializeTrain(QDataStream &stream, const Simulator::Train &train, bool ful
   }
 
   stream << train.state;
-  serializeVehicleList(stream, train.vehicles, full);
+  serializeVehicleList(stream, train.vehicles, full, stateData);
 }
 
 void deserializeTrain(QDataStream &stream, std::vector<Simulator::Train::VehicleItemFull> &vehicles,
