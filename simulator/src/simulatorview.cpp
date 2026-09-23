@@ -2286,51 +2286,38 @@ void SimulatorView::keyPressEvent(QKeyEvent* e)
     case Qt::Key_Up:
     {
       std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
-      if(m_stateData.trains.contains(m_currentTrainId))
-      {
-        Simulator::Train &train = m_stateData.trains.at(m_currentTrainId);
-        m_simulator->applyTrainSpeedDelta(train, train.speedMax / 20);
-      }
+      m_simulator->applyTrainSpeedDelta(m_currentTrainId, train.speedMax / 20);
       break;
     }
     case Qt::Key_Down:
     {
       std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
-      if(m_stateData.trains.contains(m_currentTrainId))
-      {
-        Simulator::Train &train = m_stateData.trains.at(m_currentTrainId);
-        m_simulator->applyTrainSpeedDelta(train, -train.speedMax / 20);
-      }
+      m_simulator->applyTrainSpeedDelta(m_currentTrainId, -train.speedMax / 20);
       break;
     }
     case Qt::Key_Right:
     case Qt::Key_Left:
     {
       std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
-      if(m_stateData.trains.contains(m_currentTrainId))
-      {
-        Simulator::Train &train = m_stateData.trains.at(m_currentTrainId);
+      const Train *train = m_stateData.getTrainById(m_currentTrainId);
+      if(!train)
+        break;
 
-        bool dir = (e->key() == Qt::Key_Left);
-        std::pair<Simulator::Point, Simulator::Point> extents = Simulator::getTrainExtents(m_stateData train);
+      bool dir = (e->key() == Qt::Key_Left);
+      std::pair<Simulator::Point, Simulator::Point> extents = Simulator::getTrainExtents(m_stateData, *train);
 
-        const bool inverted = isPointPairInvertedInView(extents.first, extents.second);
-        if(inverted)
-          dir = !dir;
+      const bool inverted = isPointPairInvertedInView(extents.first, extents.second);
+      if(inverted)
+        dir = !dir;
 
-        m_simulator->setTrainDirection(train, dir);
-      }
+      m_simulator->setTrainDirection(m_currentTrainId, dir);
       break;
     }
 
     case Qt::Key_Space:
     {
       std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
-      if(m_stateData.trains.contains(m_currentTrainId))
-      {
-        Simulator::Train &train = m_stateData.trains.at(m_currentTrainId);
-        m_simulator->stopTrainAndSetManual(train);
-      }
+      m_simulator->stopTrainAndSetManual(m_currentTrainId);
       break;
     }
     case Qt::Key_Escape:

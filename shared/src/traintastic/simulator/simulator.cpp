@@ -571,7 +571,7 @@ void Simulator::togglePowerOn()
   }
 }
 
-std::pair<Simulator::Point, Simulator::Point> Simulator::getTrainExtents(const StateData &stateData_, Train &train)
+std::pair<Simulator::Point, Simulator::Point> Simulator::getTrainExtents(const StateData &stateData_, const Train &train)
 {
   if(train.vehicles.empty())
     return {};

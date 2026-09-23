@@ -684,13 +684,63 @@ public:
   void setPowerOn(bool powerOn);
   void togglePowerOn();
 
-  static std::pair<Point, Point> getTrainExtents(const StateData &stateData_, Train &train);
+  static std::pair<Point, Point> getTrainExtents(const StateData &stateData_, const Train &train);
 
-  void setTrainDirection(Train &train, bool reverse);
-  void setTrainSpeed(Train &train, float speed, bool immediate = false);
-  void applyTrainSpeedDelta(Train &train, float delta);
-  void setTrainMode(Train &train, TrainState::Mode mode);
-  void stopTrainAndSetManual(Train &train);
+  void setTrainDirection(quint32 trainId, bool reverse)
+  {
+    if(trainId == invalidTrainId)
+      return;
+    Train *train = m_stateData.getTrainById(trainId);
+    if(!train)
+      return;
+
+    setTrainDirection(*train, reverse);
+  }
+
+  void setTrainSpeed(quint32 trainId, float speed, bool immediate = false)
+  {
+    if(trainId == invalidTrainId)
+      return;
+    Train *train = m_stateData.getTrainById(trainId);
+    if(!train)
+      return;
+
+    setTrainSpeed(*train, speed, immediate);
+  }
+
+  void applyTrainSpeedDelta(quint32 trainId, float delta)
+  {
+    if(trainId == invalidTrainId)
+      return;
+    Train *train = m_stateData.getTrainById(trainId);
+    if(!train)
+      return;
+
+    applyTrainSpeedDelta(*train, delta);
+  }
+
+  void setTrainMode(quint32 trainId, TrainState::Mode mode)
+  {
+    if(trainId == invalidTrainId)
+      return;
+    Train *train = m_stateData.getTrainById(trainId);
+    if(!train)
+      return;
+
+    setTrainMode(*train, mode);
+  }
+
+  void stopTrainAndSetManual(quint32 trainId)
+  {
+    if(trainId == invalidTrainId)
+      return;
+    Train *train = m_stateData.getTrainById(trainId);
+    if(!train)
+      return;
+
+    stopTrainAndSetManual(*train);
+  }
+
   void stopAllTrains();
 
   void setTrainSpeedFactor(float val);
@@ -861,6 +911,11 @@ private:
                                            Vehicle *bestVehicle, float &bestDistance);
 
   void destroyTrain(Train &train, bool removeWagons);
+  void setTrainDirection(Train &train, bool reverse);
+  void setTrainSpeed(Train &train, float speed, bool immediate = false);
+  void applyTrainSpeedDelta(Train &train, float delta);
+  void setTrainMode(Train &train, TrainState::Mode mode);
+  void stopTrainAndSetManual(Train &train);
 
   void sendReplicas(const SimulatorProtocol::Message& message);
   void sendReplicas(QByteArray &buf);

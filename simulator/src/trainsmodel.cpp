@@ -117,8 +117,8 @@ bool TrainsModel::addTrain(const QString &name,
         return false;
     }
 
-    //if(invert)
-    //    mSimulator->setTrainDirection(mSimulator->stateData().trains.at(trainId), true);
+    if(invert)
+      mSimulator->setTrainDirection(trainId, true);
 
     beginResetModel();
     mTrains.insert(name, Train{name, 0.0});
