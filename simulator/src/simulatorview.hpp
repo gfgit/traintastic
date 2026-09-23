@@ -195,6 +195,7 @@ private:
   QPoint m_middleMousePos;
 
   quint32 m_currentTrainId = Simulator::invalidTrainId;
+  quint32 m_futureCurrentTrainId = Simulator::invalidTrainId;
   quint32 m_trainToBeRemovedId = Simulator::invalidTrainId;
   quint32 m_trainUnderMouseId = Simulator::invalidTrainId;
   size_t m_trainUnderMouseVehicleIdx = Simulator::invalidIndex;

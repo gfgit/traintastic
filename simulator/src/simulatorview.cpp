@@ -2243,7 +2243,6 @@ void SimulatorView::keyPressEvent(QKeyEvent* e)
     case Qt::Key_9:
     {
       const size_t trainIndex = static_cast<size_t>(e->key() - Qt::Key_1);
-      std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
 
       if(m_stateData.trains.size() < trainIndex)
         break;
@@ -2258,8 +2257,6 @@ void SimulatorView::keyPressEvent(QKeyEvent* e)
     case Qt::Key_W:
     case Qt::Key_E:
     {
-      std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
-
       auto it = m_currentTrainId == Simulator::invalidTrainId ?
             m_stateData.trains.begin() :
             m_stateData.trains.find(m_currentTrainId);
@@ -2285,21 +2282,18 @@ void SimulatorView::keyPressEvent(QKeyEvent* e)
     }
     case Qt::Key_Up:
     {
-      std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
-      m_simulator->applyTrainSpeedDelta(m_currentTrainId, train.speedMax / 20);
+      m_simulator->applyTrainSpeedDelta(m_currentTrainId, true);
       break;
     }
     case Qt::Key_Down:
     {
-      std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
-      m_simulator->applyTrainSpeedDelta(m_currentTrainId, -train.speedMax / 20);
+      m_simulator->applyTrainSpeedDelta(m_currentTrainId, false);
       break;
     }
     case Qt::Key_Right:
     case Qt::Key_Left:
     {
-      std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
-      const Train *train = m_stateData.getTrainById(m_currentTrainId);
+      const Simulator::Train *train = m_stateData.getTrainById(m_currentTrainId);
       if(!train)
         break;
 
@@ -2316,7 +2310,6 @@ void SimulatorView::keyPressEvent(QKeyEvent* e)
 
     case Qt::Key_Space:
     {
-      std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
       m_simulator->stopTrainAndSetManual(m_currentTrainId);
       break;
     }
@@ -2331,34 +2324,19 @@ void SimulatorView::keyPressEvent(QKeyEvent* e)
 
     case Qt::Key_A:
     {
-      std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
-      if(m_stateData.trains.contains(m_currentTrainId))
-      {
-        Simulator::Train &train = m_stateData.trains.at(m_currentTrainId);
-        m_simulator->setTrainMode(train, Simulator::TrainState::Mode::Automatic);
-      }
+      m_simulator->setTrainMode(m_currentTrainId, Simulator::TrainState::Mode::Automatic);
       break;
     }
 
     case Qt::Key_S:
     {
-      std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
-      if(m_stateData.trains.contains(m_currentTrainId))
-      {
-        Simulator::Train &train = m_stateData.trains.at(m_currentTrainId);
-        m_simulator->setTrainMode(train, Simulator::TrainState::Mode::SemiAutomatic);
-      }
+      m_simulator->setTrainMode(m_currentTrainId, Simulator::TrainState::Mode::SemiAutomatic);
       break;
     }
 
     case Qt::Key_M:
     {
-      std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
-      if(m_stateData.trains.contains(m_currentTrainId))
-      {
-        Simulator::Train &train = m_stateData.trains.at(m_currentTrainId);
-        m_simulator->setTrainMode(train, Simulator::TrainState::Mode::Manual);
-      }
+      m_simulator->setTrainMode(m_currentTrainId, Simulator::TrainState::Mode::Manual);
       break;
     }
 
@@ -3166,6 +3144,13 @@ void SimulatorView::tick(const Simulator::StateData &newStateData)
     emit trainSpeedFactorChanged(m_stateData.trainSpeedFactor);
   }
 
+  if(m_futureCurrentTrainId != Simulator::invalidTrainId
+      && m_stateData.trains.contains(m_futureCurrentTrainId))
+  {
+    m_currentTrainId = m_futureCurrentTrainId;
+    m_futureCurrentTrainId = Simulator::invalidTrainId;
+  }
+
   update();
 }
 
@@ -3213,9 +3198,13 @@ void SimulatorView::userAskRemoveTrain(quint32 trainId)
 
 void SimulatorView::doSetCurrentTrainIndex(quint32 newTrainId)
 {
-  std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
   if(m_stateData.trains.contains(newTrainId))
   {
     m_currentTrainId = newTrainId;
+  }
+  else
+  {
+    // We need to wait state sync from Simulator thread
+    m_futureCurrentTrainId = newTrainId;
   }
 }

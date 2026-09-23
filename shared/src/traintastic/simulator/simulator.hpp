@@ -690,55 +690,75 @@ public:
   {
     if(trainId == invalidTrainId)
       return;
-    Train *train = m_stateData.getTrainById(trainId);
-    if(!train)
-      return;
 
-    setTrainDirection(*train, reverse);
+    m_ioContext.post([this, trainId, reverse]()
+                     {
+                       Train *train = m_stateData.getTrainById(trainId);
+                       if(!train)
+                         return;
+
+                       setTrainDirection(*train, reverse);
+                     });
   }
 
   void setTrainSpeed(quint32 trainId, float speed, bool immediate = false)
   {
     if(trainId == invalidTrainId)
       return;
-    Train *train = m_stateData.getTrainById(trainId);
-    if(!train)
-      return;
 
-    setTrainSpeed(*train, speed, immediate);
+    m_ioContext.post([this, speed, immediate]()
+                     {
+                       Train *train = m_stateData.getTrainById(trainId);
+                       if(!train)
+                         return;
+
+                       setTrainSpeed(*train, speed, immediate);
+                     });
   }
 
-  void applyTrainSpeedDelta(quint32 trainId, float delta)
+  void applyTrainSpeedDelta(quint32 trainId, bool deltaUp)
   {
     if(trainId == invalidTrainId)
       return;
-    Train *train = m_stateData.getTrainById(trainId);
-    if(!train)
-      return;
 
-    applyTrainSpeedDelta(*train, delta);
+    m_ioContext.post([this, trainId, deltaUp]()
+                     {
+                       Train *train = m_stateData.getTrainById(trainId);
+                       if(!train)
+                         return;
+
+                       applyTrainSpeedDelta(*train, train->speedMax / 20.0f * (deltaUp ? 1.0f : -1.0f));
+                     });
   }
 
   void setTrainMode(quint32 trainId, TrainState::Mode mode)
   {
     if(trainId == invalidTrainId)
       return;
-    Train *train = m_stateData.getTrainById(trainId);
-    if(!train)
-      return;
 
-    setTrainMode(*train, mode);
+    m_ioContext.post([this, trainId, mode]()
+                     {
+                       Train *train = m_stateData.getTrainById(trainId);
+                       if(!train)
+                         return;
+
+                       setTrainMode(*train, mode);
+                     });
   }
 
   void stopTrainAndSetManual(quint32 trainId)
   {
     if(trainId == invalidTrainId)
       return;
-    Train *train = m_stateData.getTrainById(trainId);
-    if(!train)
-      return;
 
-    stopTrainAndSetManual(*train);
+    m_ioContext.post([this, trainId]()
+                     {
+                       Train *train = m_stateData.getTrainById(trainId);
+                       if(!train)
+                         return;
+
+                       stopTrainAndSetManual(*train);
+                     });
   }
 
   void stopAllTrains();
@@ -795,7 +815,7 @@ public:
 
   void liftRestrictions(bool val)
   {
-    for(auto it : m_stateData.mainSignals)
+    for(auto &it : m_stateData.mainSignals)
     {
       MainSignal *s = &it.second;
       s->maxSpeed = val ? 150 : 0;
