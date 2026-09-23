@@ -432,7 +432,7 @@ public:
         mLights &= ~(1u << n);
     }
 
-    inline bool isLightOn(uint8_t n)
+    inline bool isLightOn(uint8_t n) const
     {
       assert(n >= 0 && n < 8);
       return mLights & (1u << n);
@@ -578,18 +578,25 @@ public:
     float tickActive = 0.0f;
     float tickLoad = 0.0f;
     float trainSpeedFactor = 1.0f;
+
+    // TODO move to private member of Simulator
     quint32 mLastTrainId = 0;
     quint32 mLastVehicleId = 0;
 
     bool powerOn = false;
 
-    uint8_t signalBlinkState = 0; // Goes from 0 to 7
+    uint8_t signalBlinkState = 0; // Goes from 0 to 7 TODO: remove
+
     std::vector<SensorState> sensors;
     std::vector<TurnoutState> turnouts;
+
     std::map<quint32, Train> trains; // Avoid rehashing
     std::map<quint32, Vehicle> vehicles;
-    std::unordered_map<std::string, MainSignal *, StringHash, StringEqual> mainSignals;
-    std::unordered_map<std::string, AuxSignal *, StringHash, StringEqual> auxSignals;
+
+    // TODO: split state
+    std::unordered_map<std::string, MainSignal, StringHash, StringEqual> mainSignals;
+    std::unordered_map<std::string, AuxSignal, StringHash, StringEqual> auxSignals;
+
     std::unordered_map<size_t, SpawnState> spawns;
     std::unordered_map<size_t, SegmentVehicles> segmentVehicles;
 
@@ -743,7 +750,7 @@ public:
   {
     for(auto it : m_stateData.mainSignals)
     {
-      MainSignal *s = it.second;
+      MainSignal *s = &it.second;
       s->maxSpeed = val ? 150 : 0;
     }
   }

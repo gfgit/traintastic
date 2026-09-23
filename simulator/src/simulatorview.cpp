@@ -1313,7 +1313,7 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
         // Draw with Y along mast
         painter->rotate(90.0);
 
-        Simulator::MainSignal *signal = signIt->second;
+        Simulator::MainSignal *signal = &signIt->second;
 
         // Adjust later placment
         qreal lateralDiff = obj.lateralDiff;
@@ -1610,16 +1610,16 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
         // Draw with Y along mast
         painter->rotate(90.0);
 
-        Simulator::AuxSignal *signal = signIt->second;
+        const Simulator::AuxSignal *auxSignal = &signIt->second;
 
         // Adjust later placment
         qreal lateralDiff = obj.lateralDiff;
-        if(signal->zoomLateralDiff)
+        if(auxSignal->zoomLateralDiff)
           lateralDiff = obj.lateralDiff * (0.6 + 0.4 * m_signalsScaleFactor);
 
         painter->translate(lateralDiff, 0.0f);
 
-        switch (signal->subType)
+        switch (auxSignal->subType)
         {
         case Simulator::AuxSignal::SubType::LightDwarfSignal:
         {
@@ -1648,17 +1648,17 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
 
           // L1
           lightRect.moveCenter(QPointF(- LightDwarfWidth / 2.0 + LightDwarfLightSz * 0.8, - LightDwarfLightSz * 1.5));
-          painter->setBrush(signal->isLightOn(0) ? Qt::yellow : Qt::darkGray);
+          painter->setBrush(auxSignal->isLightOn(0) ? Qt::yellow : Qt::darkGray);
           painter->drawEllipse(lightRect);
 
           // L2
           lightRect.moveCenter(QPointF(+ LightDwarfWidth / 2.0 - LightDwarfLightSz * 0.8, - LightDwarfLightSz * 1.5));
-          painter->setBrush(signal->isLightOn(1) ? Qt::yellow : Qt::darkGray);
+          painter->setBrush(auxSignal->isLightOn(1) ? Qt::yellow : Qt::darkGray);
           painter->drawEllipse(lightRect);
 
           // L3
           lightRect.moveCenter(QPointF(- LightDwarfWidth / 2.0 + LightDwarfLightSz * 0.8, - LightDwarfHeight + LightDwarfLightSz * 0.9));
-          painter->setBrush(signal->isLightOn(2) ? Qt::yellow : Qt::darkGray);
+          painter->setBrush(auxSignal->isLightOn(2) ? Qt::yellow : Qt::darkGray);
           painter->drawEllipse(lightRect);
 
           break;
@@ -1698,7 +1698,7 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
           painter->setBrush(Qt::white);
           painter->drawRect(rotRect);
 
-          if(signal->mPosition == 0)
+          if(auxSignal->mPosition == 0)
           {
             // Draw diagonal black lines with clipping
             painter->save();
@@ -1718,20 +1718,20 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
             }
             painter->restore();
 
-            painter->setBrush(signal->isLightOn(0) ? Qt::darkMagenta : Qt::black);
+            painter->setBrush(auxSignal->isLightOn(0) ? Qt::darkMagenta : Qt::black);
             painter->drawEllipse(rotLightRect);
           }
-          else if(signal->mPosition == 255)
+          else if(auxSignal->mPosition == 255)
           {
             painter->setBrush(Qt::NoBrush);
             painter->drawRect(rotInnerRect);
 
-            painter->setBrush(signal->isLightOn(0) ? Qt::yellow : Qt::darkGray);
+            painter->setBrush(auxSignal->isLightOn(0) ? Qt::yellow : Qt::darkGray);
             painter->drawEllipse(rotLightRect);
           }
           else
           {
-            const double offset = RotDwarfSz.width() * double(signal->mPosition) / 255.0;
+            const double offset = RotDwarfSz.width() * double(auxSignal->mPosition) / 255.0;
 
             // Draw half and half with clipping
             painter->save();
@@ -1803,7 +1803,7 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
           painter->setBrush(Qt::black);
           painter->drawRect(departIndRect);
 
-          if(signal->isLightOn(0))
+          if(auxSignal->isLightOn(0))
           {
             QRectF departIndLightRect = departIndRect;
             departIndLightRect.setHeight(directionIndicatorWidth);

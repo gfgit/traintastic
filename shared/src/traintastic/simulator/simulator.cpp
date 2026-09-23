@@ -409,23 +409,8 @@ Simulator::~Simulator()
   {
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-    {
-        auto it = m_stateData.mainSignals.begin();
-        while(it != m_stateData.mainSignals.end())
-        {
-            delete it->second;
-            it = m_stateData.mainSignals.erase(it);
-        }
-    }
-
-    {
-      auto it = m_stateData.auxSignals.begin();
-      while(it != m_stateData.auxSignals.end())
-      {
-        delete it->second;
-        it = m_stateData.auxSignals.erase(it);
-      }
-    }
+    m_stateData.mainSignals.clear();
+    m_stateData.auxSignals.clear();
 
     {
       auto it = m_stateData.trains.begin();
@@ -1091,9 +1076,9 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
   {
     const auto& m = static_cast<const SignalSetState&>(message);
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-    for(auto it : m_stateData.mainSignals)
+    for(auto &it : m_stateData.mainSignals)
     {
-      MainSignal *s = it.second;
+      MainSignal *s = &it.second;
       if(!isReplica && s->ownerConnectionId != fromConnId)
         continue;
 
@@ -1172,9 +1157,9 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
   {
     const auto& m = static_cast<const AuxSignalSetState&>(message);
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-    for(auto it : m_stateData.auxSignals)
+    for(auto &it : m_stateData.auxSignals)
     {
-      AuxSignal *s = it.second;
+      AuxSignal *s = &it.second;
       if(!isReplica && s->ownerConnectionId != fromConnId)
         continue;
 
@@ -1199,9 +1184,9 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
 
     if(m.isMain)
     {
-      for(auto it : m_stateData.mainSignals)
+      for(auto &it : m_stateData.mainSignals)
       {
-        MainSignal *s = it.second;
+        MainSignal *s = &it.second;
         if(s->ownerConnectionId != invalidIndex || s->address != m.address || s->channel != m.channel)
           continue;
 
@@ -1211,9 +1196,9 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
     }
     else
     {
-      for(auto it : m_stateData.auxSignals)
+      for(auto &it : m_stateData.auxSignals)
       {
-        AuxSignal *s = it.second;
+        AuxSignal *s = &it.second;
         if(s->ownerConnectionId != invalidIndex || s->address != m.address || s->channel != m.channel)
           continue;
 
@@ -1976,9 +1961,9 @@ void Simulator::onConnectionRemoved(const std::shared_ptr<SimulatorConnection>& 
   }
 
   // Turn off owned signals
-  for(auto it : m_stateData.mainSignals)
+  for(auto &it : m_stateData.mainSignals)
   {
-    MainSignal *s = it.second;
+    MainSignal *s = &it.second;
     if(isReplica || s->ownerConnectionId != connId)
       continue;
 
@@ -1996,9 +1981,9 @@ void Simulator::onConnectionRemoved(const std::shared_ptr<SimulatorConnection>& 
     s->rappelState = MainSignal::RappelState::Off;
   }
 
-  for(auto it : m_stateData.auxSignals)
+  for(auto &it : m_stateData.auxSignals)
   {
-    AuxSignal *s = it.second;
+    AuxSignal *s = &it.second;
     if(isReplica || s->ownerConnectionId != connId)
       continue;
 
@@ -2928,7 +2913,7 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
       train.state.isOnStationStop = false;
       clearTrainSignalCache(m_stateData, train, false);
 
-      MainSignal *signal = it->second;
+      MainSignal *signal = &it->second;
       const float tickSpeed = signal->maxSpeed * SpeedKmHtoTick;
       if(signal->maxSpeed == 0.0f)
       {
@@ -3787,57 +3772,58 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                     if(signalName.empty() || signalAddress == invalidAddress)
                         continue;
 
-                    MainSignal *signal = nullptr;
+                    MainSignal *mainSignal = nullptr;
                     auto signIt = stateData.mainSignals.find(signalName);
                     if(signIt == stateData.mainSignals.end())
                     {
-                        signal = new MainSignal;
-                        signal->name = signalName;
-                        signal->address = signalAddress;
-                        signal->channel = signalChannel;
-                        signal->lights.push_back({});
-                        stateData.mainSignals.insert({signal->name, signal});
+                      MainSignal mainSignal_;
+                      mainSignal_.name = signalName;
+                      mainSignal_.address = signalAddress;
+                      mainSignal_.channel = signalChannel;
+                      mainSignal_.lights.push_back({});
+                      auto res = stateData.mainSignals.insert({mainSignal_.name, mainSignal_});
+                      mainSignal = &res.first->second;
                     }
                     else
-                        signal = signIt->second;
+                        mainSignal = &signIt->second;
 
-                    trackObj.signalName = signal->name;
+                    trackObj.signalName = mainSignal->name;
 
-                    size_t nLights = item.value("n_lights", std::max(size_t(1), signal->lights.size()));
+                    size_t nLights = item.value("n_lights", std::max(size_t(1), mainSignal->lights.size()));
                     nLights = std::clamp(nLights, size_t(1), size_t(3));
-                    signal->lights.resize(nLights);
+                    mainSignal->lights.resize(nLights);
 
-                    signal->square = item.value("square", false);
-                    if(signal->square)
-                      signal->hasSquareArrowLight = item.value("arrow_light", false);
+                    mainSignal->square = item.value("square", false);
+                    if(mainSignal->square)
+                      mainSignal->hasSquareArrowLight = item.value("arrow_light", false);
 
                     const size_t fixedLimit = item.value("fixed_limit", size_t(0));
                     switch (fixedLimit)
                     {
                     case 30:
-                      signal->fixedLimit = MainSignal::FixedLimit::Limit30;
+                      mainSignal->fixedLimit = MainSignal::FixedLimit::Limit30;
                       break;
                     case 60:
-                      signal->fixedLimit = MainSignal::FixedLimit::Limit60;
+                      mainSignal->fixedLimit = MainSignal::FixedLimit::Limit60;
                       break;
                     default:
-                      signal->fixedLimit = MainSignal::FixedLimit::NoLimit;
+                      mainSignal->fixedLimit = MainSignal::FixedLimit::NoLimit;
                       break;
                     }
 
-                    signal->hasAdvanceSignal = item.value("advance_light", false);
-                    signal->hasRappel = item.value("rappel", false);
-                    signal->hasDirectionIndicator = item.value("direction_ind", false);
-                    signal->isPureDistantSignal = item.value("pure_distant", false);
-                    signal->zoomLateralDiff = item.value("zoom_lat", true);
+                    mainSignal->hasAdvanceSignal = item.value("advance_light", false);
+                    mainSignal->hasRappel = item.value("rappel", false);
+                    mainSignal->hasDirectionIndicator = item.value("direction_ind", false);
+                    mainSignal->isPureDistantSignal = item.value("pure_distant", false);
+                    mainSignal->zoomLateralDiff = item.value("zoom_lat", true);
 
-                    if(signal->hasRappel)
-                      signal->fixedLimit = MainSignal::FixedLimit::NoLimit;
+                    if(mainSignal->hasRappel)
+                      mainSignal->fixedLimit = MainSignal::FixedLimit::NoLimit;
 
-                    if(signal->hasRappel || signal->hasDirectionIndicator ||
-                        signal->hasAdvanceSignal || signal->fixedLimit != MainSignal::FixedLimit::NoLimit ||
-                        signal->lights.size() > 2)
-                      signal->isPureDistantSignal = false;
+                    if(mainSignal->hasRappel || mainSignal->hasDirectionIndicator ||
+                        mainSignal->hasAdvanceSignal || mainSignal->fixedLimit != MainSignal::FixedLimit::NoLimit ||
+                        mainSignal->lights.size() > 2)
+                      mainSignal->isPureDistantSignal = false;
                 }
                 else if(type == "aux_signal")
                 {
@@ -3864,23 +3850,24 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
                   else
                     continue;
 
-                  AuxSignal *signal = nullptr;
+                  AuxSignal *auxSignal = nullptr;
                   auto signIt = stateData.auxSignals.find(signalName);
                   if(signIt == stateData.auxSignals.end())
                   {
-                    signal = new AuxSignal;
-                    signal->name = signalName;
-                    signal->address = signalAddress;
-                    signal->channel = signalChannel;
-                    stateData.auxSignals.insert({signal->name, signal});
+                    AuxSignal auxSignal_;
+                    auxSignal_.name = signalName;
+                    auxSignal_.address = signalAddress;
+                    auxSignal_.channel = signalChannel;
+                    auto res = stateData.auxSignals.insert({auxSignal_.name, auxSignal_});
+                    auxSignal = &res.first->second;
                   }
                   else
-                    signal = signIt->second;
+                    auxSignal = &signIt->second;
 
-                  trackObj.signalName = signal->name;
+                  trackObj.signalName = auxSignal->name;
 
-                  signal->subType = subType;
-                  signal->zoomLateralDiff = item.value("zoom_lat", true);
+                  auxSignal->subType = subType;
+                  auxSignal->zoomLateralDiff = item.value("zoom_lat", true);
                 }
                 else if(type == "reverse_dir")
                 {
@@ -5112,7 +5099,7 @@ void Simulator::updateTrainNextSignal(Train &train, bool next)
 
         signalPositionInSegment = trackObj.position;
         totalDistance += trackObj.position - startPos;
-        return it->second;
+        return &it->second;
       }
 
       totalDistance += getSegmentLength(curSegment, m_stateData) - startPos;
@@ -5136,7 +5123,7 @@ void Simulator::updateTrainNextSignal(Train &train, bool next)
 
         signalPositionInSegment = trackObj.position;
         totalDistance += startPos - trackObj.position;
-        return it->second;
+        return &it->second;
       }
 
       totalDistance += startPos;
