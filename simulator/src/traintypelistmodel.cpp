@@ -202,10 +202,11 @@ void TrainTypeListModel::setupTrainSpeedPowered(Simulator *simulator, Simulator:
   float maxSpeed = 150.0f;
 
   std::lock_guard<std::recursive_mutex> lock(simulator->stateMutex());
+  auto stateData = simulator->stateData();
 
   for(const Simulator::Train::VehicleItem &item : train->vehicles)
   {
-    const Simulator::Vehicle *vehicle = simulator->stateData().vehicles.at(item.vehicleId);
+    const Simulator::Vehicle *vehicle = stateData.getVehicleById(item.vehicleId);
     if(vehicle->typeIdx != VehicleTypesModel::invalidIndex)
     {
       const VehicleTypesModel::VehicleType vehicleType = vehicleTypesModel->getTypeAt(vehicle->typeIdx);

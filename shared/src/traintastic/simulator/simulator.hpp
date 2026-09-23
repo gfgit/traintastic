@@ -297,7 +297,7 @@ public:
     State state = State::Closed;
     uint8_t coils = 0;
 
-    std::vector<Train *> watchingTrains;
+    std::vector<quint32> watchingTrainIDs;
   };
 
   struct MainSignal
@@ -548,7 +548,6 @@ public:
 
     ~Train()
     {
-      assert(vehicles.empty());
     }
 
     inline bool isHeadOrTail(const Vehicle *vehicle) const
@@ -587,14 +586,14 @@ public:
     uint8_t signalBlinkState = 0; // Goes from 0 to 7
     std::vector<SensorState> sensors;
     std::vector<TurnoutState> turnouts;
-    std::map<quint32, Train *> trains; // Avoid rehashing
-    std::map<quint32, Vehicle *> vehicles;
+    std::map<quint32, Train> trains; // Avoid rehashing
+    std::map<quint32, Vehicle> vehicles;
     std::unordered_map<std::string, MainSignal *, StringHash, StringEqual> mainSignals;
     std::unordered_map<std::string, AuxSignal *, StringHash, StringEqual> auxSignals;
     std::unordered_map<size_t, SpawnState> spawns;
     std::unordered_map<size_t, SegmentVehicles> segmentVehicles;
 
-    inline Simulator::Train *getTrainById(quint32 trainId) const
+    inline const Simulator::Train *getTrainById(quint32 trainId) const
     {
       if(trainId == invalidTrainId)
         return nullptr;
@@ -603,10 +602,22 @@ public:
       if(it == trains.end())
         return nullptr;
 
-      return it->second;
+      return &it->second;
     }
 
-    inline Simulator::Vehicle *getVehicleById(quint32 vehicleId) const
+    inline Simulator::Train *getTrainById(quint32 trainId)
+    {
+      if(trainId == invalidTrainId)
+        return nullptr;
+
+      auto it = trains.find(trainId);
+      if(it == trains.end())
+        return nullptr;
+
+      return &it->second;
+    }
+
+    inline Simulator::Vehicle *getVehicleById(quint32 vehicleId)
     {
       if(vehicleId == invalidTrainId)
         return nullptr;
@@ -615,7 +626,19 @@ public:
       if(it == vehicles.end())
         return nullptr;
 
-      return it->second;
+      return &it->second;
+    }
+
+    inline const Simulator::Vehicle *getVehicleById(quint32 vehicleId) const
+    {
+      if(vehicleId == invalidTrainId)
+        return nullptr;
+
+      auto it = vehicles.find(vehicleId);
+      if(it == vehicles.end())
+        return nullptr;
+
+      return &it->second;
     }
   };
 
@@ -653,14 +676,12 @@ public:
   void setPowerOn(bool powerOn);
   void togglePowerOn();
 
-  Train *getTrainById(quint32 trainId) const;
-
-  std::pair<Point, Point> getTrainExtents(Train *train);
-  void setTrainDirection(Train *train, bool reverse);
-  void setTrainSpeed(Train *train, float speed, bool immediate = false);
-  void applyTrainSpeedDelta(Train *train, float delta);
-  void setTrainMode(Train *train, TrainState::Mode mode);
-  void stopTrainAndSetManual(Train *train);
+  std::pair<Point, Point> getTrainExtents(Train &train);
+  void setTrainDirection(Train &train, bool reverse);
+  void setTrainSpeed(Train &train, float speed, bool immediate = false);
+  void applyTrainSpeedDelta(Train &train, float delta);
+  void setTrainMode(Train &train, TrainState::Mode mode);
+  void stopTrainAndSetManual(Train &train);
   void stopAllTrains();
 
   void setTrainSpeedFactor(float val);
@@ -701,7 +722,7 @@ public:
 
   bool removeTrain(quint32 trainId, bool removeWagons, quint32 suggestedTrainId = invalidTrainId);
   bool removeTrainUser(quint32 trainId);
-  void destroyTrain(Train *train, bool removeWagons);
+  void destroyTrain(Train &train, bool removeWagons);
 
   Vehicle *addVehicle(float length, Color color,
                       size_t typeIdx = invalidIndex,
@@ -715,8 +736,8 @@ public:
                           bool canGoForward = true, bool canGoBackwards = true,
                           float *outDistance = nullptr);
 
-  bool splitTrain(Train *trainToSplit, const size_t vehicleIdx, const bool fwd, quint32 &trainIdOut);
-  bool coupleTrain(Train *train, bool fwd, quint32 &removedTrainIdOut);
+  bool splitTrain(Train &trainToSplit, const size_t vehicleIdx, const bool fwd, quint32 &trainIdOut);
+  bool coupleTrain(Train &train, bool fwd, quint32 &removedTrainIdOut);
 
   void liftRestrictions(bool val)
   {
@@ -828,8 +849,8 @@ private:
 
   void loadTrains(const nlohmann::json& world);
 
-  void updateTrainNextSignal(Train *train, bool next);
-  bool checkNextSignal(Train *train);
+  void updateTrainNextSignal(Train &train, bool next);
+  bool checkNextSignal(Train &train);
 
   Simulator::Vehicle *getVehicleNearHelper(size_t segmentIdx, float pos, float maxDistance,
                                            bool canGoForward, bool canGoBackwards,

@@ -363,9 +363,9 @@ std::optional<T> stringToEnum(std::string_view value)
 
 }
 
-void clearTrainSignalCache(Simulator::StateData &data, Simulator::Train *train, bool next)
+void clearTrainSignalCache(Simulator::StateData &data, Simulator::Train &train, bool next)
 {
-  Simulator::TrainState::SignalCache &cache = next ? train->state.nextSignal : train->state.prevSignal;
+  Simulator::TrainState::SignalCache &cache = next ? train.state.nextSignal : train.state.prevSignal;
 
   cache.signal = nullptr;
   cache.segmentIdx = Simulator::invalidIndex;
@@ -375,10 +375,10 @@ void clearTrainSignalCache(Simulator::StateData &data, Simulator::Train *train, 
 
   for(const size_t idx : cache.turnouts)
   {
-    std::erase_if(data.turnouts[idx].watchingTrains,
-                  [train](Simulator::Train *t) -> bool
+    std::erase_if(data.turnouts[idx].watchingTrainIDs,
+                  [train](quint32 trainId) -> bool
     {
-      return t == train;
+      return trainId == train.trainId;
     });
   }
   cache.turnouts.clear();
@@ -431,7 +431,7 @@ Simulator::~Simulator()
       auto it = m_stateData.trains.begin();
       while(it != m_stateData.trains.end())
       {
-        Train *train = it->second;
+        Train &train = it->second;
         destroyTrain(train, true);
         it = m_stateData.trains.erase(it);
       }
@@ -440,7 +440,7 @@ Simulator::~Simulator()
     {
       while(!m_stateData.vehicles.empty())
       {
-        removeVehicle(m_stateData.vehicles.begin()->second);
+        removeVehicle(&m_stateData.vehicles.begin()->second);
       }
     }
   }
@@ -586,30 +586,17 @@ void Simulator::togglePowerOn()
   }
 }
 
-Simulator::Train *Simulator::getTrainById(quint32 trainId) const
-{
-  if(trainId == invalidTrainId)
-    return nullptr;
-
-  std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-  auto it = m_stateData.trains.find(trainId);
-  if(it == m_stateData.trains.end())
-    return nullptr;
-
-  return it->second;
-}
-
-std::pair<Simulator::Point, Simulator::Point> Simulator::getTrainExtents(Train *train)
+std::pair<Simulator::Point, Simulator::Point> Simulator::getTrainExtents(Train &train)
 {
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-  if(train->vehicles.empty())
+  if(train.vehicles.empty())
     return {};
 
   std::pair<Simulator::Point, Simulator::Point> ret;
 
-  const auto frontVehicleItem = train->vehicles.front();
-  const auto rearVehicleItem = train->vehicles.back();
+  const auto frontVehicleItem = train.vehicles.front();
+  const auto rearVehicleItem = train.vehicles.back();
 
   const Simulator::Vehicle *frontVehicle = m_stateData.getVehicleById(frontVehicleItem.vehicleId);
   const Simulator::Vehicle *rearVehicle = m_stateData.getVehicleById(rearVehicleItem.vehicleId);
@@ -620,92 +607,92 @@ std::pair<Simulator::Point, Simulator::Point> Simulator::getTrainExtents(Train *
   return ret;
 }
 
-void Simulator::setTrainDirection(Train *train, bool reverse)
+void Simulator::setTrainDirection(Train &train, bool reverse)
 {
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-  if(getSimModeUnlocked() == SimMode::Replica && train->state.reverse != reverse)
+  if(getSimModeUnlocked() == SimMode::Replica && train.state.reverse != reverse)
   {
-    send(SimulatorProtocol::TrainRequestSetDirection(train->trainId, reverse));
+    send(SimulatorProtocol::TrainRequestSetDirection(train.trainId, reverse));
     return;
   }
 
-  if(train->state.reverse != reverse)
+  if(train.state.reverse != reverse)
   {
-    train->state.reverse = reverse;
+    train.state.reverse = reverse;
     setTrainSpeed(train, 0.0, true); // Stop train when changing direction
-    train->state.speedOrDirectionChanged = true;
-    train->state.nextSignal.dirty = true;
-    train->state.prevSignal.dirty = true;
-    train->state.skipCollisionDetection = false; // Check again in opposite direction
+    train.state.speedOrDirectionChanged = true;
+    train.state.nextSignal.dirty = true;
+    train.state.prevSignal.dirty = true;
+    train.state.skipCollisionDetection = false; // Check again in opposite direction
   }
 }
 
-void Simulator::setTrainSpeed(Train *train, float speed, bool immediate)
+void Simulator::setTrainSpeed(Train &train, float speed, bool immediate)
 {
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-  if(!train->isPowered)
+  if(!train.isPowered)
     speed = 0.0f;
 
-  speed = std::clamp(speed, 0.0f, train->speedMax);
-  if(immediate && train->state.speed != speed)
+  speed = std::clamp(speed, 0.0f, train.speedMax);
+  if(immediate && train.state.speed != speed)
   {
-    train->state.speed = speed;
-    train->state.targetSpeed = speed; // Also adjust target if immediate
-    train->state.waitToStart_ms = 0.0;
-    train->state.speedOrDirectionChanged = true;
+    train.state.speed = speed;
+    train.state.targetSpeed = speed; // Also adjust target if immediate
+    train.state.waitToStart_ms = 0.0;
+    train.state.speedOrDirectionChanged = true;
   }
-  else if(!immediate && train->state.targetSpeed != speed)
+  else if(!immediate && train.state.targetSpeed != speed)
   {
-    const float oldTargetSpeed = train->state.targetSpeed;
-    train->state.targetSpeed = speed;
-    if(train->state.targetSpeed > 0.0 && train->state.waitToStart_ms == 0 &&
-       (train->state.speed == 0.0 || oldTargetSpeed == 0.0))
+    const float oldTargetSpeed = train.state.targetSpeed;
+    train.state.targetSpeed = speed;
+    if(train.state.targetSpeed > 0.0 && train.state.waitToStart_ms == 0 &&
+       (train.state.speed == 0.0 || oldTargetSpeed == 0.0))
     {
       // When train was stopped or about to stop and signal becomes clear, add a bit of delay
-      train->state.waitToStart_ms = TrainState::SecondsWaitFromStandstill * 1000.0;
+      train.state.waitToStart_ms = TrainState::SecondsWaitFromStandstill * 1000.0;
     }
-    else if(train->state.targetSpeed < train->state.speed)
+    else if(train.state.targetSpeed < train.state.speed)
     {
-      train->state.waitToStart_ms = 0.0;
+      train.state.waitToStart_ms = 0.0;
     }
 
-    train->state.speedOrDirectionChanged = true;
+    train.state.speedOrDirectionChanged = true;
   }
 }
 
-void Simulator::setTrainMode(Train *train, TrainState::Mode mode)
+void Simulator::setTrainMode(Train &train, TrainState::Mode mode)
 {
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-  if(getSimModeUnlocked() == SimMode::Replica && train->state.mode != mode)
+  if(getSimModeUnlocked() == SimMode::Replica && train.state.mode != mode)
   {
-    send(SimulatorProtocol::TrainRequestSetMode(train->trainId, mode));
+    send(SimulatorProtocol::TrainRequestSetMode(train.trainId, mode));
     return;
   }
 
-  if(!train->isPowered)
+  if(!train.isPowered)
     mode = TrainState::Mode::Manual;
 
-  if(train->state.mode != mode)
+  if(train.state.mode != mode)
   {
-    train->state.mode = mode;
-    train->state.nextSignal.dirty = true;
-    train->state.prevSignal.dirty = true;
-    train->state.speedOrDirectionChanged = true;
+    train.state.mode = mode;
+    train.state.nextSignal.dirty = true;
+    train.state.prevSignal.dirty = true;
+    train.state.speedOrDirectionChanged = true;
 
-    if(train->state.mode == TrainState::Mode::Manual)
+    if(train.state.mode == TrainState::Mode::Manual)
     {
       // Reset acceleration and signals
-      train->state.targetSpeed = train->state.speed;
-      train->state.isOnStationStop = false;
+      train.state.targetSpeed = train.state.speed;
+      train.state.isOnStationStop = false;
       clearTrainSignalCache(m_stateData, train, false);
     }
   }
 }
 
-void Simulator::applyTrainSpeedDelta(Train *train, float delta)
+void Simulator::applyTrainSpeedDelta(Train &train, float delta)
 {
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
@@ -714,22 +701,22 @@ void Simulator::applyTrainSpeedDelta(Train *train, float delta)
     const auto step = delta > 0 ?
           SimulatorProtocol::TrainRequestChangeSpeed::IncreaseStep :
           SimulatorProtocol::TrainRequestChangeSpeed::DecreaseStep;
-    send(SimulatorProtocol::TrainRequestChangeSpeed(train->trainId, step));
+    send(SimulatorProtocol::TrainRequestChangeSpeed(train.trainId, step));
     return;
   }
 
-  const float speed = std::clamp(train->state.speed + delta, 0.0f, train->speedMax);
+  const float speed = std::clamp(train.state.speed + delta, 0.0f, train.speedMax);
   setTrainSpeed(train, speed);
 }
 
-void Simulator::stopTrainAndSetManual(Train *train)
+void Simulator::stopTrainAndSetManual(Train &train)
 {
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
   if(getSimModeUnlocked() == SimMode::Replica)
   {
     const auto step = SimulatorProtocol::TrainRequestChangeSpeed::Stop;
-    send(SimulatorProtocol::TrainRequestChangeSpeed(train->trainId, step));
+    send(SimulatorProtocol::TrainRequestChangeSpeed(train.trainId, step));
     return;
   }
 
@@ -742,7 +729,7 @@ void Simulator::stopAllTrains()
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
   for(auto& it : m_stateData.trains)
   {
-    auto *train = it.second;
+    auto &train = it.second;
     setTrainSpeed(train, 0.0f, true);
     setTrainMode(train, TrainState::Mode::Manual);
   }
@@ -803,10 +790,11 @@ void Simulator::setTurnoutState(size_t segmentIndex, TurnoutState::State state, 
       }
       turnout.state = state;
 
-      for(Train *train : turnout.watchingTrains)
+      for(quint32 trainId : turnout.watchingTrainIDs)
       {
-        train->state.nextSignal.dirty = true;
-        train->state.prevSignal.dirty = true;
+        Train &train = m_stateData.trains.at(trainId);
+        train.state.nextSignal.dirty = true;
+        train.state.prevSignal.dirty = true;
       }
     }
   }
@@ -938,16 +926,16 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
 
     const auto &m = static_cast<const LocomotiveSpeedDirection &>(message);
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-    for(auto it : m_stateData.trains)
+    for(auto &it : m_stateData.trains)
     {
-      Train *train = it.second;
+      Train &train = it.second;
 
-      if(m.address == train->address && (m.protocol == train->protocol || train->protocol == DecoderProtocol::None))
+      if(m.address == train.address && (m.protocol == train.protocol || train.protocol == DecoderProtocol::None))
       {
-        const float speed = std::clamp(train->speedMax * (m.speed / 255.0f), 0.0f, train->speedMax);
+        const float speed = std::clamp(train.speedMax * (m.speed / 255.0f), 0.0f, train.speedMax);
         const bool reverse = m.direction == Direction::Reverse;
 
-        auto &trainState = train->state;
+        auto &trainState = train.state;
         if(trainState.speed != speed || trainState.reverse != reverse)
         {
           setTrainSpeed(train, speed);
@@ -1425,11 +1413,11 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
     const auto& m = static_cast<const TrainRequestSetMode&>(message);
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-    auto it = m_stateData.trains.find(m.getTrainId());
-    if(it == m_stateData.trains.end())
+    auto train = m_stateData.getTrainById(m.getTrainId());
+    if(!train)
       break;
 
-    setTrainMode(it->second, m.mode);
+    setTrainMode(*train, m.mode);
     break;
   }
   case OpCode::TrainRequestSetDirection:
@@ -1440,11 +1428,11 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
     const auto& m = static_cast<const TrainRequestSetDirection&>(message);
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-    auto it = m_stateData.trains.find(m.getTrainId());
-    if(it == m_stateData.trains.end())
+    auto train = m_stateData.getTrainById(m.getTrainId());
+    if(!train)
       break;
 
-    setTrainDirection(it->second, m.reverse);
+    setTrainDirection(*train, m.reverse);
     break;
   }
   case OpCode::TrainRequestChangeSpeed:
@@ -1455,8 +1443,8 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
     const auto& m = static_cast<const TrainRequestChangeSpeed&>(message);
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-    auto it = m_stateData.trains.find(m.getTrainId());
-    if(it == m_stateData.trains.end())
+    auto train = m_stateData.getTrainById(m.getTrainId());
+    if(!train)
       break;
 
     // NOTE: match what SimulatorView does
@@ -1464,18 +1452,18 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
     {
     case TrainRequestChangeSpeed::Stop:
     {
-      setTrainMode(it->second, Simulator::TrainState::Mode::Manual);
-      setTrainSpeed(it->second, 0.0f, true);
+      setTrainMode(*train, Simulator::TrainState::Mode::Manual);
+      setTrainSpeed(*train, 0.0f, true);
       break;
     }
     case TrainRequestChangeSpeed::IncreaseStep:
     {
-      applyTrainSpeedDelta(it->second, it->second->speedMax / 20);
+      applyTrainSpeedDelta(*train, train->speedMax / 20);
       break;
     }
     case TrainRequestChangeSpeed::DecreaseStep:
     {
-      applyTrainSpeedDelta(it->second, - it->second->speedMax / 20);
+      applyTrainSpeedDelta(*train, - train->speedMax / 20);
       break;
     }
     default:
@@ -1491,8 +1479,8 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
     const auto& m = static_cast<const TrainRequestCoupleSplit&>(message);
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-    auto it = m_stateData.trains.find(m.getTrainId());
-    if(it == m_stateData.trains.end())
+    auto train = m_stateData.getTrainById(m.getTrainId());
+    if(!train)
       break;
 
     quint32 otherTrainId = invalidTrainId;
@@ -1502,23 +1490,23 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
     {
     case TrainRequestCoupleSplit::CoupleFront:
     {
-      coupleTrain(it->second, true, otherTrainId);
+      coupleTrain(*train, true, otherTrainId);
       break;
     }
     case TrainRequestCoupleSplit::CoupleRear:
     {
-      coupleTrain(it->second, false, otherTrainId);
+      coupleTrain(*train, false, otherTrainId);
       break;
     }
     case TrainRequestCoupleSplit::SplitFront:
     {
-      splitTrain(it->second, m.getVehicleIdx(),
+      splitTrain(*train, m.getVehicleIdx(),
                  true, otherTrainId);
       break;
     }
     case TrainRequestCoupleSplit::SplitRear:
     {
-      splitTrain(it->second, m.getVehicleIdx(),
+      splitTrain(*train, m.getVehicleIdx(),
                  false, otherTrainId);
       break;
     }
@@ -1532,13 +1520,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       break;
 
     const auto& m = static_cast<const TrainRemoved&>(message);
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-
-    auto it = m_stateData.trains.find(m.getTrainId());
-    if(it == m_stateData.trains.end())
-      break;
-
-    removeTrain(it->second->trainId, true);
+    removeTrain(m.getTrainId(), true);
     break;
   }
   case OpCode::TrainRemoved:
@@ -1547,14 +1529,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       break;
 
     const auto& m = static_cast<const TrainRemoved&>(message);
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-
-    auto it = m_stateData.trains.find(m.getTrainId());
-    if(it == m_stateData.trains.end())
-      break;
-
-    removeTrain(it->second->trainId, true, m.getNextSelectedTrainId());
-
+    removeTrain(m.getTrainId(), true, m.getNextSelectedTrainId());
     break;
   }
   case OpCode::TrainRequestAddReply:
@@ -1620,17 +1595,11 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message, s
 
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-    Train *train = nullptr;
-
+    Train *train = m_stateData.getTrainById(trainId);
+    if(train && (isNewTrain || vehicles.empty()))
     {
-      auto it = m_stateData.trains.find(trainId);
-      if(it != m_stateData.trains.end())
-      {
-        if(isNewTrain || vehicles.empty())
-          removeTrain(trainId, true, trainId);
-        else
-          train = it->second;
-      }
+      removeTrain(trainId, true, trainId);
+      train = nullptr;
     }
 
     if(vehicles.empty())
@@ -1673,13 +1642,10 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message, s
     size_t idx = 0;
     for(const Simulator::Train::VehicleItemFull &v : vehicles)
     {
-      Vehicle *result = nullptr;
-      auto it = m_stateData.vehicles.find(v.vehicle.vehicleId);
-      if(it != m_stateData.vehicles.end())
+      Vehicle *result = m_stateData.getVehicleById(v.vehicle.vehicleId);
+      if(result)
       {
-        result = it->second;
         result->typeIdx = v.vehicle.typeIdx;
-
         result->color = v.vehicle.color;
         result->length = v.vehicle.length;
       }
@@ -1724,8 +1690,8 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message, s
       Vehicle *vehicle = m_stateData.getVehicleById(v.vehicleId);
       if(vehicle->activeTrainId != invalidTrainId && vehicle->activeTrainId != train->trainId)
       {
-        Train *otherTrain = m_stateData.getTrainById(vehicle->activeTrainId);
-        auto &otherVehicles = otherTrain->vehicles;
+        Train &otherTrain = m_stateData.trains.at(vehicle->activeTrainId);
+        auto &otherVehicles = otherTrain.vehicles;
         if(otherVehicles.size() == 1 && otherVehicles.front().vehicleId == v.vehicleId)
         {
           // After removing this vehicle, train will be empty
@@ -1751,11 +1717,9 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message, s
 
     for(quint32 vehicleId : vehiclesToRemove)
     {
-      auto it = m_stateData.vehicles.find(vehicleId);
-      if(it == m_stateData.vehicles.end())
-        continue;
-
-      removeVehicle(it->second);
+      auto vehicle = m_stateData.getVehicleById(vehicleId);
+      if(vehicle)
+        removeVehicle(vehicle);
     }
     vehiclesToRemove.clear();
 
@@ -1764,8 +1728,7 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message, s
       trainTypeInterface->setupTrainSpeedPowered(this, train);
     }
 
-    guard.release();
-    m_stateData.trains.insert({train->trainId, train});
+    m_stateData.trains.insert({train->trainId, *train});
     onTrainAddedRemoved(true, train->trainId, invalidTrainId);
     break;
   }
@@ -1782,11 +1745,11 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message, s
                      false);
 
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-    auto it = m_stateData.trains.find(trainId);
-    if(it == m_stateData.trains.end())
-      break;
 
-    Train *train = it->second;
+    Train *train = m_stateData.getTrainById(trainId);
+    if(!train)
+      return;
+
     train->state.speed = trainState.speed;
     train->state.targetSpeed = trainState.targetSpeed;
     train->state.waitToStart_ms = trainState.waitToStart_ms;
@@ -1865,7 +1828,7 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message, s
 
     // Set direction
     if(invertDir)
-      setTrainDirection(m_stateData.getTrainById(trainId), true);
+      setTrainDirection(m_stateData.trains.at(trainId), true);
 
     // Success
     for(const std::shared_ptr<SimulatorConnection>& connection : m_repliacas)
@@ -1978,7 +1941,7 @@ void Simulator::onConnectionRemoved(const std::shared_ptr<SimulatorConnection>& 
       auto it = m_stateData.trains.begin();
       while(it != m_stateData.trains.end())
       {
-        Train *train = it->second;
+        Train &train = it->second;
         destroyTrain(train, true);
         it = m_stateData.trains.erase(it);
       }
@@ -1987,7 +1950,7 @@ void Simulator::onConnectionRemoved(const std::shared_ptr<SimulatorConnection>& 
     {
       while(!m_stateData.vehicles.empty())
       {
-        removeVehicle(m_stateData.vehicles.begin()->second);
+        removeVehicle(&m_stateData.vehicles.begin()->second);
       }
     }
   }
@@ -2489,7 +2452,7 @@ void Simulator::syncReplicaState()
 
     if(it != m_stateData.trains.end())
     {
-      trainToSync = it->second;
+      trainToSync = &it->second;
       it++;
 
       if(it != m_stateData.trains.end())
@@ -2562,7 +2525,7 @@ void Simulator::syncReplicaTrainFull()
 
     if(it != m_stateData.trains.end())
     {
-      trainToSync = it->second;
+      trainToSync = &it->second;
       it++;
 
       if(it != m_stateData.trains.end())
@@ -2620,21 +2583,21 @@ void Simulator::updateTrainPositions()
 
   for(auto it = m_stateData.trains.begin(); it != m_stateData.trains.end(); )
   {
-    Train* train = it->second;
-    auto& trainState = train->state;
+    Train& train = it->second;
+    auto& trainState = train.state;
 
-    if(!isReplica && train->state.isOnStationStop && train->state.mode != TrainState::Mode::Manual)
+    if(!isReplica && train.state.isOnStationStop && train.state.mode != TrainState::Mode::Manual)
     {
-      bool stoppedAndCannotContinue = train->state.speed == 0.0;
+      bool stoppedAndCannotContinue = train.state.speed == 0.0;
       if(stoppedAndCannotContinue)
-        stoppedAndCannotContinue = (train->state.nextSignal.signal && train->state.nextSignal.signal->maxSpeed == 0.0);
+        stoppedAndCannotContinue = (train.state.nextSignal.signal && train.state.nextSignal.signal->maxSpeed == 0.0);
 
       // Train cannot proceed forward, lets see if we can reverse
       if(stoppedAndCannotContinue &&
-         train->state.prevSignal.signal && train->state.prevSignal.signal->maxSpeed > 0.0)
+         train.state.prevSignal.signal && train.state.prevSignal.signal->maxSpeed > 0.0)
       {
         // Prev signal detected and set to proceed, reverse train
-        setTrainDirection(train, !train->state.reverse);
+        setTrainDirection(train, !train.state.reverse);
       }
     }
 
@@ -2642,17 +2605,17 @@ void Simulator::updateTrainPositions()
     float totalTravelled = 0.0f;
 
     // If train is stopped at signal check if signal goes to "Proceed"
-    if(!isReplica && train->state.speed == 0.0f)
+    if(!isReplica && train.state.speed == 0.0f)
       checkNextSignal(train);
 
     // Update only if moving or first time to place vehicles on tracks
-    if(train->state.isOnStationStop || train->state.speed != 0.0f ||
-        (!train->vehicles.empty() && !m_stateData.getVehicleById(train->vehicles.front().vehicleId)->state.front.position.isFinite()))
+    if(train.state.isOnStationStop || train.state.speed != 0.0f ||
+        (!train.vehicles.empty() && !m_stateData.getVehicleById(train.vehicles.front().vehicleId)->state.front.position.isFinite()))
     {
       if(!isReplica)
       {
         updateTrainNextSignal(train, true);
-        if(train->state.isOnStationStop)
+        if(train.state.isOnStationStop)
           updateTrainNextSignal(train, false);
 
         checkNextSignal(train);
@@ -2695,9 +2658,9 @@ void Simulator::updateTrainPositions()
 
         if(!trainState.reverse)
         {
-          for(auto& vehicleItem : train->vehicles)
+          for(auto& vehicleItem : train.vehicles)
           {
-            if(!updateHelper(vehicleItem, tickPosDelta, trainState.reverse, isFirst, *train, trainRemoved, outRemaining))
+            if(!updateHelper(vehicleItem, tickPosDelta, trainState.reverse, isFirst, train, trainRemoved, outRemaining))
             {
               if(trainRemoved)
                 break;
@@ -2715,9 +2678,9 @@ void Simulator::updateTrainPositions()
         }
         else // reverse
         {
-          for(auto& vehicleItem : train->vehicles | std::views::reverse)
+          for(auto& vehicleItem : train.vehicles | std::views::reverse)
           {
-            if(!updateHelper(vehicleItem, tickPosDelta, trainState.reverse, isFirst, *train, trainRemoved, outRemaining))
+            if(!updateHelper(vehicleItem, tickPosDelta, trainState.reverse, isFirst, train, trainRemoved, outRemaining))
             {
               if(trainRemoved)
                 break;
@@ -2741,7 +2704,7 @@ void Simulator::updateTrainPositions()
 
       if(trainRemoved)
       {
-        const quint32 trainId = it->second->trainId;
+        const quint32 trainId = it->second.trainId;
         destroyTrain(it->second, true);
         it = m_stateData.trains.erase(it);
         onTrainAddedRemoved(false, trainId, invalidTrainId);
@@ -2758,47 +2721,47 @@ void Simulator::updateTrainPositions()
 
     if(!wasStopped)
     {
-      if(train->state.nextSignal.signal)
-        train->state.nextSignal.distance -= totalTravelled;
+      if(train.state.nextSignal.signal)
+        train.state.nextSignal.distance -= totalTravelled;
 
-      if(train->state.prevSignal.signal)
-        train->state.prevSignal.distance += totalTravelled;
+      if(train.state.prevSignal.signal)
+        train.state.prevSignal.distance += totalTravelled;
 
-      if(train->state.waitToStart_ms > 0.0)
+      if(train.state.waitToStart_ms > 0.0)
       {
-        train->state.waitToStart_ms -= TickWaitFactor * tickRate.count();
+        train.state.waitToStart_ms -= TickWaitFactor * tickRate.count();
 
         // Prevent going negative, also ignore wait if in Manual mode
-        if(train->state.waitToStart_ms < 0.0 || train->state.mode == TrainState::Mode::Manual)
-          train->state.waitToStart_ms = 0.0;
+        if(train.state.waitToStart_ms < 0.0 || train.state.mode == TrainState::Mode::Manual)
+          train.state.waitToStart_ms = 0.0;
       }
 
-      if(train->state.waitToStart_ms == 0.0)
+      if(train.state.waitToStart_ms == 0.0)
       {
         // Accelerate
-        if(train->state.targetSpeed > train->state.speed)
+        if(train.state.targetSpeed > train.state.speed)
         {
-          const float newSpeed = std::clamp(train->state.speed + TrainState::AccelerationRate_ms2 * AccelerationConversionFactor,
-                                            0.0f, train->state.targetSpeed);
-          train->state.speed = newSpeed;
-          train->state.speedOrDirectionChanged = true;
+          const float newSpeed = std::clamp(train.state.speed + TrainState::AccelerationRate_ms2 * AccelerationConversionFactor,
+                                            0.0f, train.state.targetSpeed);
+          train.state.speed = newSpeed;
+          train.state.speedOrDirectionChanged = true;
         }
-        else if(train->state.targetSpeed < train->state.speed)
+        else if(train.state.targetSpeed < train.state.speed)
         {
-          const float newSpeed = std::clamp(train->state.speed - TrainState::DecelerationRate_ms2 * AccelerationConversionFactor,
-                                            train->state.targetSpeed, train->speedMax);
-          train->state.speed = newSpeed;
-          train->state.speedOrDirectionChanged = true;
+          const float newSpeed = std::clamp(train.state.speed - TrainState::DecelerationRate_ms2 * AccelerationConversionFactor,
+                                            train.state.targetSpeed, train.speedMax);
+          train.state.speed = newSpeed;
+          train.state.speedOrDirectionChanged = true;
         }
       }
     }
 
-    if(!isReplica && train->address != invalidAddress && trainState.speedOrDirectionChanged)
+    if(!isReplica && train.address != invalidAddress && trainState.speedOrDirectionChanged)
     {
       send(SimulatorProtocol::LocomotiveSpeedDirection(
-             train->address,
-             train->protocol,
-             static_cast<uint8_t>(std::clamp<float>(std::round(std::numeric_limits<uint8_t>::max() * (trainState.speed / train->speedMax)),
+             train.address,
+             train.protocol,
+             static_cast<uint8_t>(std::clamp<float>(std::round(std::numeric_limits<uint8_t>::max() * (trainState.speed / train.speedMax)),
                                                     std::numeric_limits<uint8_t>::min(),
                                                     std::numeric_limits<uint8_t>::max())),
              trainState.reverse ? Direction::Reverse : Direction::Forward,
@@ -2807,7 +2770,7 @@ void Simulator::updateTrainPositions()
       trainState.speedOrDirectionChanged = false;
 
       if(getSimModeUnlocked() == SimMode::Master)
-        sendTrainStateRefreshReplica(train);
+        sendTrainStateRefreshReplica(&train);
     }
 
     // Go to next train
@@ -2963,7 +2926,7 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
 
       // Reset station stop state for each passed main signal
       train.state.isOnStationStop = false;
-      clearTrainSignalCache(m_stateData, &train, false);
+      clearTrainSignalCache(m_stateData, train, false);
 
       MainSignal *signal = it->second;
       const float tickSpeed = signal->maxSpeed * SpeedKmHtoTick;
@@ -2981,13 +2944,13 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
 
       // Apply signal speed on next tick
       // TODO: train max speed
-      setTrainSpeed(&train, tickSpeed);
+      setTrainSpeed(train, tickSpeed);
       train.state.nextSignal.dirty = true;
     }
     else if (isFirst && obj.type == Object::Type::ReverseDirection && train.state.mode != TrainState::Mode::Manual)
     {
       // Apply direction change on next tick
-      setTrainDirection(&train, !train.state.reverse);
+      setTrainDirection(train, !train.state.reverse);
       stop = true;
       return false;
     }
@@ -3365,8 +3328,8 @@ void Simulator::maybeAddVehicleSegment(Vehicle *vehicle, size_t segmentIdx)
       continue;
 
     // Notify other trains we are in same segment so they need to check again
-    Train *otherTrain = m_stateData.getTrainById(other->activeTrainId);
-    otherTrain->state.skipCollisionDetection = false;
+    Train &otherTrain = m_stateData.trains.at(other->activeTrainId);
+    otherTrain.state.skipCollisionDetection = false;
   }
 
   seg.vehicleIDs.insert(vehicle->vehicleId);
@@ -3580,13 +3543,13 @@ void Simulator::doSpawnTrain(uint16_t spawnAddress)
               vehicles, spawn.segmentIndex, outTrainId, spawn.posInSegment, placement))
   {
     // DONE!
-    Train *train = m_stateData.getTrainById(outTrainId);
+    Train &train = m_stateData.trains.at(outTrainId);
     setTrainDirection(train, !spawn.forward);
     setTrainMode(train, TrainState::Mode::Automatic);
 
     // Give some default speed
-    train->state.speed = std::clamp(spawn.defaultSpeedKmH * SpeedKmHtoTick, 0.0f, train->speedMax);
-    train->state.targetSpeed = std::clamp(train->speedMax * 0.8f, train->state.speed, train->speedMax);
+    train.state.speed = std::clamp(spawn.defaultSpeedKmH * SpeedKmHtoTick, 0.0f, train.speedMax);
+    train.state.targetSpeed = std::clamp(train.speedMax * 0.8f, train.state.speed, train.speedMax);
 
     // Wait reset
     spawnState.state = SpawnState::State::WaitingReset;
@@ -4518,11 +4481,11 @@ Simulator::StaticData Simulator::load(const nlohmann::json& world, StateData& st
         continue;
       }
 
-      Vehicle *vehicle = new Vehicle;
-      vehicle->vehicleId = stateData.mLastVehicleId++;
-      vehicle->length = object.value("length", 20.0f);
-      vehicle->color = stringToEnum<Color>(object.value<std::string_view>("color", {})).value_or(Color::Red);
-      stateData.vehicles.insert({vehicle->vehicleId, vehicle});
+      Vehicle vehicle;
+      vehicle.vehicleId = stateData.mLastVehicleId++;
+      vehicle.length = object.value("length", 20.0f);
+      vehicle.color = stringToEnum<Color>(object.value<std::string_view>("color", {})).value_or(Color::Red);
+      stateData.vehicles.insert({vehicle.vehicleId, vehicle});
     }
   }
 
@@ -4917,14 +4880,14 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
   }
 
   trainIdOut = train->trainId;
-  auto pair = m_stateData.trains.insert({train->trainId, train.release()});
+  auto pair = m_stateData.trains.insert({train->trainId, *train});
 
   onTrainAddedRemoved(true, trainIdOut, invalidTrainId);
 
   if(getSimModeUnlocked() == SimMode::Master)
   {
     sendTrainFullRefreshReplica(SimulatorProtocol::OpCode::TrainAdded,
-                                pair.first->second);
+                                &pair.first->second);
   }
 
   return true;
@@ -4978,7 +4941,7 @@ bool Simulator::removeTrain(quint32 trainId, bool removeWagons, quint32 suggeste
     if(!m_stateData.trains.contains(suggestedTrainId))
       suggestedTrainId = invalidTrainId;
 
-    Train *train = it->second;
+    Train &train = it->second;
     destroyTrain(train, removeWagons);
     it = m_stateData.trains.erase(it);
     onTrainAddedRemoved(false, trainId, suggestedTrainId);
@@ -4994,21 +4957,21 @@ bool Simulator::removeTrain(quint32 trainId, bool removeWagons, quint32 suggeste
 
 Simulator::Vehicle *Simulator::addVehicle(float length, Color color, size_t typeIdx, quint32 suggestId)
 {    
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+  std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-    Vehicle *vehicle = new Vehicle;
+  Vehicle vehicle;
 
-    if(suggestId == invalidTrainId)
-      vehicle->vehicleId = m_stateData.mLastVehicleId++;
-    else
-      vehicle->vehicleId = suggestId;
+  if(suggestId == invalidTrainId)
+    vehicle.vehicleId = m_stateData.mLastVehicleId++;
+  else
+    vehicle.vehicleId = suggestId;
 
-    vehicle->length = length;
-    vehicle->color = color;
-    vehicle->typeIdx = typeIdx;
+  vehicle.length = length;
+  vehicle.color = color;
+  vehicle.typeIdx = typeIdx;
 
-    m_stateData.vehicles.insert({vehicle->vehicleId, vehicle});
-    return vehicle;
+  auto result = m_stateData.vehicles.insert({vehicle.vehicleId, vehicle});
+  return &result.first->second;
 }
 
 bool Simulator::removeVehicle(Vehicle *vehicle)
@@ -5018,7 +4981,7 @@ bool Simulator::removeVehicle(Vehicle *vehicle)
     if(it == m_stateData.vehicles.end())
         return false;
 
-    if(it->second != vehicle)
+    if(&it->second != vehicle)
         return false;
 
     if(vehicle->activeTrainId != invalidTrainId)
@@ -5055,7 +5018,6 @@ bool Simulator::removeVehicle(Vehicle *vehicle)
     }
 
     m_stateData.vehicles.erase(it);
-    delete vehicle;
     return true;
 }
 
@@ -5087,26 +5049,26 @@ void Simulator::sendTrainStateRefreshReplica(Train *train)
   sendReplicas(buf);
 }
 
-void Simulator::updateTrainNextSignal(Train *train, bool next)
+void Simulator::updateTrainNextSignal(Train &train, bool next)
 {
-  Simulator::TrainState::SignalCache &cache = next ? train->state.nextSignal : train->state.prevSignal;
+  Simulator::TrainState::SignalCache &cache = next ? train.state.nextSignal : train.state.prevSignal;
 
-  if(!cache.dirty && train->state.mode != TrainState::Mode::Manual)
+  if(!cache.dirty && train.state.mode != TrainState::Mode::Manual)
     return;
 
   // De-register
   clearTrainSignalCache(m_stateData, train, next);
 
-  if(train->state.mode == TrainState::Mode::Manual)
+  if(train.state.mode == TrainState::Mode::Manual)
     return;
-  if(train->state.mode == TrainState::Mode::SemiAutomatic && train->state.speed == 0.0f)
+  if(train.state.mode == TrainState::Mode::SemiAutomatic && train.state.speed == 0.0f)
     return;
 
-  if(!train->state.isOnStationStop && !next)
+  if(!train.state.isOnStationStop && !next)
     return; // Only look at previous signal if inside a station stop
 
-  const bool trainReverse = (train->state.reverse == next);
-  const Train::VehicleItem& firstItem = trainReverse ? train->vehicles.back() : train->vehicles.front();
+  const bool trainReverse = (train.state.reverse == next);
+  const Train::VehicleItem& firstItem = trainReverse ? train.vehicles.back() : train.vehicles.front();
   const Vehicle *firstVehicle = m_stateData.getVehicleById(firstItem.vehicleId);
   const VehicleState::Face& face = (firstItem.reversed == trainReverse) ? firstVehicle->state.front : firstVehicle->state.rear;
 
@@ -5124,7 +5086,7 @@ void Simulator::updateTrainNextSignal(Train *train, bool next)
     case TrackSegment::Type::Turnout3Way:
     {
       cache.turnouts.push_back(curSegment.turnout.index);
-      m_stateData.turnouts[curSegment.turnout.index].watchingTrains.push_back(train);
+      m_stateData.turnouts[curSegment.turnout.index].watchingTrainIDs.push_back(train.trainId);
       break;
     }
     default:
@@ -5219,54 +5181,52 @@ void Simulator::updateTrainNextSignal(Train *train, bool next)
   clearTrainSignalCache(m_stateData, train, next);
 }
 
-void Simulator::destroyTrain(Train *train, bool removeWagons)
+void Simulator::destroyTrain(Train &train, bool removeWagons)
 {
   clearTrainSignalCache(m_stateData, train, true);
   clearTrainSignalCache(m_stateData, train, false);
 
-  for(const auto &item : train->vehicles)
+  for(const auto &item : train.vehicles)
   {
     Vehicle *vehicle = m_stateData.getVehicleById(item.vehicleId);
     vehicle->activeTrainId = invalidTrainId;
       if(removeWagons)
           removeVehicle(vehicle);
   }
-  train->vehicles.clear();
-
-  delete train;
+  train.vehicles.clear();
 }
 
-bool Simulator::checkNextSignal(Train *train)
+bool Simulator::checkNextSignal(Train &train)
 {
-  if(train->state.mode == TrainState::Mode::Manual)
+  if(train.state.mode == TrainState::Mode::Manual)
     return true;
-  if(train->state.mode == TrainState::Mode::SemiAutomatic && train->state.speed == 0.0f)
+  if(train.state.mode == TrainState::Mode::SemiAutomatic && train.state.speed == 0.0f)
     return true;
 
-  if(!train->state.nextSignal.signal)
+  if(!train.state.nextSignal.signal)
   {
-    if(train->state.mode == TrainState::Mode::Automatic && train->state.targetSpeed < 30 * SpeedKmHtoTick)
+    if(train.state.mode == TrainState::Mode::Automatic && train.state.targetSpeed < 30 * SpeedKmHtoTick)
     {
       // Start at 30 km/h until next signal is found
       setTrainSpeed(train, 30 * SpeedKmHtoTick);
     }
   }
 
-  const Train::VehicleItem& firstItem = train->state.reverse ? train->vehicles.back() : train->vehicles.front();
+  const Train::VehicleItem& firstItem = train.state.reverse ? train.vehicles.back() : train.vehicles.front();
   const Vehicle *firstVehicle = m_stateData.getVehicleById(firstItem.vehicleId);
-  const VehicleState::Face& face = (firstItem.reversed == train->state.reverse) ? firstVehicle->state.front : firstVehicle->state.rear;
+  const VehicleState::Face& face = (firstItem.reversed == train.state.reverse) ? firstVehicle->state.front : firstVehicle->state.rear;
 
-  if(!train->state.nextSignal.signal)
+  if(!train.state.nextSignal.signal)
   {
     const float length = getSegmentLength(staticData.trackSegments[face.segmentIndex], m_stateData);
     if(length >= 100)
     {
       // Long segments do not find signal and also do not set dirty
       // Set dirty near to end to re-trigger signal scan
-      const bool dirFwd = face.segmentDirectionInverted == train->state.reverse;
+      const bool dirFwd = face.segmentDirectionInverted == train.state.reverse;
       if((dirFwd && (length - face.distance) < 600) || (!dirFwd && face.distance < 600))
       {
-        train->state.nextSignal.dirty = true;
+        train.state.nextSignal.dirty = true;
       }
     }
     return true;
@@ -5274,12 +5234,12 @@ bool Simulator::checkNextSignal(Train *train)
 
 
 
-  const float totalDistance = train->state.nextSignal.distance;
+  const float totalDistance = train.state.nextSignal.distance;
 
-  if(totalDistance <= 650 && train->state.speed >= train->state.nextSignal.signal->maxSpeed * SpeedKmHtoTick)
+  if(totalDistance <= 650 && train.state.speed >= train.state.nextSignal.signal->maxSpeed * SpeedKmHtoTick)
   {
     // Decrease speed
-    float targetSpeed = train->speedMax;
+    float targetSpeed = train.speedMax;
 
     static const std::pair<float, float> SpeedCurve[] = {
       {30, 0},
@@ -5306,25 +5266,25 @@ bool Simulator::checkNextSignal(Train *train)
     {
       if(totalDistance < entry.first)
       {
-        targetSpeed = (train->state.nextSignal.signal->maxSpeed + entry.second) * SpeedKmHtoTick;
+        targetSpeed = (train.state.nextSignal.signal->maxSpeed + entry.second) * SpeedKmHtoTick;
         break;
       }
     }
 
-    targetSpeed = std::min(targetSpeed, train->speedMax);
-    if(targetSpeed < train->state.speed)
+    targetSpeed = std::min(targetSpeed, train.speedMax);
+    if(targetSpeed < train.state.speed)
     {
       // TODO: adjust deceleration so that it doest not SPAD
       // Then we can remove immediate = true
       setTrainSpeed(train, targetSpeed, true);
 
-      if(train->state.speed == 0.0)
+      if(train.state.speed == 0.0)
         return false; // Stop
     }
   }
 
-  const bool underSignalSpeed = train->state.speed < train->state.nextSignal.signal->maxSpeed * SpeedKmHtoTick;
-  if(train->state.targetSpeed < 30 * SpeedKmHtoTick && (totalDistance > 30 || underSignalSpeed))
+  const bool underSignalSpeed = train.state.speed < train.state.nextSignal.signal->maxSpeed * SpeedKmHtoTick;
+  if(train.state.targetSpeed < 30 * SpeedKmHtoTick && (totalDistance > 30 || underSignalSpeed))
   {
     // Get near at 30 km/h to next signal if stopped or currently at less than 30 km/h
     // If stopped at less than 30 meters from signal, remain stopped
@@ -5652,15 +5612,15 @@ Simulator::Vehicle *Simulator::getVehicleNear(size_t segmentIdx,
   return bestVehicle;
 }
 
-bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const bool fwd, quint32 &trainIdOut)
+bool Simulator::splitTrain(Train &trainToSplit, const size_t vehicleIdx, const bool fwd, quint32 &trainIdOut)
 {
-  if(!trainToSplit->state.isManualAndStopped())
+  if(!trainToSplit.state.isManualAndStopped())
     return false; // Train must be Manual and stopped
 
-  if(trainToSplit->vehicles.size() <= 1 || vehicleIdx >= trainToSplit->vehicles.size())
+  if(trainToSplit.vehicles.size() <= 1 || vehicleIdx >= trainToSplit.vehicles.size())
     return false; // Train must have more than 1 vehicle and valid vehicle selected
 
-  if((vehicleIdx == 0 && fwd) || (vehicleIdx == (trainToSplit->vehicles.size() - 1) && !fwd))
+  if((vehicleIdx == 0 && fwd) || (vehicleIdx == (trainToSplit.vehicles.size() - 1) && !fwd))
     return false; // Cannot split before first or after last vehicle
 
   if(getSimModeUnlocked() == SimMode::Replica)
@@ -5668,19 +5628,19 @@ bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const b
     const auto coupleOp = fwd ?
                               SimulatorProtocol::TrainRequestCoupleSplit::SplitFront :
                               SimulatorProtocol::TrainRequestCoupleSplit::SplitRear;
-    send(SimulatorProtocol::TrainRequestCoupleSplit(trainToSplit->trainId, vehicleIdx, coupleOp));
+    send(SimulatorProtocol::TrainRequestCoupleSplit(trainToSplit.trainId, vehicleIdx, coupleOp));
     return true;
   }
 
   std::unique_ptr<Train> remainingTrain(new Train);
 
   // Put a name
-  remainingTrain->name = trainToSplit->name + '_';
-  remainingTrain->protocol = trainToSplit->protocol;
-  remainingTrain->address = trainToSplit->address; // TODO: unique
-  remainingTrain->speedMax = trainToSplit->speedMax;
+  remainingTrain->name = trainToSplit.name + '_';
+  remainingTrain->protocol = trainToSplit.protocol;
+  remainingTrain->address = trainToSplit.address; // TODO: unique
+  remainingTrain->speedMax = trainToSplit.speedMax;
   remainingTrain->state.mode = TrainState::Mode::Manual;
-  remainingTrain->state.reverse = trainToSplit->state.reverse;
+  remainingTrain->state.reverse = trainToSplit.state.reverse;
   remainingTrain->trainId = m_stateData.mLastTrainId++;
 
   if(fwd)
@@ -5689,49 +5649,49 @@ bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const b
 
     for(size_t i = 0; i < vehicleIdx; i++)
     {
-      remainingTrain->vehicles.push_back(trainToSplit->vehicles.at(i));
+      remainingTrain->vehicles.push_back(trainToSplit.vehicles.at(i));
 
       Vehicle *vehicle = m_stateData.getVehicleById(remainingTrain->vehicles.back().vehicleId);
       vehicle->activeTrainId = remainingTrain->trainId;
     }
 
-    trainToSplit->vehicles.erase(trainToSplit->vehicles.begin(), trainToSplit->vehicles.begin() + vehicleIdx);
+    trainToSplit.vehicles.erase(trainToSplit.vehicles.begin(), trainToSplit.vehicles.begin() + vehicleIdx);
   }
   else
   {
-    remainingTrain->vehicles.reserve(trainToSplit->vehicles.size() - (vehicleIdx + 1));
+    remainingTrain->vehicles.reserve(trainToSplit.vehicles.size() - (vehicleIdx + 1));
 
-    for(size_t i = vehicleIdx + 1; i < trainToSplit->vehicles.size(); i++)
+    for(size_t i = vehicleIdx + 1; i < trainToSplit.vehicles.size(); i++)
     {
-      remainingTrain->vehicles.push_back(trainToSplit->vehicles.at(i));
+      remainingTrain->vehicles.push_back(trainToSplit.vehicles.at(i));
 
       Vehicle *vehicle = m_stateData.getVehicleById(remainingTrain->vehicles.back().vehicleId);
       vehicle->activeTrainId = remainingTrain->trainId;
     }
 
-    trainToSplit->vehicles.erase(trainToSplit->vehicles.begin() + (vehicleIdx + 1), trainToSplit->vehicles.end());
+    trainToSplit.vehicles.erase(trainToSplit.vehicles.begin() + (vehicleIdx + 1), trainToSplit.vehicles.end());
   }
 
-  trainToSplit->vehicles.shrink_to_fit();
+  trainToSplit.vehicles.shrink_to_fit();
 
   // Recalculate length
   bool first = true;
-  trainToSplit->length = 0.0f;
-  for(const auto& item : trainToSplit->vehicles)
+  trainToSplit.length = 0.0f;
+  for(const auto& item : trainToSplit.vehicles)
   {
     const Vehicle *vehicle = m_stateData.getVehicleById(item.vehicleId);
-    trainToSplit->length += vehicle->length + (first ? 0.0f : staticData.trainCouplingLength);
+    trainToSplit.length += vehicle->length + (first ? 0.0f : staticData.trainCouplingLength);
     first = false;
   }
 
   if(trainTypeInterface)
   {
-    trainTypeInterface->setupTrainSpeedPowered(this, trainToSplit);
+    trainTypeInterface->setupTrainSpeedPowered(this, &trainToSplit);
     trainTypeInterface->setupTrainSpeedPowered(this, remainingTrain.get());
   }
 
   trainIdOut = remainingTrain->trainId;
-  auto pair = m_stateData.trains.insert({remainingTrain->trainId, remainingTrain.release()});
+  auto pair = m_stateData.trains.insert({remainingTrain->trainId, *remainingTrain});
 
   onTrainAddedRemoved(true, trainIdOut, invalidTrainId);
 
@@ -5739,18 +5699,18 @@ bool Simulator::splitTrain(Train *trainToSplit, const size_t vehicleIdx, const b
   if(getSimModeUnlocked() == SimMode::Master)
   {
     sendTrainFullRefreshReplica(SimulatorProtocol::OpCode::TrainChangedVehicles,
-                                trainToSplit);
+                                &trainToSplit);
 
     sendTrainFullRefreshReplica(SimulatorProtocol::OpCode::TrainAdded,
-                                pair.first->second);
+                                &pair.first->second);
   }
 
   return true;
 }
 
-bool Simulator::coupleTrain(Train *train, bool fwd, quint32& removedTrainIdOut)
+bool Simulator::coupleTrain(Train &train, bool fwd, quint32& removedTrainIdOut)
 {
-  if(!train->state.isManualAndStopped() || train->vehicles.empty())
+  if(!train.state.isManualAndStopped() || train.vehicles.empty())
     return false; // Train must be Manual and stopped
 
   if(getSimModeUnlocked() == SimMode::Replica)
@@ -5758,11 +5718,11 @@ bool Simulator::coupleTrain(Train *train, bool fwd, quint32& removedTrainIdOut)
     const auto coupleOp = fwd ?
                               SimulatorProtocol::TrainRequestCoupleSplit::CoupleFront :
                               SimulatorProtocol::TrainRequestCoupleSplit::CoupleRear;
-    send(SimulatorProtocol::TrainRequestCoupleSplit(train->trainId, 0, coupleOp));
+    send(SimulatorProtocol::TrainRequestCoupleSplit(train.trainId, 0, coupleOp));
     return true;
   }
 
-  const Train::VehicleItem itemToCouple = fwd ? train->vehicles.front() : train->vehicles.back(); // Deep copy, vehicles could realloc on resize
+  const Train::VehicleItem itemToCouple = fwd ? train.vehicles.front() : train.vehicles.back(); // Deep copy, vehicles could realloc on resize
   const Vehicle *vehicleToCouple = m_stateData.getVehicleById(itemToCouple.vehicleId);
   const VehicleState::Face &faceToCouple = (itemToCouple.reversed != fwd) ? vehicleToCouple->state.front : vehicleToCouple->state.rear;
 
@@ -5777,18 +5737,18 @@ bool Simulator::coupleTrain(Train *train, bool fwd, quint32& removedTrainIdOut)
     newDist += (-halfCouplingLength - 0.01);
 
   Simulator::Vehicle *otherVehicle = getVehicleNear(faceToCouple.segmentIndex, newDist, halfCouplingLength);
-  if(!otherVehicle || otherVehicle->activeTrainId == train->trainId)
+  if(!otherVehicle || otherVehicle->activeTrainId == train.trainId)
     return false;
 
-  Train *trainToRemove = m_stateData.getTrainById(otherVehicle->activeTrainId);
-  if(trainToRemove && !trainToRemove->state.isManualAndStopped())
+  Train &trainToRemove = m_stateData.trains.at(otherVehicle->activeTrainId);
+  if(!trainToRemove.state.isManualAndStopped())
     return false;
 
   bool goForward = faceToCouple.segmentDirectionInverted != fwd;
   std::vector<Train::VehicleItem> vehiclesToAdd;
-  if(trainToRemove)
+  //if(trainToRemove)
   {
-    std::vector<Train::VehicleItem> &sourceVehicles = trainToRemove->vehicles;
+    std::vector<Train::VehicleItem> &sourceVehicles = trainToRemove.vehicles;
     size_t segmentIdx = faceToCouple.segmentIndex;
     bool found = false;
     bool flipList = false;
@@ -5882,7 +5842,7 @@ bool Simulator::coupleTrain(Train *train, bool fwd, quint32& removedTrainIdOut)
     for(Train::VehicleItem &item : vehiclesToAdd)
     {
       Vehicle *vehicle = m_stateData.getVehicleById(item.vehicleId);
-      vehicle->activeTrainId = train->trainId;
+      vehicle->activeTrainId = train.trainId;
       if(flipList)
       {
         // When flipping list, also flip each vehicle and flit its segment orientation
@@ -5895,82 +5855,80 @@ bool Simulator::coupleTrain(Train *train, bool fwd, quint32& removedTrainIdOut)
     if(flipList)
       std::reverse(vehiclesToAdd.begin(), vehiclesToAdd.end());
 
-    train->length += trainToRemove->length;
-    trainToRemove->length = 0.0f;
+    train.length += trainToRemove.length;
+    trainToRemove.length = 0.0f;
   }
-  else
-  {
-    size_t segmentIdx = faceToCouple.segmentIndex;
-    bool found = false;
-    bool flipList = false;
+  // else
+  // {
+  //   // TODO: remove?
+  //   size_t segmentIdx = faceToCouple.segmentIndex;
+  //   bool found = false;
+  //   bool flipList = false;
 
-    for(int i = 0; i < 1000; i++)
-    {
-      // Single vehicle, check which face is nearest
-      if(segmentIdx == otherVehicle->state.front.segmentIndex
-          && segmentIdx == otherVehicle->state.rear.segmentIndex)
-      {
-        flipList = (otherVehicle->state.rear.distance < otherVehicle->state.front.distance);
+  //   for(int i = 0; i < 1000; i++)
+  //   {
+  //     // Single vehicle, check which face is nearest
+  //     if(segmentIdx == otherVehicle->state.front.segmentIndex
+  //         && segmentIdx == otherVehicle->state.rear.segmentIndex)
+  //     {
+  //       flipList = (otherVehicle->state.rear.distance < otherVehicle->state.front.distance);
 
-        if(!goForward)
-          flipList = !flipList;
-      }
-      else if(segmentIdx == otherVehicle->state.front.segmentIndex
-              || segmentIdx == otherVehicle->state.rear.segmentIndex)
-      {
-        // If we find tail first, flip the list
-        flipList = (segmentIdx == otherVehicle->state.rear.segmentIndex);
-      }
+  //       if(!goForward)
+  //         flipList = !flipList;
+  //     }
+  //     else if(segmentIdx == otherVehicle->state.front.segmentIndex
+  //             || segmentIdx == otherVehicle->state.rear.segmentIndex)
+  //     {
+  //       // If we find tail first, flip the list
+  //       flipList = (segmentIdx == otherVehicle->state.rear.segmentIndex);
+  //     }
 
-      const auto &segment = staticData.trackSegments.at(segmentIdx);
-      size_t nextSegmentIdx = getNextSegmentIndex(segment, goForward, m_stateData);
-      if(segmentIdx == invalidIndex)
-        break;
+  //     const auto &segment = staticData.trackSegments.at(segmentIdx);
+  //     size_t nextSegmentIdx = getNextSegmentIndex(segment, goForward, m_stateData);
+  //     if(segmentIdx == invalidIndex)
+  //       break;
 
-      const auto &nextSegment = staticData.trackSegments.at(nextSegmentIdx);
-      goForward = nextSegment.nextSegmentIndex[0] == segmentIdx;
-      segmentIdx = nextSegmentIdx;
-    }
+  //     const auto &nextSegment = staticData.trackSegments.at(nextSegmentIdx);
+  //     goForward = nextSegment.nextSegmentIndex[0] == segmentIdx;
+  //     segmentIdx = nextSegmentIdx;
+  //   }
 
-    if(!found)
-      return false;
+  //   if(!found)
+  //     return false;
 
-    if(fwd)
-      flipList = !flipList;
+  //   if(fwd)
+  //     flipList = !flipList;
 
-    if(flipList)
-    {
-      otherVehicle->state.front.segmentDirectionInverted = !otherVehicle->state.front.segmentDirectionInverted;
-      otherVehicle->state.rear.segmentDirectionInverted = !otherVehicle->state.rear.segmentDirectionInverted;
-    }
+  //   if(flipList)
+  //   {
+  //     otherVehicle->state.front.segmentDirectionInverted = !otherVehicle->state.front.segmentDirectionInverted;
+  //     otherVehicle->state.rear.segmentDirectionInverted = !otherVehicle->state.rear.segmentDirectionInverted;
+  //   }
 
-    otherVehicle->activeTrainId = train->trainId;
-    vehiclesToAdd.push_back({otherVehicle->vehicleId, flipList});
-    train->length += otherVehicle->length;
-  }
+  //   otherVehicle->activeTrainId = train.trainId;
+  //   vehiclesToAdd.push_back({otherVehicle->vehicleId, flipList});
+  //   train.length += otherVehicle->length;
+  // }
 
-  train->length += staticData.trainCouplingLength;
+  train.length += staticData.trainCouplingLength;
 
   if(fwd)
-    train->vehicles.insert(train->vehicles.begin(), vehiclesToAdd.begin(), vehiclesToAdd.end());
+    train.vehicles.insert(train.vehicles.begin(), vehiclesToAdd.begin(), vehiclesToAdd.end());
   else
-    train->vehicles.insert(train->vehicles.end(), vehiclesToAdd.begin(), vehiclesToAdd.end());
+    train.vehicles.insert(train.vehicles.end(), vehiclesToAdd.begin(), vehiclesToAdd.end());
 
   if(getSimModeUnlocked() == SimMode::Master)
   {
     sendTrainFullRefreshReplica(SimulatorProtocol::OpCode::TrainChangedVehicles,
-                                train);
+                                &train);
   }
 
-  if(trainToRemove)
-  {
-    removedTrainIdOut = trainToRemove->trainId;
-    removeTrain(trainToRemove->trainId, false, train->trainId);
-  }
+  removedTrainIdOut = trainToRemove.trainId;
+  removeTrain(trainToRemove.trainId, false, train.trainId);
 
   if(trainTypeInterface)
   {
-    trainTypeInterface->setupTrainSpeedPowered(this, train);
+    trainTypeInterface->setupTrainSpeedPowered(this, &train);
   }
 
   return true;

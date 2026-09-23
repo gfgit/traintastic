@@ -1883,8 +1883,7 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
           triangle[2].rx() = triangle[0].x();
         }
 
-        const Simulator::StateData &stateData = m_simulator->stateData();
-        const Simulator::SpawnState &spawnState = stateData.spawns.at(obj.sensorIndex);
+        const Simulator::SpawnState &spawnState = m_stateData.spawns.at(obj.sensorIndex);
 
         switch (spawnState.state)
         {
@@ -1965,22 +1964,26 @@ void SimulatorView::drawTrains(QPainter *painter)
   // We need to access simulator data
   std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
 
-  const Simulator::Train *const activeTrain = m_simulator->getTrainById(m_currentTrainId);
-  const Simulator::Train *const trainUnderMouse = m_simulator->getTrainById(m_trainUnderMouseId);
-  quint32 vehicleUnderMouseId = Simulator::invalidTrainId;
+  if(!m_stateData.trains.contains(m_currentTrainId))
+    m_currentTrainId = Simulator::invalidTrainId;
 
-  if(trainUnderMouse && m_trainUnderMouseVehicleIdx != Simulator::invalidTrainId
-      && m_trainUnderMouseVehicleIdx <= trainUnderMouse->vehicles.size())
+  quint32 vehicleUnderMouseId = Simulator::invalidTrainId;
+  if(m_trainUnderMouseVehicleIdx != Simulator::invalidIndex)
   {
-    vehicleUnderMouseId = trainUnderMouse->vehicles.at(m_trainUnderMouseVehicleIdx).vehicleId;
+    auto trainUnderMouse = m_stateData.getTrainById(m_trainUnderMouseId);
+    if(trainUnderMouse &&
+        m_trainUnderMouseVehicleIdx <= trainUnderMouse->vehicles.size())
+    {
+      vehicleUnderMouseId = trainUnderMouse->vehicles.at(m_trainUnderMouseVehicleIdx).vehicleId;
+    }
   }
 
   const float trainCouplingLength = m_simulator->staticData.trainCouplingLength;
 
-  for(auto it : m_simulator->stateData().vehicles)
+  for(const auto &it : m_stateData.vehicles)
   {
-    const Simulator::Vehicle* vehicle = it.second;
-    const Simulator::Train *train = m_simulator->stateData().getTrainById(vehicle->activeTrainId);
+    const Simulator::Vehicle* vehicle = &it.second;
+
     const auto& vehicleState = vehicle->state;
     const float length = vehicle->length;
 
@@ -1991,6 +1994,9 @@ void SimulatorView::drawTrains(QPainter *painter)
     painter->translate(center.x, center.y);
     painter->rotate(qRadiansToDegrees(angle));
 
+    Simulator::TrainState::Mode mode = Simulator::TrainState::Mode::Manual;
+
+    auto train = m_stateData.getTrainById(vehicle->activeTrainId);
     if(train)
     {
       const Simulator::Train::VehicleItem trainHead = train->getHead();
@@ -2045,11 +2051,9 @@ void SimulatorView::drawTrains(QPainter *painter)
           painter->drawLine(QLineF(QPointF(0.0, 0.0), trainTail.reversed ? backPt : frontPt));
         }
       }
-    }
 
-    Simulator::TrainState::Mode mode = Simulator::TrainState::Mode::Manual;
-    if(train)
       mode = train->state.mode;
+    }
 
     const QRectF vehicleRect(-length / 2.0, -trainWidth / 2.0,
                              length, trainWidth);
@@ -2062,7 +2066,7 @@ void SimulatorView::drawTrains(QPainter *painter)
     {
       painter->fillRect(vehicleRectAdj, Qt::darkYellow);
     }
-    else if(activeTrain && activeTrain == train)
+    else if(m_currentTrainId != Simulator::invalidTrainId && m_currentTrainId == train->trainId)
     {
       painter->fillRect(vehicleRectAdj, Qt::white);
     }
@@ -2075,7 +2079,8 @@ void SimulatorView::drawTrains(QPainter *painter)
                         QColor(color.red * 255, color.green * 255, color.blue * 255));
     }
 
-    if(vehicle->vehicleId != vehicleUnderMouseId && activeTrain && activeTrain == train)
+    if(vehicle->vehicleId != vehicleUnderMouseId
+        && m_currentTrainId != Simulator::invalidTrainId && m_currentTrainId == train->trainId)
     {
       painter->setBrush(Qt::NoBrush);
 
@@ -2090,7 +2095,7 @@ void SimulatorView::drawTrains(QPainter *painter)
         painter->drawRect(vehicleRectAdj);
       }
 
-      if(activeTrain->state.isOnStationStop)
+      if(train->state.isOnStationStop)
       {
         painter->setPen(trainStationStopPen);
         painter->drawRect(vehicleRectAdj);
@@ -2152,7 +2157,10 @@ std::pair<Simulator::Point, bool> SimulatorView::getCurrentTrainStartPt(qreal *a
   // We need to access simulator data
   std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
 
-  const Simulator::Train *const activeTrain = m_simulator->stateData().getTrainById(m_currentTrainId);
+  if(m_currentTrainId == Simulator::invalidTrainId)
+    return {Simulator::Point(), false};
+
+  auto activeTrain = m_stateData.getTrainById(m_currentTrainId);
   if(!activeTrain)
     return {Simulator::Point(), false};
 
@@ -2163,7 +2171,7 @@ std::pair<Simulator::Point, bool> SimulatorView::getCurrentTrainStartPt(qreal *a
   if(vehicleItem.vehicleId == Simulator::invalidTrainId)
     return {Simulator::Point(), false};
 
-  const Simulator::Vehicle *vehicle = m_simulator->stateData().getVehicleById(vehicleItem.vehicleId);
+  const Simulator::Vehicle *vehicle = m_stateData.getVehicleById(vehicleItem.vehicleId);
   const Simulator::Point centerPt = (vehicle->state.front.position + vehicle->state.rear.position) / 2.0;
 
   if(!centerPt.isFinite())
@@ -2212,15 +2220,14 @@ void SimulatorView::keyPressEvent(QKeyEvent* e)
       const size_t trainIndex = static_cast<size_t>(e->key() - Qt::Key_1);
       std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
 
-      const auto &trains = m_simulator->stateData().trains;
-      if(trains.size() < trainIndex)
+      if(m_stateData.trains.size() < trainIndex)
         break;
 
-      auto it = trains.begin();
+      auto it = m_stateData.trains.begin();
       std::advance(it, trainIndex);
 
-      if(it != trains.end() && it->second)
-        m_currentTrainId = it->second->trainId;
+      if(it != m_stateData.trains.end() && !m_stateData.trains.empty())
+        m_currentTrainId = it->second.trainId;
       break;
     }
     case Qt::Key_W:
@@ -2228,59 +2235,64 @@ void SimulatorView::keyPressEvent(QKeyEvent* e)
     {
       std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
 
-      const auto &trains = m_simulator->stateData().trains;
       auto it = m_currentTrainId == Simulator::invalidTrainId ?
-            trains.begin() :
-            trains.find(m_currentTrainId);
+            m_stateData.trains.begin() :
+            m_stateData.trains.find(m_currentTrainId);
 
-      if(it == trains.end())
+      if(it == m_stateData.trains.end())
         return;
 
-      if(m_currentTrainId == Simulator::invalidTrainId && !trains.empty())
-        m_currentTrainId = it->second->trainId;
+      if(m_currentTrainId == Simulator::invalidTrainId && !m_stateData.trains.empty())
+        m_currentTrainId = it->second.trainId;
 
-      if(e->key() == Qt::Key_W && it != trains.begin())
+      if(e->key() == Qt::Key_W && it != m_stateData.trains.begin())
         it--;
       else if(e->key() == Qt::Key_E)
       {
         auto it2= it;
         it2++;
-        if(it2 != trains.end())
+        if(it2 != m_stateData.trains.end())
           it = it2;
       }
 
-      m_currentTrainId = it->second->trainId;
+      m_currentTrainId = it->second.trainId;
       break;
     }
     case Qt::Key_Up:
     {
       std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
-      Simulator::Train *train = m_simulator->getTrainById(m_currentTrainId);
-      if(train)
-        m_simulator->applyTrainSpeedDelta(train, train->speedMax / 20);
+      if(m_stateData.trains.contains(m_currentTrainId))
+      {
+        Simulator::Train &train = m_stateData.trains.at(m_currentTrainId);
+        m_simulator->applyTrainSpeedDelta(train, train.speedMax / 20);
+      }
       break;
     }
     case Qt::Key_Down:
     {
       std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
-      Simulator::Train *train = m_simulator->getTrainById(m_currentTrainId);
-      if(train)
-        m_simulator->applyTrainSpeedDelta(train, -train->speedMax / 20);
+      if(m_stateData.trains.contains(m_currentTrainId))
+      {
+        Simulator::Train &train = m_stateData.trains.at(m_currentTrainId);
+        m_simulator->applyTrainSpeedDelta(train, -train.speedMax / 20);
+      }
       break;
     }
     case Qt::Key_Right:
     case Qt::Key_Left:
     {
       std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
-      Simulator::Train *train = m_simulator->getTrainById(m_currentTrainId);
-      if(train)
+      if(m_stateData.trains.contains(m_currentTrainId))
       {
+        Simulator::Train &train = m_stateData.trains.at(m_currentTrainId);
+
         bool dir = (e->key() == Qt::Key_Left);
         std::pair<Simulator::Point, Simulator::Point> extents = m_simulator->getTrainExtents(train);
 
         const bool inverted = isPointPairInvertedInView(extents.first, extents.second);
         if(inverted)
           dir = !dir;
+
         m_simulator->setTrainDirection(train, dir);
       }
       break;
@@ -2289,9 +2301,9 @@ void SimulatorView::keyPressEvent(QKeyEvent* e)
     case Qt::Key_Space:
     {
       std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
-      Simulator::Train *train = m_simulator->getTrainById(m_currentTrainId);
-      if(train)
+      if(m_stateData.trains.contains(m_currentTrainId))
       {
+        Simulator::Train &train = m_stateData.trains.at(m_currentTrainId);
         m_simulator->stopTrainAndSetManual(train);
       }
       break;
@@ -2308,27 +2320,33 @@ void SimulatorView::keyPressEvent(QKeyEvent* e)
     case Qt::Key_A:
     {
       std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
-      Simulator::Train *train = m_simulator->getTrainById(m_currentTrainId);
-      if(train)
+      if(m_stateData.trains.contains(m_currentTrainId))
+      {
+        Simulator::Train &train = m_stateData.trains.at(m_currentTrainId);
         m_simulator->setTrainMode(train, Simulator::TrainState::Mode::Automatic);
+      }
       break;
     }
 
     case Qt::Key_S:
     {
       std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
-      Simulator::Train *train = m_simulator->getTrainById(m_currentTrainId);
-      if(train)
+      if(m_stateData.trains.contains(m_currentTrainId))
+      {
+        Simulator::Train &train = m_stateData.trains.at(m_currentTrainId);
         m_simulator->setTrainMode(train, Simulator::TrainState::Mode::SemiAutomatic);
+      }
       break;
     }
 
     case Qt::Key_M:
     {
       std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
-      Simulator::Train *train = m_simulator->getTrainById(m_currentTrainId);
-      if(train)
+      if(m_stateData.trains.contains(m_currentTrainId))
+      {
+        Simulator::Train &train = m_stateData.trains.at(m_currentTrainId);
         m_simulator->setTrainMode(train, Simulator::TrainState::Mode::Manual);
+      }
       break;
     }
 
@@ -2510,74 +2528,80 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
       m_trainUnderMouseId = vehicle->activeTrainId;
       m_trainUnderMouseVehicleIdx = Simulator::invalidIndex;
 
-      Simulator::Train *train = m_simulator->stateData().getTrainById(vehicle->activeTrainId);
-      trainName = QString::fromStdString(train->name);
-      isManualModeStopped = train->state.isManualAndStopped();
 
-      size_t vehicleIdx = 0;
-      for(const Simulator::Train::VehicleItem& item : train->vehicles)
+      auto train = m_stateData.getTrainById(vehicle->activeTrainId);
+      if(train)
       {
-        if(item.vehicleId == vehicle->vehicleId)
+        trainName = QString::fromStdString(train->name);
+        isManualModeStopped = train->state.isManualAndStopped();
+
+        size_t vehicleIdx = 0;
+        for(const Simulator::Train::VehicleItem& item : train->vehicles)
         {
-          m_trainUnderMouseVehicleIdx = vehicleIdx;
-          break;
+          if(item.vehicleId == vehicle->vehicleId)
+          {
+            m_trainUnderMouseVehicleIdx = vehicleIdx;
+            break;
+          }
+          vehicleIdx++;
         }
-        vehicleIdx++;
-      }
 
-      if(isManualModeStopped && !train->vehicles.empty())
-      {
-        auto findNearVehicleToCouple = [&](bool isTrainHead) -> bool
+        if(isManualModeStopped && !train->vehicles.empty())
         {
-          const Simulator::Train::VehicleItem &item = isTrainHead ? train->vehicles.front() : train->vehicles.back();
-          Simulator::VehicleState::Face &coupleFace = (item.reversed != isTrainHead) ?
-                                                         vehicle->state.front :
-                                                         vehicle->state.rear;
+          auto findNearVehicleToCouple = [&](bool isTrainHead) -> bool
+          {
+            const Simulator::Train::VehicleItem &item = isTrainHead ? train->vehicles.front() : train->vehicles.back();
+            Simulator::VehicleState::Face &coupleFace = (item.reversed != isTrainHead) ?
+                                                            vehicle->state.front :
+                                                            vehicle->state.rear;
 
-          // Look for a vehicle at coupling distance from us
-          // Use half coupling distance + small offset to not get ourselves as result
-          const float halfCouplingLength = m_simulator->staticData.trainCouplingLength / 2.0f;
+            // Look for a vehicle at coupling distance from us
+            // Use half coupling distance + small offset to not get ourselves as result
+            const float halfCouplingLength = m_simulator->staticData.trainCouplingLength / 2.0f;
 
-          float newDist = coupleFace.distance;
-          if(coupleFace.segmentDirectionInverted != isTrainHead)
-            newDist += (halfCouplingLength + 0.01);
+            float newDist = coupleFace.distance;
+            if(coupleFace.segmentDirectionInverted != isTrainHead)
+              newDist += (halfCouplingLength + 0.01);
+            else
+              newDist += (-halfCouplingLength - 0.01);
+
+            Simulator::Vehicle *otherVehicle = m_simulator->getVehicleNear(coupleFace.segmentIndex, newDist, halfCouplingLength);
+            if(!otherVehicle)
+              return false;
+
+            // TODO: check if distance is trainCouplingLength
+
+            if(otherVehicle->activeTrainId == Simulator::invalidTrainId)
+              return true;
+
+            if(vehicle->activeTrainId == otherVehicle->activeTrainId)
+              return false;
+
+            auto otherTrain = m_stateData.getTrainById(otherVehicle->activeTrainId);
+            if(!otherTrain)
+              return false;
+
+            return otherTrain->state.isManualAndStopped();
+          };
+
+          if(vehicle->vehicleId == train->vehicles.front().vehicleId)
+            canCoupleFwd = findNearVehicleToCouple(true);
           else
-            newDist += (-halfCouplingLength - 0.01);
+            canSplitFwd = true;
 
-          Simulator::Vehicle *otherVehicle = m_simulator->getVehicleNear(coupleFace.segmentIndex, newDist, halfCouplingLength);
-          if(!otherVehicle)
-            return false;
+          if(vehicle->vehicleId == train->vehicles.back().vehicleId)
+            canCoupleRear = findNearVehicleToCouple(false);
+          else
+            canSplitRear = true;
 
-          // TODO: check if distance is trainCouplingLength
-
-          if(otherVehicle->activeTrainId == Simulator::invalidTrainId)
-            return true;
-
-          if(vehicle->activeTrainId == otherVehicle->activeTrainId)
-            return false;
-
-          Simulator::Train *otherTrain = m_simulator->stateData().getTrainById(otherVehicle->activeTrainId);
-          return otherTrain->state.isManualAndStopped();
-        };
-
-        if(vehicle->vehicleId == train->vehicles.front().vehicleId)
-          canCoupleFwd = findNearVehicleToCouple(true);
-        else
-          canSplitFwd = true;
-
-        if(vehicle->vehicleId == train->vehicles.back().vehicleId)
-          canCoupleRear = findNearVehicleToCouple(false);
-        else
-          canSplitRear = true;
-
-        if(train->state.reverse)
-        {
-          std::swap(canCoupleFwd, canCoupleRear);
-          std::swap(canSplitFwd, canSplitRear);
+          if(train->state.reverse)
+          {
+            std::swap(canCoupleFwd, canCoupleRear);
+            std::swap(canSplitFwd, canSplitRear);
+          }
         }
+        foundTrain = true;
       }
-
-      foundTrain = true;
     }
   }
 
@@ -2684,7 +2708,7 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
     {
       std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
 
-      Simulator::Train *trainToCouple = m_simulator->getTrainById(m_trainUnderMouseId);
+      auto trainToCouple = m_stateData.getTrainById(m_trainUnderMouseId);
       m_trainUnderMouseId = Simulator::invalidTrainId;
       foundTrain = false;
 
@@ -2696,7 +2720,7 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
 
         // NOTE: this might remove active train, if so set active train to trainToCouple
         quint32 removedTrainIdx = Simulator::invalidTrainId;
-        if(!m_simulator->coupleTrain(trainToCouple, fwd, removedTrainIdx))
+        if(!m_simulator->coupleTrain(*trainToCouple, fwd, removedTrainIdx))
         {
           // TODO: show error
         }
@@ -2706,7 +2730,7 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
     {
       std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
 
-      Simulator::Train *trainToSplit = m_simulator->getTrainById(m_trainUnderMouseId);
+      auto trainToSplit = m_stateData.getTrainById(m_trainUnderMouseId);
       m_trainUnderMouseId = Simulator::invalidTrainId;
       foundTrain = false;
 
@@ -2716,7 +2740,7 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
         bool fwd = result == splitFwdAct;
         if(trainToSplit->state.reverse)
           fwd = !fwd;
-        m_simulator->splitTrain(trainToSplit, m_trainUnderMouseVehicleIdx, fwd, newTrainId);
+        m_simulator->splitTrain(*trainToSplit, m_trainUnderMouseVehicleIdx, fwd, newTrainId);
       }
     }
   }
@@ -2990,7 +3014,7 @@ void SimulatorView::showItemTooltip(const Simulator::Point &point, QHelpEvent *e
 
     {
       std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
-      encoding = m_simulator->stateData().sensors[segment.sensor.index].encoding;
+      encoding = m_stateData.sensors[segment.sensor.index].encoding;
     }
 
     switch(encoding)
@@ -3151,16 +3175,15 @@ void SimulatorView::trainAddedRemoved(bool add, quint32 trainId, quint32 suggest
   }
 }
 
-void SimulatorView::userAskRemoveTrain(size_t trainIdx)
+void SimulatorView::userAskRemoveTrain(quint32 trainId)
 {
   {
     std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
-    Simulator::Train *train = m_simulator->getTrainById(trainIdx);
-    if(!train)
+    if(!m_stateData.trains.contains(trainId))
       return;
 
     assert(m_trainToBeRemovedId == Simulator::invalidTrainId);
-    m_trainToBeRemovedId = trainIdx;
+    m_trainToBeRemovedId = trainId;
   }
 
   const int ret = QMessageBox::question(this, tr("Remove Train?"), tr("Remove Current Train?"));
@@ -3173,10 +3196,7 @@ void SimulatorView::userAskRemoveTrain(size_t trainIdx)
 
   {
     std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
-    Simulator::Train *train = m_simulator->getTrainById(m_trainToBeRemovedId);
-    if(train)
-      m_simulator->removeTrainUser(train->trainId);
-
+    m_simulator->removeTrainUser(m_trainToBeRemovedId);
     m_trainToBeRemovedId = Simulator::invalidTrainId;
   }
 }
@@ -3184,7 +3204,7 @@ void SimulatorView::userAskRemoveTrain(size_t trainIdx)
 void SimulatorView::doSetCurrentTrainIndex(quint32 newTrainId)
 {
   std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
-  if(m_simulator->stateData().trains.contains(newTrainId))
+  if(m_stateData.trains.contains(newTrainId))
   {
     m_currentTrainId = newTrainId;
   }
