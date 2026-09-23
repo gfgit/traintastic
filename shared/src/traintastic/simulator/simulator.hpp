@@ -706,7 +706,7 @@ public:
     if(trainId == invalidTrainId)
       return;
 
-    m_ioContext.post([this, speed, immediate]()
+    m_ioContext.post([this, trainId, speed, immediate]()
                      {
                        Train *train = m_stateData.getTrainById(trainId);
                        if(!train)

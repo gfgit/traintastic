@@ -1977,9 +1977,6 @@ void SimulatorView::drawTrains(QPainter *painter)
   const QBrush frontLightBrush(qRgba(254, 243, 144, 90));
   const QBrush rearLightBrush (qRgba(255,  70,   70, 90));
 
-  // We need to access simulator data
-  std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
-
   if(!m_stateData.trains.contains(m_currentTrainId))
     m_currentTrainId = Simulator::invalidTrainId;
 
@@ -2169,9 +2166,6 @@ std::pair<Simulator::Point, bool> SimulatorView::getCurrentTrainStartPt(qreal *a
 {
   if(!m_simulator)
     return {Simulator::Point(), false};
-
-  // We need to access simulator data
-  std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
 
   if(m_currentTrainId == Simulator::invalidTrainId)
     return {Simulator::Point(), false};
