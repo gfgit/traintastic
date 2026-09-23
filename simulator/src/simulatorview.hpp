@@ -228,7 +228,7 @@ private:
   void showAddTrainDialog(size_t segmentIndex, const Simulator::Point &point, bool segmentInverted);
 
 private slots:
-  void tick();
+  void tick(const Simulator::StateData &newStateData);
   void trainAddedRemoved(bool add, quint32 trainId, quint32 suggestedTrainId);
   void userAskRemoveTrain(quint32 trainId);
   void doSetCurrentTrainIndex(quint32 newTrainId);

@@ -30,6 +30,7 @@
 #include <numbers>
 #include <optional>
 #include <thread>
+#include <utility>
 #include <vector>
 #include <cstdint>
 #include <boost/asio/io_context.hpp>
@@ -671,7 +672,7 @@ public:
   static void updateView(Simulator::StaticData::View& view,
                          const Simulator::TrackSegment::Curve& curve, float startAngle);
 
-  StateData stateData() const;
+  const StateData& stateData() const;
 
   void enableServer(bool localhostOnly = true, uint16_t port = 5741);
 
@@ -683,7 +684,8 @@ public:
   void setPowerOn(bool powerOn);
   void togglePowerOn();
 
-  std::pair<Point, Point> getTrainExtents(Train &train);
+  static std::pair<Point, Point> getTrainExtents(const StateData &stateData_, Train &train);
+
   void setTrainDirection(Train &train, bool reverse);
   void setTrainSpeed(Train &train, float speed, bool immediate = false);
   void applyTrainSpeedDelta(Train &train, float delta);
@@ -705,10 +707,6 @@ public:
   void setConnectionAsReplica(const std::shared_ptr<SimulatorConnection>& connection);
   void removeConnection(const std::shared_ptr<SimulatorConnection>& connection, bool replica, bool remove = true);
 
-  void sendReplicas(const SimulatorProtocol::Message& message);
-  void sendReplicas(QByteArray &buf);
-  void sendToMaster(QByteArray &buf);
-
   inline std::recursive_mutex& stateMutex() { return m_stateMutex; }
 
   enum class TrainPlacement : uint8_t
@@ -729,7 +727,6 @@ public:
 
   bool removeTrain(quint32 trainId, bool removeWagons, quint32 suggestedTrainId = invalidTrainId);
   bool removeTrainUser(quint32 trainId);
-  void destroyTrain(Train &train, bool removeWagons);
 
   Vehicle *addVehicle(float length, Color color,
                       size_t typeIdx = invalidIndex,
@@ -862,6 +859,12 @@ private:
   Simulator::Vehicle *getVehicleNearHelper(size_t segmentIdx, float pos, float maxDistance,
                                            bool canGoForward, bool canGoBackwards,
                                            Vehicle *bestVehicle, float &bestDistance);
+
+  void destroyTrain(Train &train, bool removeWagons);
+
+  void sendReplicas(const SimulatorProtocol::Message& message);
+  void sendReplicas(QByteArray &buf);
+  void sendToMaster(QByteArray &buf);
 };
 
 

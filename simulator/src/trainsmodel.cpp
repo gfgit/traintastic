@@ -117,8 +117,8 @@ bool TrainsModel::addTrain(const QString &name,
         return false;
     }
 
-    if(invert)
-        mSimulator->setTrainDirection(mSimulator->stateData().trains.at(trainId), true);
+    //if(invert)
+    //    mSimulator->setTrainDirection(mSimulator->stateData().trains.at(trainId), true);
 
     beginResetModel();
     mTrains.insert(name, Train{name, 0.0});
@@ -155,16 +155,6 @@ void TrainsModel::setSimulator(Simulator *sim)
 
     if(mSimulator)
     {
-        for(const auto& it : mSimulator->stateData().trains)
-        {
-            Train train;
-            train.name = QString::fromStdString(it.second.name);
-            train.speedKmH = it.second.state.speed;
-            if(it.second.state.reverse)
-                train.speedKmH = -train.speedKmH;
-
-            mTrains.insert(train.name, train);
-        }
     }
 
     endResetModel();

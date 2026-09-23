@@ -540,6 +540,20 @@ void drawCurve(const Simulator::TrackSegment& segment, size_t curveIndex, QPaint
 
 }
 
+class StateDataSyncEvent : public QEvent
+{
+public:
+  static constexpr QEvent::Type _Type = QEvent::Type(QEvent::User + 1);
+
+  StateDataSyncEvent(const Simulator::StateData &data_)
+    : QEvent(_Type)
+    , stateData(data_)
+  {
+  }
+
+  Simulator::StateData stateData;
+};
+
 SimulatorView::SimulatorView(QWidget* parent)
   : QWidget(parent)
 {
@@ -615,10 +629,12 @@ void SimulatorView::setSimulator(std::shared_ptr<Simulator> value,
     emit powerOnChanged(m_stateData.powerOn);
 
     m_simulatorConnections.emplace_back(m_simulator->onTick.connect(
-                                          [this]()
-    {
-      QMetaObject::invokeMethod(this, &SimulatorView::tick, Qt::QueuedConnection);
-    }));
+        [this]()
+        {
+          // Runs in Simulator thread
+          StateDataSyncEvent *ev = new StateDataSyncEvent(m_simulator->stateData());
+          qApp->postEvent(this, ev);
+        }));
     m_simulatorConnections.emplace_back(m_simulator->onTrainAddedRemoved.connect(
         [this](bool add, quint32 trainId, quint32 suggestedTrainId)
         {
@@ -2188,11 +2204,20 @@ std::pair<Simulator::Point, bool> SimulatorView::getCurrentTrainStartPt(qreal *a
 
 bool SimulatorView::event(QEvent *e)
 {
-  if(m_simulator && e->type() == QEvent::ToolTip)
+  if(m_simulator)
   {
-    QHelpEvent *ev = static_cast<QHelpEvent *>(e);
-    showItemTooltip(mapToSim(ev->pos()), ev);
-    return true;
+    if(e->type() == QEvent::ToolTip)
+    {
+      QHelpEvent *ev = static_cast<QHelpEvent *>(e);
+      showItemTooltip(mapToSim(ev->pos()), ev);
+      return true;
+    }
+    else if(e->type() == StateDataSyncEvent::_Type)
+    {
+      StateDataSyncEvent *ev = static_cast<StateDataSyncEvent *>(e);
+      tick(ev->stateData);
+      return true;
+    }
   }
 
   return QWidget::event(e);
@@ -2287,7 +2312,7 @@ void SimulatorView::keyPressEvent(QKeyEvent* e)
         Simulator::Train &train = m_stateData.trains.at(m_currentTrainId);
 
         bool dir = (e->key() == Qt::Key_Left);
-        std::pair<Simulator::Point, Simulator::Point> extents = m_simulator->getTrainExtents(train);
+        std::pair<Simulator::Point, Simulator::Point> extents = Simulator::getTrainExtents(m_stateData train);
 
         const bool inverted = isPointPairInvertedInView(extents.first, extents.second);
         if(inverted)
@@ -3136,13 +3161,11 @@ void SimulatorView::showAddTrainDialog(size_t segmentIndex, const Simulator::Poi
   delete dlg;
 }
 
-void SimulatorView::tick()
+void SimulatorView::tick(const Simulator::StateData &newStateData)
 {
-  std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
-
   m_stateDataPrevious.powerOn = m_stateData.powerOn;
   m_stateDataPrevious.trainSpeedFactor = m_stateData.trainSpeedFactor;
-  m_stateData = m_simulator->stateData();
+  m_stateData = newStateData;
 
   emit tickActiveChanged(m_stateData.tickActive);
 

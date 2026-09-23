@@ -431,7 +431,7 @@ Simulator::~Simulator()
   }
 }
 
-Simulator::StateData Simulator::stateData() const
+const Simulator::StateData& Simulator::stateData() const
 {
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
   return m_stateData;
@@ -571,10 +571,8 @@ void Simulator::togglePowerOn()
   }
 }
 
-std::pair<Simulator::Point, Simulator::Point> Simulator::getTrainExtents(Train &train)
+std::pair<Simulator::Point, Simulator::Point> Simulator::getTrainExtents(const StateData &stateData_, Train &train)
 {
-  std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-
   if(train.vehicles.empty())
     return {};
 
@@ -583,8 +581,8 @@ std::pair<Simulator::Point, Simulator::Point> Simulator::getTrainExtents(Train &
   const auto frontVehicleItem = train.vehicles.front();
   const auto rearVehicleItem = train.vehicles.back();
 
-  const Simulator::Vehicle *frontVehicle = m_stateData.getVehicleById(frontVehicleItem.vehicleId);
-  const Simulator::Vehicle *rearVehicle = m_stateData.getVehicleById(rearVehicleItem.vehicleId);
+  const Simulator::Vehicle *frontVehicle = stateData_.getVehicleById(frontVehicleItem.vehicleId);
+  const Simulator::Vehicle *rearVehicle = stateData_.getVehicleById(rearVehicleItem.vehicleId);
 
   ret.first = frontVehicleItem.reversed ? frontVehicle->state.rear.position : frontVehicle->state.front.position;
   ret.second = !rearVehicleItem.reversed ? rearVehicle->state.rear.position : rearVehicle->state.front.position;
