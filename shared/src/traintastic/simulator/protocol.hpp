@@ -27,6 +27,7 @@
 #include "../utils/packed.hpp"
 
 #include <QtGlobal>
+#include "endian.h"
 
 
 namespace SimulatorProtocol

@@ -691,7 +691,7 @@ public:
     if(trainId == invalidTrainId)
       return;
 
-    m_ioContext.post([this, trainId, reverse]()
+    boost::asio::post(m_ioContext, [this, trainId, reverse]()
                      {
                        Train *train = m_stateData.getTrainById(trainId);
                        if(!train)
@@ -706,7 +706,7 @@ public:
     if(trainId == invalidTrainId)
       return;
 
-    m_ioContext.post([this, trainId, speed, immediate]()
+    boost::asio::post(m_ioContext, [this, trainId, speed, immediate]()
                      {
                        Train *train = m_stateData.getTrainById(trainId);
                        if(!train)
@@ -721,7 +721,7 @@ public:
     if(trainId == invalidTrainId)
       return;
 
-    m_ioContext.post([this, trainId, deltaUp]()
+    boost::asio::post(m_ioContext, [this, trainId, deltaUp]()
                      {
                        Train *train = m_stateData.getTrainById(trainId);
                        if(!train)
@@ -736,7 +736,7 @@ public:
     if(trainId == invalidTrainId)
       return;
 
-    m_ioContext.post([this, trainId, mode]()
+    boost::asio::post(m_ioContext, [this, trainId, mode]()
                      {
                        Train *train = m_stateData.getTrainById(trainId);
                        if(!train)
@@ -751,7 +751,7 @@ public:
     if(trainId == invalidTrainId)
       return;
 
-    m_ioContext.post([this, trainId]()
+    boost::asio::post(m_ioContext, [this, trainId]()
                      {
                        Train *train = m_stateData.getTrainById(trainId);
                        if(!train)
