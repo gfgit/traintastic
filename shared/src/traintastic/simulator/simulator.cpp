@@ -855,6 +855,17 @@ void Simulator::send(const SimulatorProtocol::Message& message)
   }
 }
 
+void Simulator::sendTo(size_t toConnId, const SimulatorProtocol::Message &message)
+{
+  for(const auto& connection : m_connections)
+  {
+    if(toConnId != connection->connectionId())
+      continue;
+    connection->send(message);
+    break;
+  }
+}
+
 void Simulator::sendReplicas(const SimulatorProtocol::Message& message)
 {
   if(getSimModeUnlocked() != SimMode::Master)
@@ -932,26 +943,30 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
     if(isReplica)
       break;
 
-    const auto &m = static_cast<const LocomotiveSpeedDirection &>(message);
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-    for(auto &it : m_stateData.trains)
-    {
-      Train &train = it.second;
-
-      if(m.address == train.address && (m.protocol == train.protocol || train.protocol == DecoderProtocol::None))
-      {
-        const float speed = std::clamp(train.speedMax * (m.speed / 255.0f), 0.0f, train.speedMax);
-        const bool reverse = m.direction == Direction::Reverse;
-
-        auto &trainState = train.state;
-        if(trainState.speed != speed || trainState.reverse != reverse)
+    boost::asio::post(
+        m_coreContext, [this, message=message]()
         {
-          setTrainSpeed(train, speed);
-          setTrainDirection(train, reverse);
-        }
-        break;
-      }
-    }
+          const auto &m = static_cast<const LocomotiveSpeedDirection &>(message);
+          std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+          for(auto &it : m_stateData.trains)
+          {
+            Train &train = it.second;
+
+            if(m.address == train.address && (m.protocol == train.protocol || train.protocol == DecoderProtocol::None))
+            {
+              const float speed = std::clamp(train.speedMax * (m.speed / 255.0f), 0.0f, train.speedMax);
+              const bool reverse = m.direction == Direction::Reverse;
+
+              auto &trainState = train.state;
+              if(trainState.speed != speed || trainState.reverse != reverse)
+              {
+                setTrainSpeed(train, speed);
+                setTrainDirection(train, reverse);
+              }
+              break;
+            }
+          }
+        });
     break;
   }
   case OpCode::AccessorySetState:
@@ -973,7 +988,20 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
         {
           newState = Simulator::TurnoutState::State::Thrown;
         }
-        setTurnoutState(i, newState, !isReplica);
+
+        if(getSimModeNetwork() == SimMode::Master)
+        {
+          for(const auto& connection : m_repliacas)
+          {
+            connection->send(m);
+          }
+        }
+
+        boost::asio::post(
+            m_coreContext, [this, i, isReplica, newState=newState]()
+            {
+              setTurnoutState(i, newState, !isReplica);
+            });
         break;
       }
       else if(segment.type == Simulator::TrackSegment::Type::Turnout3Way && (m.address == segment.turnout.addresses[0] || m.address == segment.turnout.addresses[1]))
@@ -984,6 +1012,9 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
         // \|  = 1st address
         //
         // TurnoutState::coils = 0 0 0 0 RC RT LC LT
+
+        // TODO: implement
+        break;
 
         std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
         auto& turnoutState = m_stateData.turnouts[segment.turnout.index];
@@ -1013,15 +1044,6 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
           turnoutState.state = Simulator::TurnoutState::State::ThrownRight;
           break;
         }
-
-        // TODO: move all inside setTurnoutState()
-        if(getSimModeNetwork() == SimMode::Master)
-        {
-          for(const auto& connection : m_repliacas)
-          {
-            connection->send(m);
-          }
-        }
         break;
       }
     }
@@ -1042,22 +1064,25 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
     if(sensor == chan->second.end())
       break;
 
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+    boost::asio::post(
+        m_coreContext, [this, sensorIdx=sensor->second, newAxleCount=m.axleCount, newValue=m.value]()
+        {
+          std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-    auto &sensorState = m_stateData.sensors[sensor->second];
-    const auto sensorType = staticData.sensors.at(sensor->second).type;
-    if(sensorType == Sensor::Type::PositionSensor)
-    {
-      sensorState.curTime = sensorState.maxTime;
-    }
-    else if(sensorType == Sensor::Type::AxleCounter)
-    {
-      sensorState.axleCount += m.axleCount;
-      sensorState.curTime = sensorState.axleCount > 0 ? sensorState.maxTime : -sensorState.maxTime;
-    }
+          auto &sensorState = m_stateData.sensors[sensorIdx];
+          const auto sensorType = staticData.sensors.at(sensorIdx).type;
+          if(sensorType == Sensor::Type::PositionSensor)
+          {
+            sensorState.curTime = sensorState.maxTime;
+          }
+          else if(sensorType == Sensor::Type::AxleCounter)
+          {
+            sensorState.axleCount += newAxleCount;
+            sensorState.curTime = sensorState.axleCount > 0 ? sensorState.maxTime : -sensorState.maxTime;
+          }
 
-    sensorState.value = m.value;
-
+          sensorState.value = newValue;
+        });
     break;
   }
   case OpCode::SensorBatchState:
@@ -1073,22 +1098,25 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
     const size_t firstIdx = m.batchIdx * 16;
     const size_t idxCount = std::min(firstIdx + 16, staticData.sensors.size());
 
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+    boost::asio::post(
+        m_coreContext, [this, firstIdx, idxCount, newState=m.state]()
+        {
+          std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-    for(size_t idx = firstIdx; idx < idxCount; idx++)
-    {
-      const auto& sensor = staticData.sensors[idx];
+          for(size_t idx = firstIdx; idx < idxCount; idx++)
+          {
+            const auto& sensor = staticData.sensors[idx];
 
-      // Axle counter sensor send diffs so there is no point in querying them
-      if(sensor.type == Sensor::Type::AxleCounter)
-      {
-        continue;
-      }
+            // Axle counter sensor send diffs so there is no point in querying them
+            if(sensor.type == Sensor::Type::AxleCounter)
+            {
+              continue;
+            }
 
-      auto& sensorState = m_stateData.sensors[idx];
-      sensorState.value = bitRead(m.state, idx - firstIdx);
-    }
-
+            auto& sensorState = m_stateData.sensors[idx];
+            sensorState.value = bitRead(newState, idx - firstIdx);
+          }
+        });
     break;
   }
   case OpCode::Handshake:
@@ -1098,80 +1126,85 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
   case OpCode::SignalSetState:
   {
     const auto& m = static_cast<const SignalSetState&>(message);
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-    for(auto &it : m_stateData.mainSignals)
+    for(const auto &it : m_networkStateData.mainSignals)
     {
-      MainSignal *s = &it.second;
-      if(!isReplica && s->ownerConnectionId != fromConnId)
+      const MainSignal &signalCopy = it.second;
+      if(!isReplica && signalCopy.ownerConnectionId != fromConnId)
         continue;
 
-      if(s->address != m.address || s->channel != m.channel)
+      if(signalCopy.address != m.address || signalCopy.channel != m.channel)
         continue;
-
-      bool wasBlinking = false;
-      bool isBlinking = false;
-
-      for(size_t i = 0; i < s->lights.size(); i++)
-      {
-        if(i < (sizeof(m.lights) / sizeof(m.lights[0])))
-        {
-          if(s->lights[i].state == MainSignal::State::BlikOn ||
-              s->lights[i].state == MainSignal::State::BlinkReverseOn)
-            wasBlinking = true;
-
-          s->lights[i].color = MainSignal::Light::Color(m.lights[i].color);
-          s->lights[i].state = MainSignal::State(m.lights[i].state);
-
-          if(s->lights[i].state == MainSignal::State::BlikOn ||
-              s->lights[i].state == MainSignal::State::BlinkReverseOn)
-            isBlinking = true;
-        }
-        else
-        {
-          s->lights[i].color = MainSignal::Light::Color::Red;
-          s->lights[i].state = MainSignal::State::Off;
-        }
-      }
-
-      s->maxSpeed = m.speed;
-
-      if(s->fixedLimit == Simulator::MainSignal::FixedLimit::Limit60)
-      {
-        s->maxSpeed = std::min(s->maxSpeed, 60.0);
-      }
-      else if(s->fixedLimit == Simulator::MainSignal::FixedLimit::Limit30)
-      {
-        s->maxSpeed = std::min(s->maxSpeed, 30.0);
-      }
-
-      // If just started blinking, sync with current blink phase
-      if(isBlinking && !wasBlinking)
-        s->setSignalBlinkStart(false, m_stateData.signalBlinkState);
-
-      s->setArrowLightOn(m.isArrowLightOn());
-      s->directionIndicatorText = m.directionIndication;
-      s->rappelState = Simulator::MainSignal::RappelState(m.rappelState);
-
-      MainSignal::State advanceSignalState = s->getAdvanceSignalState();
-      if(advanceSignalState == MainSignal::State::BlikOn ||
-          advanceSignalState == MainSignal::State::BlinkReverseOn)
-        wasBlinking = true;
-
-      advanceSignalState = MainSignal::State(m.getAdvanceSignalState());
-      s->setAdvanceSignalState(advanceSignalState);
-
-      if(advanceSignalState == MainSignal::State::BlikOn ||
-          advanceSignalState == MainSignal::State::BlinkReverseOn)
-        isBlinking = true;
-
-      if(isBlinking && !wasBlinking)
-        s->setSignalBlinkStart(true, m_stateData.signalBlinkState);
 
       if(getSimModeNetwork() == SimMode::Master)
       {
         sendReplicas(m);
       }
 
+      boost::asio::post(
+          m_coreContext, [this, m=m, signalName=signalCopy.name]()
+          {
+            std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+            MainSignal &mainSignal = m_stateData.mainSignals.at(signalName);
+
+            bool wasBlinking = false;
+            bool isBlinking = false;
+
+            for(size_t i = 0; i < mainSignal.lights.size(); i++)
+            {
+              if(i < (sizeof(m.lights) / sizeof(m.lights[0])))
+              {
+                if(mainSignal.lights[i].state == MainSignal::State::BlikOn ||
+                    mainSignal.lights[i].state == MainSignal::State::BlinkReverseOn)
+                  wasBlinking = true;
+
+                mainSignal.lights[i].color = MainSignal::Light::Color(m.lights[i].color);
+                mainSignal.lights[i].state = MainSignal::State(m.lights[i].state);
+
+                if(mainSignal.lights[i].state == MainSignal::State::BlikOn ||
+                    mainSignal.lights[i].state == MainSignal::State::BlinkReverseOn)
+                  isBlinking = true;
+              }
+              else
+              {
+                mainSignal.lights[i].color = MainSignal::Light::Color::Red;
+                mainSignal.lights[i].state = MainSignal::State::Off;
+              }
+            }
+
+            mainSignal.maxSpeed = m.speed;
+
+            if(mainSignal.fixedLimit == Simulator::MainSignal::FixedLimit::Limit60)
+            {
+              mainSignal.maxSpeed = std::min(mainSignal.maxSpeed, 60.0);
+            }
+            else if(mainSignal.fixedLimit == Simulator::MainSignal::FixedLimit::Limit30)
+            {
+              mainSignal.maxSpeed = std::min(mainSignal.maxSpeed, 30.0);
+            }
+
+            // If just started blinking, sync with current blink phase
+            if(isBlinking && !wasBlinking)
+              mainSignal.setSignalBlinkStart(false, m_stateData.signalBlinkState);
+
+            mainSignal.setArrowLightOn(m.isArrowLightOn());
+            mainSignal.directionIndicatorText = m.directionIndication;
+            mainSignal.rappelState = Simulator::MainSignal::RappelState(m.rappelState);
+
+            MainSignal::State advanceSignalState = mainSignal.getAdvanceSignalState();
+            if(advanceSignalState == MainSignal::State::BlikOn ||
+                advanceSignalState == MainSignal::State::BlinkReverseOn)
+              wasBlinking = true;
+
+            advanceSignalState = MainSignal::State(m.getAdvanceSignalState());
+            mainSignal.setAdvanceSignalState(advanceSignalState);
+
+            if(advanceSignalState == MainSignal::State::BlikOn ||
+                advanceSignalState == MainSignal::State::BlinkReverseOn)
+              isBlinking = true;
+
+            if(isBlinking && !wasBlinking)
+              mainSignal.setSignalBlinkStart(true, m_stateData.signalBlinkState);
+          });
       break;
     }
     break;
@@ -1179,23 +1212,29 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
   case OpCode::AuxSignalSetState:
   {
     const auto& m = static_cast<const AuxSignalSetState&>(message);
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-    for(auto &it : m_stateData.auxSignals)
+    for(const auto &it : m_networkStateData.auxSignals)
     {
-      AuxSignal *s = &it.second;
-      if(!isReplica && s->ownerConnectionId != fromConnId)
+      const AuxSignal &signalCopy = it.second;
+      if(!isReplica && signalCopy.ownerConnectionId != fromConnId)
         continue;
 
-      if(s->address != m.address || s->channel != m.channel)
+      if(signalCopy.address != m.address || signalCopy.channel != m.channel)
         continue;
-
-      s->mLights = m.lights;
-      s->mPosition = m.position;
 
       if(getSimModeNetwork() == SimMode::Master)
       {
         sendReplicas(m);
       }
+
+      boost::asio::post(
+          m_coreContext, [this, m=m, signalName=signalCopy.name]()
+          {
+            std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+            AuxSignal &auxSignal = m_stateData.auxSignals.at(signalName);
+
+            auxSignal.mLights = m.lights;
+            auxSignal.mPosition = m.position;
+          });
       break;
     }
     break;
@@ -1203,29 +1242,46 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
   case OpCode::OwnSignal:
   {
     const auto& m = static_cast<const OwnSignal&>(message);
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
     if(m.isMain)
     {
-      for(auto &it : m_stateData.mainSignals)
+      for(const auto &it : m_networkStateData.mainSignals)
       {
-        MainSignal *s = &it.second;
-        if(s->ownerConnectionId != invalidIndex || s->address != m.address || s->channel != m.channel)
+        const MainSignal &signalCopy = it.second;
+        if(signalCopy.address != m.address || signalCopy.channel != m.channel)
           continue;
 
-        s->ownerConnectionId = fromConnId;
+        boost::asio::post(
+            m_coreContext, [this, m=m, signalName=signalCopy.name, fromConnId]()
+            {
+              std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+              MainSignal &mainSignal = m_stateData.mainSignals.at(signalName);
+
+              if(mainSignal.ownerConnectionId != invalidIndex)
+                return;
+              mainSignal.ownerConnectionId = fromConnId;
+            });
         break;
       }
     }
     else
     {
-      for(auto &it : m_stateData.auxSignals)
+      for(const auto &it : m_networkStateData.auxSignals)
       {
-        AuxSignal *s = &it.second;
-        if(s->ownerConnectionId != invalidIndex || s->address != m.address || s->channel != m.channel)
+        const AuxSignal &signalCopy = it.second;
+        if(signalCopy.address != m.address || signalCopy.channel != m.channel)
           continue;
 
-        s->ownerConnectionId = fromConnId;
+        boost::asio::post(
+            m_coreContext, [this, m=m, signalName=signalCopy.name, fromConnId]()
+            {
+              std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+              AuxSignal &auxSignal = m_stateData.auxSignals.at(signalName);
+
+              if(auxSignal.ownerConnectionId != invalidIndex)
+                return;
+              auxSignal.ownerConnectionId = fromConnId;
+            });
         break;
       }
     }
@@ -1244,58 +1300,68 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       if(connection->connectionId() != fromConnId)
         continue;
 
-      // Subscribe client to this channel
-      if(!vec_contains(connection->subscribedChannels, m.channel))
-        connection->subscribedChannels.push_back(m.channel);
-
-      const auto& channelMap = staticData.sensorChannelMap.at(m.channel);
-
-      size_t batchIdx = 0;
-      bool sensorFound = false;
-
-      uint16_t stateBuf = 0;
-      std::map<size_t, size_t>::const_iterator it;
-
-      while(true)
-      {
-        const size_t firstAddress = batchIdx * 16 + 1;
-        const size_t lastAddress = (batchIdx + 1) * 16;
-
-        it = channelMap.lower_bound(firstAddress);
-        stateBuf = 0;
-        sensorFound = false;
-
-        while(it != channelMap.end())
-        {
-          if(it->first > lastAddress)
-            break;
-
-          const auto& sensor = staticData.sensors[it->second];
-
-          // Axle counter sensor send diffs so there is no point in querying them
-          if(sensor.type == Sensor::Type::AxleCounter)
+      boost::asio::post(
+          m_coreContext, [this, fromConnId, connection=connection, newChannel=m.channel]()
           {
-            it++;
-            continue;
-          }
+            // Subscribe client to this channel
+            if(!vec_contains(connection->subscribedChannels, newChannel))
+              connection->subscribedChannels.push_back(newChannel);
 
-          const auto& sensorState = m_stateData.sensors[it->second];
-          if(sensorState.value)
-            bitSet(stateBuf, sensor.address - firstAddress);
+            const auto& channelMap = staticData.sensorChannelMap.at(newChannel);
 
-          sensorFound = true;
-          it++;
-        }
+            size_t batchIdx = 0;
+            bool sensorFound = false;
 
-        if(sensorFound)
-          connection->send(SimulatorProtocol::SensorBatchState(m.channel, m_stateData.powerOn ? batchIdx : 0, stateBuf));
+            uint16_t stateBuf = 0;
+            std::map<size_t, size_t>::const_iterator it;
 
-        if(it == channelMap.end())
-          break;
+            while(true)
+            {
+              const size_t firstAddress = batchIdx * 16 + 1;
+              const size_t lastAddress = (batchIdx + 1) * 16;
 
-        // Go to next batch
-        batchIdx = it->first / 16;
-      }
+              it = channelMap.lower_bound(firstAddress);
+              stateBuf = 0;
+              sensorFound = false;
+
+              while(it != channelMap.end())
+              {
+                if(it->first > lastAddress)
+                  break;
+
+                const auto& sensor = staticData.sensors[it->second];
+
+                // Axle counter sensor send diffs so there is no point in querying them
+                if(sensor.type == Sensor::Type::AxleCounter)
+                {
+                  it++;
+                  continue;
+                }
+
+                const auto& sensorState = m_stateData.sensors[it->second];
+                if(sensorState.value)
+                  bitSet(stateBuf, sensor.address - firstAddress);
+
+                sensorFound = true;
+                it++;
+              }
+
+              if(sensorFound)
+              {
+                boost::asio::post(
+                    m_networkContext, [this, fromConnId, newChannel, batchIdx, stateBuf]()
+                    {
+                      sendTo(fromConnId, SimulatorProtocol::SensorBatchState(newChannel, batchIdx, m_stateData.powerOn ? stateBuf : 0));
+                    });
+              }
+
+              if(it == channelMap.end())
+                break;
+
+              // Go to next batch
+              batchIdx = it->first / 16;
+            }
+          });
       break;
     }
     break;
@@ -1314,7 +1380,6 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
     if(sensor == chan->second.end())
       break;
 
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
     if(getSimModeNetwork() == SimMode::Master)
     {
       for(const auto& connection : m_repliacas)
@@ -1323,84 +1388,91 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       }
     }
 
-    m_stateData.sensors[sensor->second].encoding = SensorState::Encoding(m.encoding);
+    boost::asio::post(
+        m_coreContext, [this, sensorIdx=sensor->second, encoding=m.encoding]()
+        {
+          std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+          m_stateData.sensors[sensorIdx].encoding = SensorState::Encoding(encoding);
+        });
     break;
   }
   case OpCode::OwnSpawn:
   {
     const auto& m = static_cast<const OwnSpawn&>(message);
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-    auto it = m_stateData.spawns.find(m.address);
-    if(it == m_stateData.spawns.end())
-      break;
+    boost::asio::post(
+        m_coreContext, [this, fromConnId, m=m]()
+        {
+          std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-    SpawnState &spawnState = it->second;
-    if(spawnState.ownerConnectionId != invalidIndex)
-      break;
+          auto it = m_stateData.spawns.find(m.address);
+          if(it == m_stateData.spawns.end())
+            return;
 
-    spawnState.ownerConnectionId = fromConnId;
-    spawnState.state = (spawnState.waitingResetCount > 0) ?
-                           SpawnState::State::WaitingReset :
-                           SpawnState::State::Ready;
+          SpawnState &spawnState = it->second;
+          if(spawnState.ownerConnectionId != invalidIndex)
+            return;
 
-    for(const auto& connection : m_connections)
-    {
-      if(connection->connectionId() != fromConnId)
-        continue;
+          spawnState.ownerConnectionId = fromConnId;
+          spawnState.state = (spawnState.waitingResetCount > 0) ?
+                                 SpawnState::State::WaitingReset :
+                                 SpawnState::State::Ready;
 
-      uint8_t state = SpawnStateChange::Reset;
-      if(spawnState.state == SpawnState::State::Ready)
-        state = SpawnStateChange::Ready;
-      else if(spawnState.state == SpawnState::State::WaitingReset)
-        state = SpawnStateChange::WaitingReset;
+          uint8_t state = SpawnStateChange::Reset;
+          if(spawnState.state == SpawnState::State::Ready)
+            state = SpawnStateChange::Ready;
+          else if(spawnState.state == SpawnState::State::WaitingReset)
+            state = SpawnStateChange::WaitingReset;
 
-      connection->send(SimulatorProtocol::SpawnStateChange(m.address, state));
-      break;
-    }
-
+          boost::asio::post(
+              m_networkContext, [this, state, address=m.address, fromConnId]()
+              {
+                sendTo(fromConnId, SimulatorProtocol::SpawnStateChange(address, state));
+              });
+        });
     break;
   }
   case OpCode::SpawnStateChange:
   {
     const auto& m = static_cast<const SpawnStateChange&>(message);
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-    auto it = m_stateData.spawns.find(m.address);
-    if(it == m_stateData.spawns.end())
-      break;
+    boost::asio::post(
+        m_coreContext, [this, fromConnId, m=m]()
+        {
+          std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-    SpawnState &spawnState = it->second;
-    if(spawnState.ownerConnectionId != fromConnId)
-      break;
+          auto it = m_stateData.spawns.find(m.address);
+          if(it == m_stateData.spawns.end())
+            return;
 
-    if(spawnState.state == SpawnState::State::WaitingReset && spawnState.waitingResetCount == SpawnState::MAX_WAITING_RESET)
-    {
-      if(m.state == SpawnStateChange::Reset) // Start resetting
-        spawnState.waitingResetCount = SpawnState::START_WAITING_RESET;
-      break;
-    }
+          SpawnState &spawnState = it->second;
+          if(spawnState.ownerConnectionId != fromConnId)
+            return;
 
-    if(spawnState.state != SpawnState::State::Ready || m.state != SpawnStateChange::RequestActivate)
-      break;
+          if(spawnState.state == SpawnState::State::WaitingReset && spawnState.waitingResetCount == SpawnState::MAX_WAITING_RESET)
+          {
+            if(m.state == SpawnStateChange::Reset) // Start resetting
+              spawnState.waitingResetCount = SpawnState::START_WAITING_RESET;
+            return;
+          }
 
-    doSpawnTrain(m.address);
+          if(spawnState.state != SpawnState::State::Ready || m.state != SpawnStateChange::RequestActivate)
+            return;
 
-    for(const auto& connection : m_connections)
-    {
-      if(connection->connectionId() != fromConnId)
-        continue;
+          doSpawnTrain(m.address);
 
-      uint8_t state = SpawnStateChange::Reset;
-      if(spawnState.state == SpawnState::State::Ready)
-        state = SpawnStateChange::Ready;
-      else if(spawnState.state == SpawnState::State::WaitingReset)
-        state = SpawnStateChange::WaitingReset;
+          uint8_t state = SpawnStateChange::Reset;
+          if(spawnState.state == SpawnState::State::Ready)
+            state = SpawnStateChange::Ready;
+          else if(spawnState.state == SpawnState::State::WaitingReset)
+            state = SpawnStateChange::WaitingReset;
 
-      connection->send(SimulatorProtocol::SpawnStateChange(m.address, state));
-      break;
-    }
-
+          boost::asio::post(
+              m_networkContext, [this, state, address=m.address, fromConnId]()
+              {
+                sendTo(fromConnId, SimulatorProtocol::SpawnStateChange(address, state));
+              });
+        });
     break;
   }
   case OpCode::TrainSpeedFactorChanged:
@@ -1887,7 +1959,7 @@ void Simulator::removeConnection(const std::shared_ptr<SimulatorConnection>& con
     connection->stop();
 
     boost::asio::post(
-        m_coreContext, [=, this, conn=connection]()
+        m_coreContext, [this, conn=connection]()
         {
           onReplicaRemoved(conn);
         });
@@ -1927,7 +1999,7 @@ void Simulator::removeConnection(const std::shared_ptr<SimulatorConnection>& con
     else
     {
       boost::asio::post(
-          m_coreContext, [=, this, conn=connection]()
+          m_coreContext, [this, conn=connection]()
           {
             onConnectionRemoved(conn);
           });
@@ -2224,7 +2296,7 @@ void Simulator::tick()
   }
 
   // Sync network state (deep copy)
-  boost::asio::post(m_networkContext, [=, this, s=m_stateData]()
+  boost::asio::post(m_networkContext, [this, s=m_stateData]()
                     {
                       m_networkStateData = s;
                     });
@@ -6028,7 +6100,7 @@ void Simulator::setSimMode(SimMode m)
         }
 
         boost::asio::post(
-            m_coreContext, [=, this, m=mNetworkSimMode]()
+            m_coreContext, [this, m=mNetworkSimMode]()
             {
               std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
               mCoreSimMode = m;

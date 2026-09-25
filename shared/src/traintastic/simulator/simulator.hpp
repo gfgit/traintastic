@@ -772,6 +772,7 @@ public:
   void toggleTurnoutState(size_t segmentIndex, bool setUnknown);
 
   void send(const SimulatorProtocol::Message& message);
+  void sendTo(size_t toConnId, const SimulatorProtocol::Message& message);
   void receive(const SimulatorProtocol::Message& message, size_t fromConnId);
   void receiveVariableSize(const SimulatorProtocol::Message& message, size_t fromConnId);
 
