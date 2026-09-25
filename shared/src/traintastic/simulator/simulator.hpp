@@ -659,6 +659,7 @@ public:
 
 private:
   StateData m_stateData;
+  StateData m_networkStateData;
 
 public:
   const StaticData staticData;
@@ -691,7 +692,7 @@ public:
     if(trainId == invalidTrainId)
       return;
 
-    boost::asio::post(m_ioContext, [this, trainId, reverse]()
+    boost::asio::post(m_coreContext, [this, trainId, reverse]()
                      {
                        Train *train = m_stateData.getTrainById(trainId);
                        if(!train)
@@ -706,7 +707,7 @@ public:
     if(trainId == invalidTrainId)
       return;
 
-    boost::asio::post(m_ioContext, [this, trainId, speed, immediate]()
+    boost::asio::post(m_coreContext, [this, trainId, speed, immediate]()
                      {
                        Train *train = m_stateData.getTrainById(trainId);
                        if(!train)
@@ -721,7 +722,7 @@ public:
     if(trainId == invalidTrainId)
       return;
 
-    boost::asio::post(m_ioContext, [this, trainId, deltaUp]()
+    boost::asio::post(m_coreContext, [this, trainId, deltaUp]()
                      {
                        Train *train = m_stateData.getTrainById(trainId);
                        if(!train)
@@ -736,7 +737,7 @@ public:
     if(trainId == invalidTrainId)
       return;
 
-    boost::asio::post(m_ioContext, [this, trainId, mode]()
+    boost::asio::post(m_coreContext, [this, trainId, mode]()
                      {
                        Train *train = m_stateData.getTrainById(trainId);
                        if(!train)
@@ -751,7 +752,7 @@ public:
     if(trainId == invalidTrainId)
       return;
 
-    boost::asio::post(m_ioContext, [this, trainId]()
+    boost::asio::post(m_coreContext, [this, trainId]()
                      {
                        Train *train = m_stateData.getTrainById(trainId);
                        if(!train)
@@ -825,8 +826,10 @@ public:
   void setSimMode(SimMode m);
   SimMode getSimMode() const;
 
+  inline SimMode getSimModeNetwork() const { return mNetworkSimMode; };
 
-  inline SimMode getSimModeUnlocked() const { return mSimMode; };
+
+  inline SimMode getSimModeUnlocked() const { return mNetworkSimMode; };
 
 private:
   friend struct TrainState;
@@ -844,7 +847,8 @@ private:
   constexpr static float SpeedKmHtoTick = tickRate.count() / 3600.0;
   constexpr static float defaultSpeedTickRate = defaultSpeedKmH * SpeedKmHtoTick;
 
-  boost::asio::io_context m_ioContext;
+  boost::asio::io_context m_coreContext;
+  boost::asio::io_context m_networkContext;
   boost::asio::steady_timer m_tickTimer;
   boost::asio::steady_timer m_handShakeSendTimer;
   boost::asio::steady_timer m_handShakeRecvTimer;
@@ -862,7 +866,8 @@ private:
   boost::asio::steady_timer m_garbageCollectTimer;
   boost::asio::steady_timer m_replicaDiscoverSendTimer;
 
-  std::thread m_thread;
+  std::thread m_coreThread;
+  std::thread m_networkThread;
   mutable std::recursive_mutex m_stateMutex;
   bool m_serverEnabled = false;
   bool m_serverLocalHostOnly = true;
@@ -878,7 +883,8 @@ private:
 
   TrainTypeInterface *trainTypeInterface = nullptr;
 
-  SimMode mSimMode = SimMode::Standalone;
+  SimMode mCoreSimMode = SimMode::Standalone;
+  SimMode mNetworkSimMode = SimMode::Standalone;
 
   void accept();
   void doReceive();

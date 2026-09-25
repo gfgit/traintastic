@@ -115,18 +115,18 @@ constexpr size_t getStraightCount(Simulator::TrackSegment::Type type)
   using Type = Simulator::TrackSegment::Type;
   switch(type)
   {
-    case Type::Curve:
-    case Type::TurnoutCurved:
-      return 0;
+  case Type::Curve:
+  case Type::TurnoutCurved:
+    return 0;
 
-    case Type::Straight:
-    case Type::Turnout:
-    case Type::Turnout3Way:
-      return 1;
+  case Type::Straight:
+  case Type::Turnout:
+  case Type::Turnout3Way:
+    return 1;
 
-    case Type::SingleSlipTurnout:
-    case Type::DoubleSlipTurnout:
-      return 2;
+  case Type::SingleSlipTurnout:
+  case Type::DoubleSlipTurnout:
+    return 2;
   }
   return 0;
 }
@@ -137,18 +137,18 @@ constexpr size_t getCurveCount(Simulator::TrackSegment::Type type)
   using Type = Simulator::TrackSegment::Type;
   switch(type)
   {
-    case Type::Straight:
-      return 0;
+  case Type::Straight:
+    return 0;
 
-    case Type::Curve:
-    case Type::Turnout:
-    case Type::SingleSlipTurnout:
-      return 1;
+  case Type::Curve:
+  case Type::Turnout:
+  case Type::SingleSlipTurnout:
+    return 1;
 
-    case Type::TurnoutCurved:
-    case Type::Turnout3Way:
-    case Type::DoubleSlipTurnout:
-      return 2;
+  case Type::TurnoutCurved:
+  case Type::Turnout3Way:
+  case Type::DoubleSlipTurnout:
+    return 2;
   }
   return 0;
 }
@@ -157,7 +157,7 @@ Simulator::Point straightEnd(const Simulator::TrackSegment& segment)
 {
   assert(1 == getStraightCount(segment.type));
   return {
-    segment.points[0].x + segment.straight.length * std::cos(segment.rotation), segment.points[0].y + segment.straight.length * std::sin(segment.rotation)};
+          segment.points[0].x + segment.straight.length * std::cos(segment.rotation), segment.points[0].y + segment.straight.length * std::sin(segment.rotation)};
 }
 
 Simulator::Point curveEnd(const Simulator::TrackSegment& segment, size_t curveIndex = 0)
@@ -168,13 +168,13 @@ Simulator::Point curveEnd(const Simulator::TrackSegment& segment, size_t curveIn
   const float angle = (curve.angle < 0) ? (segment.rotation + pi) : segment.rotation;
 
   return {curve.center.x + curve.radius * std::sin(angle + curve.angle),
-    curve.center.y - curve.radius * std::cos(angle + curve.angle)};
+          curve.center.y - curve.radius * std::cos(angle + curve.angle)};
 }
 
 #ifndef _MSC_VER // std::abs is not constexpr :(
 constexpr
 #endif
-bool pointsClose(Simulator::Point a, Simulator::Point b)
+    bool pointsClose(Simulator::Point a, Simulator::Point b)
 {
   return std::abs(a.x - b.x) <= 1.0f && std::abs(a.y - b.y) <= 1.0f;
 }
@@ -184,18 +184,18 @@ constexpr size_t getPointCount(Simulator::TrackSegment::Type type)
   using Type = Simulator::TrackSegment::Type;
   switch(type)
   {
-    case Type::Straight:
-    case Type::Curve:
-      return 2;
+  case Type::Straight:
+  case Type::Curve:
+    return 2;
 
-    case Type::Turnout:
-    case Type::TurnoutCurved:
-      return 3;
+  case Type::Turnout:
+  case Type::TurnoutCurved:
+    return 3;
 
-    case Type::Turnout3Way:
-    case Type::SingleSlipTurnout:
-    case Type::DoubleSlipTurnout:
-      return 4;
+  case Type::Turnout3Way:
+  case Type::SingleSlipTurnout:
+  case Type::DoubleSlipTurnout:
+    return 4;
   }
   return 0;
 }
@@ -214,12 +214,12 @@ float getPointRotation(const Simulator::TrackSegment& segment, size_t pointIndex
     return segment.rotation;
   }
   else if((pointIndex == 1 && (segment.type == Type::Curve || segment.type == Type::TurnoutCurved)) ||
-          (pointIndex == 2 && (segment.type == Type::Turnout || segment.type == Type::Turnout3Way)))
+           (pointIndex == 2 && (segment.type == Type::Turnout || segment.type == Type::Turnout3Way)))
   {
     return segment.rotation + segment.curves[0].angle;
   }
   else if((pointIndex == 2 && segment.type == Type::TurnoutCurved) ||
-          (pointIndex == 3 && segment.type == Type::Turnout3Way))
+           (pointIndex == 3 && segment.type == Type::Turnout3Way))
   {
     return segment.rotation + segment.curves[1].angle;
   }
@@ -244,75 +244,75 @@ float getSegmentLength(const Simulator::TrackSegment& segment, const Simulator::
 
   switch(segment.type)
   {
-    case Type::Straight:
+  case Type::Straight:
+    return segment.straight.length;
+
+  case Type::Curve:
+    return segment.curves[0].length;
+
+  case Type::Turnout:
+    switch(stateData.turnouts[segment.turnout.index].state)
+    {
+    case State::Closed:
       return segment.straight.length;
 
-    case Type::Curve:
+    case State::Thrown:
       return segment.curves[0].length;
 
-    case Type::Turnout:
-      switch(stateData.turnouts[segment.turnout.index].state)
-      {
-        case State::Closed:
-          return segment.straight.length;
-
-        case State::Thrown:
-          return segment.curves[0].length;
-
-        default: // all others are invalid
-          break;
-      }
+    default: // all others are invalid
       break;
+    }
+    break;
 
-    case Type::TurnoutCurved:
-      switch(stateData.turnouts[segment.turnout.index].state)
-      {
-        case State::Closed:
-          return segment.curves[0].length;
+  case Type::TurnoutCurved:
+    switch(stateData.turnouts[segment.turnout.index].state)
+    {
+    case State::Closed:
+      return segment.curves[0].length;
 
-        case State::Thrown:
-          return segment.curves[1].length;
+    case State::Thrown:
+      return segment.curves[1].length;
 
-        default: // all others are invalid
-          break;
-      }
+    default: // all others are invalid
       break;
+    }
+    break;
 
-    case Type::Turnout3Way:
-      switch(stateData.turnouts[segment.turnout.index].state)
-      {
-        case State::Closed:
-          return segment.straight.length;
+  case Type::Turnout3Way:
+    switch(stateData.turnouts[segment.turnout.index].state)
+    {
+    case State::Closed:
+      return segment.straight.length;
 
-        case State::ThrownLeft:
-          return segment.curves[0].length;
+    case State::ThrownLeft:
+      return segment.curves[0].length;
 
-        case State::ThrownRight:
-          return segment.curves[1].length;
+    case State::ThrownRight:
+      return segment.curves[1].length;
 
-        default: // all others are invalid
-          break;
-      }
+    default: // all others are invalid
       break;
+    }
+    break;
 
-    case Type::SingleSlipTurnout:
-    case Type::DoubleSlipTurnout:
-      switch(stateData.turnouts[segment.turnout.index].state)
-      {
-        case State::Closed:
-        case State::ClosedLeft:
-        case State::ClosedRight:
-          return segment.straight.length;
+  case Type::SingleSlipTurnout:
+  case Type::DoubleSlipTurnout:
+    switch(stateData.turnouts[segment.turnout.index].state)
+    {
+    case State::Closed:
+    case State::ClosedLeft:
+    case State::ClosedRight:
+      return segment.straight.length;
 
-        case State::Thrown:
-        case State::ThrownLeft:
-        case State::ThrownRight:
-          return segment.curves[0].length;
+    case State::Thrown:
+    case State::ThrownLeft:
+    case State::ThrownRight:
+      return segment.curves[0].length;
 
-        default: // all others are invalid
-          break;
-      }
+    default: // all others are invalid
       break;
+    }
+    break;
   }
   return 0.0f;
 }
@@ -349,10 +349,10 @@ template<typename T>
 std::optional<T> stringToEnum(std::string_view value)
 {
   auto it = std::find_if(EnumValues<T>::value.begin(), EnumValues<T>::value.end(),
-    [&value](const auto& n)
-    {
-      return n.second == value;
-    });
+                         [&value](const auto& n)
+                         {
+                           return n.second == value;
+                         });
 
   if(it != EnumValues<T>::value.end())
   {
@@ -377,26 +377,26 @@ void clearTrainSignalCache(Simulator::StateData &data, Simulator::Train &train, 
   {
     std::erase_if(data.turnouts[idx].watchingTrainIDs,
                   [train](quint32 trainId) -> bool
-    {
-      return trainId == train.trainId;
-    });
+                  {
+                    return trainId == train.trainId;
+                  });
   }
   cache.turnouts.clear();
 }
 
 Simulator::Simulator(const nlohmann::json& world, TrainTypeInterface *iface)
   : staticData(load(world, m_stateData, iface))
-  , m_tickTimer{m_ioContext}
-  , m_handShakeSendTimer{m_ioContext}
-  , m_handShakeRecvTimer{m_ioContext}
-  , m_acceptor{m_ioContext}
-  , m_socketUDP{m_ioContext}
-  , m_signalBlinkStateTimer{m_ioContext}
-  , m_syncSensorStateTimer{m_ioContext}
-  , m_syncReplicaStateTimer{m_ioContext}
-  , m_syncReplicaTrainFullStateTimer{m_ioContext}
-  , m_garbageCollectTimer{m_ioContext}
-  , m_replicaDiscoverSendTimer{m_ioContext}
+  , m_tickTimer{m_coreContext}
+  , m_handShakeSendTimer{m_coreContext}
+  , m_handShakeRecvTimer{m_coreContext}
+  , m_acceptor{m_coreContext}
+  , m_socketUDP{m_coreContext}
+  , m_signalBlinkStateTimer{m_coreContext}
+  , m_syncSensorStateTimer{m_coreContext}
+  , m_syncReplicaStateTimer{m_coreContext}
+  , m_syncReplicaTrainFullStateTimer{m_coreContext}
+  , m_garbageCollectTimer{m_coreContext}
+  , m_replicaDiscoverSendTimer{m_coreContext}
   , trainTypeInterface(iface)
 {
   loadTrains(world);
@@ -451,74 +451,85 @@ uint16_t Simulator::serverPort() const
 
 void Simulator::start(bool discoverable)
 {
-  m_thread = std::thread(
-    [this, discoverable]()
-    {
-      if(m_serverEnabled)
+  m_coreThread = std::thread(
+      [this]()
       {
-        boost::system::error_code ec;
-        const boost::asio::ip::tcp::endpoint endpoint(m_serverLocalHostOnly ? boost::asio::ip::address_v4::loopback() : boost::asio::ip::address_v4::any(), m_serverPort);
+        tick();
+        //blinkSignals();
+        syncSensorState();
+        garbageCollectSegmentState();
 
-        m_acceptor.open(endpoint.protocol(), ec);
+        m_coreContext.run();
+      });
 
-        m_acceptor.bind(endpoint, ec);
-
-        m_acceptor.listen(5, ec);
-
-        if(discoverable)
+  m_networkThread = std::thread(
+      [this, discoverable]()
+      {
+        if(m_serverEnabled)
         {
-          m_socketUDP.open(boost::asio::ip::udp::v4(), ec);
-          if(ec)
+          boost::system::error_code ec;
+          const boost::asio::ip::tcp::endpoint endpoint(m_serverLocalHostOnly ? boost::asio::ip::address_v4::loopback() : boost::asio::ip::address_v4::any(), m_serverPort);
+
+          m_acceptor.open(endpoint.protocol(), ec);
+
+          m_acceptor.bind(endpoint, ec);
+
+          m_acceptor.listen(5, ec);
+
+          if(discoverable)
+          {
+            m_socketUDP.open(boost::asio::ip::udp::v4(), ec);
+            if(ec)
               assert(false);
 
-          m_socketUDP.set_option(boost::asio::socket_base::reuse_address(true), ec);
-          if(ec)
+            m_socketUDP.set_option(boost::asio::socket_base::reuse_address(true), ec);
+            if(ec)
               assert(false);
 
-          m_socketUDP.bind(boost::asio::ip::udp::endpoint(boost::asio::ip::address_v4::any(), defaultPort), ec);
-          if(ec)
-            assert(false);
+            m_socketUDP.bind(boost::asio::ip::udp::endpoint(boost::asio::ip::address_v4::any(), defaultPort), ec);
+            if(ec)
+              assert(false);
 
-          doReceive();
+            doReceive();
+          }
+
+          accept();
         }
 
-        accept();
-      }
+        handShakeSend();
+        handShakeRecv();
 
-      tick();
-      handShakeSend();
-      handShakeRecv();
-      //blinkSignals();
-      syncSensorState();
-      garbageCollectSegmentState();
-
-      m_ioContext.run();
-    });
+        m_networkContext.run();
+      });
 }
 
 void Simulator::stop()
 {
-  // Stop UDP discovery
-  boost::system::error_code ec;
-  m_socketUDP.close(ec);
+  boost::asio::post(
+      m_networkContext, [this]()
+      {
+        // Stop UDP discovery
+        boost::system::error_code ec;
+        m_socketUDP.close(ec);
 
-  while(!m_connections.empty())
-  {
-    auto connection =  m_connections.back();
-    m_connections.pop_back();
-    connection->stop();
-  }
+        while(!m_connections.empty())
+        {
+          auto connection =  m_connections.back();
+          m_connections.pop_back();
+          connection->stop();
+        }
 
-  while(!m_repliacas.empty())
-  {
-    auto connection =  m_repliacas.back();
-    m_repliacas.pop_back();
-    connection->stop();
-  }
+        while(!m_repliacas.empty())
+        {
+          auto connection =  m_repliacas.back();
+          m_repliacas.pop_back();
+          connection->stop();
+        }
 
-  // Stop TCP server
-  m_acceptor.cancel(ec);
-  m_acceptor.close(ec);
+        // Stop TCP server
+        m_acceptor.cancel(ec);
+        m_acceptor.close(ec);
+      });
 
   m_tickTimer.cancel();
   m_handShakeSendTimer.cancel();
@@ -529,9 +540,15 @@ void Simulator::stop()
   m_syncReplicaTrainFullStateTimer.cancel();
   m_garbageCollectTimer.cancel();
   m_replicaDiscoverSendTimer.cancel();
-  if(m_thread.joinable())
+
+  if(m_coreThread.joinable())
   {
-    m_thread.join();
+    m_coreThread.join();
+  }
+
+  if(m_networkThread.joinable())
+  {
+    m_networkThread.join();
   }
 }
 
@@ -631,7 +648,7 @@ void Simulator::setTrainSpeed(Train &train, float speed, bool immediate)
     const float oldTargetSpeed = train.state.targetSpeed;
     train.state.targetSpeed = speed;
     if(train.state.targetSpeed > 0.0 && train.state.waitToStart_ms == 0 &&
-       (train.state.speed == 0.0 || oldTargetSpeed == 0.0))
+        (train.state.speed == 0.0 || oldTargetSpeed == 0.0))
     {
       // When train was stopped or about to stop and signal becomes clear, add a bit of delay
       train.state.waitToStart_ms = TrainState::SecondsWaitFromStandstill * 1000.0;
@@ -682,8 +699,8 @@ void Simulator::applyTrainSpeedDelta(Train &train, float delta)
   if(getSimModeUnlocked() == SimMode::Replica)
   {
     const auto step = delta > 0 ?
-          SimulatorProtocol::TrainRequestChangeSpeed::IncreaseStep :
-          SimulatorProtocol::TrainRequestChangeSpeed::DecreaseStep;
+                          SimulatorProtocol::TrainRequestChangeSpeed::IncreaseStep :
+                          SimulatorProtocol::TrainRequestChangeSpeed::DecreaseStep;
     send(SimulatorProtocol::TrainRequestChangeSpeed(train.trainId, step));
     return;
   }
@@ -720,16 +737,16 @@ void Simulator::stopAllTrains()
 
 bool Simulator::segmentOccupied(size_t segmentIdx) const
 {
-    if(segmentIdx >= staticData.trackSegments.size())
-        return false;
+  if(segmentIdx >= staticData.trackSegments.size())
+    return false;
 
-    const auto& segment = staticData.trackSegments.at(segmentIdx);
-    if(!segment.hasSensor())
-        return false;
+  const auto& segment = staticData.trackSegments.at(segmentIdx);
+  if(!segment.hasSensor())
+    return false;
 
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-    const auto &sensor = m_stateData.sensors.at(segment.sensor.index);
-    return sensor.value;
+  std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+  const auto &sensor = m_stateData.sensors.at(segment.sensor.index);
+  return sensor.value;
 }
 
 void Simulator::setTurnoutState(size_t segmentIndex, TurnoutState::State state, bool sendChange)
@@ -882,24 +899,32 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
 {
   using namespace SimulatorProtocol;
 
-  const bool isReplica = getSimMode() == SimMode::Replica;
-  const bool isMaster = getSimMode() == SimMode::Master;
+  const bool isReplica = getSimModeNetwork() == SimMode::Replica;
+  const bool isMaster = getSimModeNetwork() == SimMode::Master;
 
   switch(message.opCode)
   {
   case OpCode::Power:
   {
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-    const bool wasPowerOn = m_stateData.powerOn;
+    boost::asio::post(
+        m_coreContext, [this, isReplica, message=message]()
+        {
+          std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+          const bool wasPowerOn = m_stateData.powerOn;
 
-    // NOTE: for replica we set local value here matching master value
-    m_stateData.powerOn = static_cast<const Power&>(message).powerOn;
+          // NOTE: for replica we set local value here matching master value
+          m_stateData.powerOn = static_cast<const Power&>(message).powerOn;;
 
-    if(!isReplica && wasPowerOn != m_stateData.powerOn)
-    {
-      send(message);
-      sendReplicas(message);
-    }
+          if(!isReplica && wasPowerOn != m_stateData.powerOn)
+          {
+            boost::asio::post(
+                m_networkContext, [this, message=message]()
+                {
+                  send(message);
+                  sendReplicas(message);
+                });
+          }
+        });
     break;
   }
   case OpCode::LocomotiveSpeedDirection:
@@ -937,7 +962,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
     {
       const auto& segment = staticData.trackSegments[i];
       if((segment.type == Simulator::TrackSegment::Type::Turnout || segment.type == Simulator::TrackSegment::Type::TurnoutCurved) &&
-         m.address == segment.turnout.addresses[0] && m.channel == segment.turnout.channel)
+          m.address == segment.turnout.addresses[0] && m.channel == segment.turnout.channel)
       {
         Simulator::TurnoutState::State newState = Simulator::TurnoutState::State::Unknown;
         if(m.state == 1)
@@ -990,7 +1015,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
         }
 
         // TODO: move all inside setTurnoutState()
-        if(getSimModeUnlocked() == SimMode::Master)
+        if(getSimModeNetwork() == SimMode::Master)
         {
           for(const auto& connection : m_repliacas)
           {
@@ -1091,14 +1116,14 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
         if(i < (sizeof(m.lights) / sizeof(m.lights[0])))
         {
           if(s->lights[i].state == MainSignal::State::BlikOn ||
-             s->lights[i].state == MainSignal::State::BlinkReverseOn)
+              s->lights[i].state == MainSignal::State::BlinkReverseOn)
             wasBlinking = true;
 
           s->lights[i].color = MainSignal::Light::Color(m.lights[i].color);
           s->lights[i].state = MainSignal::State(m.lights[i].state);
 
           if(s->lights[i].state == MainSignal::State::BlikOn ||
-             s->lights[i].state == MainSignal::State::BlinkReverseOn)
+              s->lights[i].state == MainSignal::State::BlinkReverseOn)
             isBlinking = true;
         }
         else
@@ -1129,20 +1154,20 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
 
       MainSignal::State advanceSignalState = s->getAdvanceSignalState();
       if(advanceSignalState == MainSignal::State::BlikOn ||
-         advanceSignalState == MainSignal::State::BlinkReverseOn)
+          advanceSignalState == MainSignal::State::BlinkReverseOn)
         wasBlinking = true;
 
       advanceSignalState = MainSignal::State(m.getAdvanceSignalState());
       s->setAdvanceSignalState(advanceSignalState);
 
       if(advanceSignalState == MainSignal::State::BlikOn ||
-         advanceSignalState == MainSignal::State::BlinkReverseOn)
+          advanceSignalState == MainSignal::State::BlinkReverseOn)
         isBlinking = true;
 
       if(isBlinking && !wasBlinking)
         s->setSignalBlinkStart(true, m_stateData.signalBlinkState);
 
-      if(getSimModeUnlocked() == SimMode::Master)
+      if(getSimModeNetwork() == SimMode::Master)
       {
         sendReplicas(m);
       }
@@ -1167,7 +1192,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       s->mLights = m.lights;
       s->mPosition = m.position;
 
-      if(getSimModeUnlocked() == SimMode::Master)
+      if(getSimModeNetwork() == SimMode::Master)
       {
         sendReplicas(m);
       }
@@ -1290,7 +1315,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       break;
 
     std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-    if(getSimModeUnlocked() == SimMode::Master)
+    if(getSimModeNetwork() == SimMode::Master)
     {
       for(const auto& connection : m_repliacas)
       {
@@ -1838,9 +1863,8 @@ void Simulator::setConnectionAsReplica(const std::shared_ptr<SimulatorConnection
     m_connections.erase(it);
 
     // Sync power state
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-    connection->send(SimulatorProtocol::Power(m_stateData.powerOn));
-    connection->send(SimulatorProtocol::TrainSpeedFactorChanged(m_stateData.trainSpeedFactor));
+    connection->send(SimulatorProtocol::Power(m_networkStateData.powerOn));
+    connection->send(SimulatorProtocol::TrainSpeedFactorChanged(m_networkStateData.trainSpeedFactor));
   }
 }
 
@@ -1862,7 +1886,11 @@ void Simulator::removeConnection(const std::shared_ptr<SimulatorConnection>& con
 
     connection->stop();
 
-    onReplicaRemoved(connection);
+    boost::asio::post(
+        m_coreContext, [=, this, conn=connection]()
+        {
+          onReplicaRemoved(conn);
+        });
   }
   else
   {
@@ -1880,7 +1908,7 @@ void Simulator::removeConnection(const std::shared_ptr<SimulatorConnection>& con
 
     connection->stop();
 
-    if(getSimMode() == SimMode::Replica)
+    if(getSimModeNetwork() == SimMode::Replica)
     {
       if(m_connections.empty())
       {
@@ -1888,11 +1916,21 @@ void Simulator::removeConnection(const std::shared_ptr<SimulatorConnection>& con
         doSendReplicaDiscover();
         doReceiveReplicaDiscover();
         onConnectionRemoved({});
+
+        boost::asio::post(
+            m_coreContext, [this]()
+            {
+              onReplicaRemoved({});
+            });
       }
     }
     else
     {
-      onConnectionRemoved(connection);
+      boost::asio::post(
+          m_coreContext, [=, this, conn=connection]()
+          {
+            onConnectionRemoved(conn);
+          });
     }
   }
 }
@@ -1969,8 +2007,8 @@ void Simulator::onConnectionRemoved(const std::shared_ptr<SimulatorConnection>& 
     s->maxSpeed = 0.0f;
     for(MainSignal::Light& l : s->lights)
     {
-        l.color = MainSignal::Light::Color::Red;
-        l.state = MainSignal::State::Off;
+      l.color = MainSignal::Light::Color::Red;
+      l.state = MainSignal::State::Off;
     }
 
     s->setArrowLightOn(false);
@@ -2011,20 +2049,20 @@ void Simulator::onReplicaRemoved(const std::shared_ptr<SimulatorConnection>& con
 void Simulator::accept()
 {
   m_acceptor.async_accept(
-    [this](boost::system::error_code ec, boost::asio::ip::tcp::socket socket)
-    {
-      if(!ec)
+      [this](boost::system::error_code ec, boost::asio::ip::tcp::socket socket)
       {
-        lastConnectionId++;
-        if(lastConnectionId == invalidIndex)
-          lastConnectionId = 0;
+        if(!ec)
+        {
+          lastConnectionId++;
+          if(lastConnectionId == invalidIndex)
+            lastConnectionId = 0;
 
-        m_connections.emplace_back(std::make_shared<SimulatorConnection>(
-                                     shared_from_this(), std::move(socket),
-                                     lastConnectionId))->start();
-        accept();
-      }
-    });
+          m_connections.emplace_back(std::make_shared<SimulatorConnection>(
+                                         shared_from_this(), std::move(socket),
+                                         lastConnectionId))->start();
+          accept();
+        }
+      });
 }
 
 constexpr char RequestMessage[] = {'s', 'i', 'm', '?'};
@@ -2034,59 +2072,50 @@ constexpr char ReplicaRequestMessage[] = {'r', 'e', 'p', '?'};
 void Simulator::doReceive()
 {
   m_socketUDP.async_receive_from(
-        boost::asio::buffer(m_udpBuffer),
-        m_remoteEndpoint,
-        [this](const boost::system::error_code& ec, std::size_t bytesReceived)
-  {
-    if(!ec)
-    {
-      const char *recvMsg = reinterpret_cast<char*>(m_udpBuffer.data());
-
-      bool isRequest = false;
-
-      if(getSimMode() != SimMode::Replica)
-        isRequest = (bytesReceived >= sizeof(RequestMessage) &&
-                     std::memcmp(recvMsg, &RequestMessage, sizeof(RequestMessage)) == 0);
-
-      if(!isRequest && getSimMode() == SimMode::Master)
-        isRequest = (bytesReceived >= sizeof(ReplicaRequestMessage) &&
-                     std::memcmp(recvMsg, &ReplicaRequestMessage, sizeof(ReplicaRequestMessage)) == 0);
-
-      if(isRequest)
+      boost::asio::buffer(m_udpBuffer),
+      m_remoteEndpoint,
+      [this](const boost::system::error_code& ec, std::size_t bytesReceived)
       {
-        if(!m_serverLocalHostOnly || m_remoteEndpoint.address().is_loopback())
+        if(!ec)
         {
-          uint16_t response[3] = {0, 0, serverPort()};
+          const char *recvMsg = reinterpret_cast<char*>(m_udpBuffer.data());
 
-          // Send in big endian format
-          if constexpr (std::endian::native == std::endian::little)
+          bool isRequest = false;
+
+          if(getSimModeNetwork() != SimMode::Replica)
+            isRequest = (bytesReceived >= sizeof(RequestMessage) &&
+                         std::memcmp(recvMsg, &RequestMessage, sizeof(RequestMessage)) == 0);
+
+          if(!isRequest && getSimModeNetwork() == SimMode::Master)
+            isRequest = (bytesReceived >= sizeof(ReplicaRequestMessage) &&
+                         std::memcmp(recvMsg, &ReplicaRequestMessage, sizeof(ReplicaRequestMessage)) == 0);
+
+          if(isRequest)
           {
-            // Swap bytes
-            uint8_t b[2] = {};
-            *reinterpret_cast<uint16_t *>(b) = response[2];
-            std::swap(b[0], b[1]);
-            response[2] = *reinterpret_cast<uint16_t *>(b);
+            if(!m_serverLocalHostOnly || m_remoteEndpoint.address().is_loopback())
+            {
+              // Send in big endian format
+              uint16_t response[3] = {0, 0, htobe16(serverPort())};
+
+              std::memcpy(&response, &ResponseMessage, sizeof(ResponseMessage));
+              m_socketUDP.async_send_to(boost::asio::buffer(response, sizeof(response)), m_remoteEndpoint,
+                                        [this](const boost::system::error_code& ec2, std::size_t bytesTransferred)
+                                        {
+                                          assert(!ec2 && bytesTransferred == 6);
+                                          if(!ec2 && bytesTransferred == 6)
+                                            doReceive();
+                                        });
+              return;
+            }
           }
-
-          std::memcpy(&response, &ResponseMessage, sizeof(ResponseMessage));
-          m_socketUDP.async_send_to(boost::asio::buffer(response, sizeof(response)), m_remoteEndpoint,
-                                    [this](const boost::system::error_code& ec2, std::size_t bytesTransferred)
-          {
-            assert(!ec2 && bytesTransferred == 6);
-            if(!ec2 && bytesTransferred == 6)
-              doReceive();
-          });
-          return;
+          doReceive();
         }
-      }
-      doReceive();
-    }
-  });
+      });
 }
 
 void Simulator::doSendReplicaDiscover()
 {
-  if(getSimMode() != SimMode::Replica)
+  if(getSimModeNetwork() != SimMode::Replica)
     return;
 
   if(!m_connections.empty())
@@ -2119,75 +2148,67 @@ void Simulator::doSendReplicaDiscover()
 
 void Simulator::doReceiveReplicaDiscover()
 {
-  if(getSimMode() != SimMode::Replica)
+  if(getSimModeNetwork() != SimMode::Replica)
     return;
 
   if(!m_connections.empty())
     return;
 
   m_socketUDP.async_receive_from(
-        boost::asio::buffer(m_udpBuffer),
-        m_remoteEndpoint,
-        [this](const boost::system::error_code& ec, std::size_t bytesReceived)
-  {
-    if(!ec)
-    {
-      const char *recvMsg = reinterpret_cast<char*>(m_udpBuffer.data());
-
-      bool isRequest = (bytesReceived >= (sizeof(ResponseMessage) + 2) &&
-                        std::memcmp(recvMsg, &ResponseMessage, sizeof(ResponseMessage)) == 0);
-
-      if(isRequest && m_connections.empty())
+      boost::asio::buffer(m_udpBuffer),
+      m_remoteEndpoint,
+      [this](const boost::system::error_code& ec, std::size_t bytesReceived)
       {
-        if(!m_serverLocalHostOnly || m_remoteEndpoint.address().is_loopback())
+        if(!ec)
         {
-          const uint16_t *response = reinterpret_cast< const uint16_t*>(recvMsg);
-          uint16_t remotePort = response[2];
+          const char *recvMsg = reinterpret_cast<char*>(m_udpBuffer.data());
 
-          // Received in big endian format
-          if constexpr (std::endian::native == std::endian::little)
+          bool isRequest = (bytesReceived >= (sizeof(ResponseMessage) + 2) &&
+                            std::memcmp(recvMsg, &ResponseMessage, sizeof(ResponseMessage)) == 0);
+
+          if(isRequest && m_connections.empty())
           {
-            // Swap bytes
-            uint8_t *b = reinterpret_cast<uint8_t *>(&remotePort);
-            std::swap(b[0], b[1]);
+            if(!m_serverLocalHostOnly || m_remoteEndpoint.address().is_loopback())
+            {
+              const uint16_t *response = reinterpret_cast< const uint16_t*>(recvMsg);
+              uint16_t remotePort = le16toh(response[2]);
+
+              boost::asio::ip::tcp::endpoint masterServer;
+              masterServer.port(remotePort);
+              masterServer.address(m_remoteEndpoint.address());
+
+              boost::system::error_code sockEc;
+              boost::asio::ip::tcp::socket s(m_coreContext);
+              s.connect(masterServer, sockEc);
+              if(!sockEc)
+              {
+                m_connections.emplace_back(std::make_shared<SimulatorConnection>(
+                                               shared_from_this(), std::move(s),
+                                               lastConnectionId))->start();
+
+                // Tell master we are a replica
+                m_connections.back()->send(SimulatorProtocol::ReplicaGreeting());
+              }
+            }
           }
 
-          boost::asio::ip::tcp::endpoint masterServer;
-          masterServer.port(remotePort);
-          masterServer.address(m_remoteEndpoint.address());
-
-          boost::system::error_code sockEc;
-          boost::asio::ip::tcp::socket s(m_ioContext);
-          s.connect(masterServer, sockEc);
-          if(!sockEc)
-          {
-            m_connections.emplace_back(std::make_shared<SimulatorConnection>(
-                                         shared_from_this(), std::move(s),
-                                         lastConnectionId))->start();
-
-            // Tell master we are a replica
-            m_connections.back()->send(SimulatorProtocol::ReplicaGreeting());
-          }
+          if(m_connections.empty())
+            doReceiveReplicaDiscover();
         }
-      }
-
-      if(m_connections.empty())
-        doReceiveReplicaDiscover();
-    }
-  });
+      });
 }
 
 void Simulator::tick()
 {
   m_tickTimer.expires_after(tickRate);
   m_tickTimer.async_wait(
-    [this](std::error_code ec)
-    {
-      if(!ec)
+      [this](std::error_code ec)
       {
-        tick();
-      }
-    });
+        if(!ec)
+        {
+          tick();
+        }
+      });
 
   onTick();
 
@@ -2201,24 +2222,32 @@ void Simulator::tick()
     m_stateData.tickActive = duration.count() / 1e6f;
     m_stateData.tickLoad = static_cast<float>(100 * duration.count()) / static_cast<float>(std::chrono::duration_cast<std::chrono::microseconds>(tickRate).count());
   }
+
+  // Sync network state (deep copy)
+  boost::asio::post(m_networkContext, [=, this, s=m_stateData]()
+                    {
+                      m_networkStateData = s;
+                    });
 }
 
 void Simulator::handShakeSend()
 {
   m_handShakeSendTimer.expires_after(handShakeRateSend);
   m_handShakeSendTimer.async_wait(
-    [this](std::error_code ec)
-    {
-      if(!ec)
+      [this](std::error_code ec)
       {
-        handShakeSend();
-      }
-    });
+        if(!ec)
+        {
+          handShakeSend();
+        }
+      });
+
+  const auto simMode = getSimModeNetwork();
 
   auto it = m_connections.begin();
   while(it != m_connections.end())
   {
-    if(getSimMode() != SimMode::Replica)
+    if(simMode != SimMode::Replica)
       (*it)->send(SimulatorProtocol::HandShake(false));
     it++;
   }
@@ -2235,13 +2264,13 @@ void Simulator::handShakeRecv()
 {
   m_handShakeRecvTimer.expires_after(handShakeRateRecv);
   m_handShakeRecvTimer.async_wait(
-    [this](std::error_code ec)
-    {
-      if(!ec)
+      [this](std::error_code ec)
       {
-        handShakeRecv();
-      }
-    });
+        if(!ec)
+        {
+          handShakeRecv();
+        }
+      });
 
   auto it = m_connections.begin();
   while(it != m_connections.end())
@@ -2299,18 +2328,18 @@ void Simulator::blinkSignals()
 
 void Simulator::syncSensorState()
 {
-  if(getSimMode() == SimMode::Replica)
+  if(getSimModeNetwork() == SimMode::Replica)
     return;
 
   m_syncSensorStateTimer.expires_after(syncSensorRate);
   m_syncSensorStateTimer.async_wait(
-    [this](std::error_code ec)
-    {
-      if(!ec)
+      [this](std::error_code ec)
       {
-        syncSensorState();
-      }
-    });
+        if(!ec)
+        {
+          syncSensorState();
+        }
+      });
 
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
   for(const std::shared_ptr<SimulatorConnection>& connection : m_connections)
@@ -2349,7 +2378,7 @@ void Simulator::syncSensorState()
           continue;
         }
 
-        const auto& sensorState = m_stateData.sensors[it->second];
+        const auto& sensorState = m_networkStateData.sensors[it->second];
         if(sensorState.value)
           stateBuf |= 1 << (sensor.address - firstAddress);
 
@@ -2365,7 +2394,7 @@ void Simulator::syncSensorState()
     }
 
     if(sensorFound)
-      connection->send(SimulatorProtocol::SensorBatchState(currentChannel, batchIdx, m_stateData.powerOn ? stateBuf : 0));
+      connection->send(SimulatorProtocol::SensorBatchState(currentChannel, batchIdx, m_networkStateData.powerOn ? stateBuf : 0));
 
     if(it == channelMap.end())
     {
@@ -2383,16 +2412,16 @@ void Simulator::syncSensorState()
   }
 
   mLastSpawnSyncIdx++;
-  if(mLastSpawnSyncIdx >= m_stateData.spawns.size())
+  if(mLastSpawnSyncIdx >= m_networkStateData.spawns.size())
     mLastSpawnSyncIdx = 0;
 
-  if(mLastSpawnSyncIdx < m_stateData.spawns.size())
+  if(mLastSpawnSyncIdx < m_networkStateData.spawns.size())
   {
     auto it = staticData.spawns.begin();
     std::advance(it, mLastSpawnSyncIdx);
 
     const Spawn &spawn = it->second;
-    SpawnState &spawnState = m_stateData.spawns.at(spawn.address);
+    SpawnState &spawnState = m_networkStateData.spawns.at(spawn.address);
 
     for(const auto& connection : m_connections)
     {
@@ -2415,13 +2444,13 @@ void Simulator::syncReplicaState()
 {
   m_syncReplicaStateTimer.expires_after(syncReplicaRate);
   m_syncReplicaStateTimer.async_wait(
-    [this](std::error_code ec)
-    {
-      if(!ec)
+      [this](std::error_code ec)
       {
-        syncReplicaState();
-      }
-    });
+        if(!ec)
+        {
+          syncReplicaState();
+        }
+      });
 
   if(staticData.sensorChannelMap.empty())
     return;
@@ -2429,16 +2458,16 @@ void Simulator::syncReplicaState()
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
   Train *trainToSync = nullptr;
   {
-    auto it = m_stateData.trains.find(mLastTrainSyncId);
-    if(it == m_stateData.trains.end())
-      it = m_stateData.trains.begin();
+    auto it = m_networkStateData.trains.find(mLastTrainSyncId);
+    if(it == m_networkStateData.trains.end())
+      it = m_networkStateData.trains.begin();
 
-    if(it != m_stateData.trains.end())
+    if(it != m_networkStateData.trains.end())
     {
       trainToSync = &it->second;
       it++;
 
-      if(it != m_stateData.trains.end())
+      if(it != m_networkStateData.trains.end())
         mLastTrainSyncId = it->first;
       else
         mLastTrainSyncId = invalidTrainId;
@@ -2472,7 +2501,7 @@ void Simulator::syncReplicaState()
         continue;
       }
 
-      const auto& sensorState = m_stateData.sensors[idx];
+      const auto& sensorState = m_networkStateData.sensors[idx];
       if(sensorState.value)
         bitSet(stateBuf, idx - firstIdx);
     }
@@ -2502,16 +2531,16 @@ void Simulator::syncReplicaTrainFull()
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
   Train *trainToSync = nullptr;
   {
-    auto it = m_stateData.trains.find(mLastTrainSyncFullId);
-    if(it == m_stateData.trains.end())
-      it = m_stateData.trains.begin();
+    auto it = m_networkStateData.trains.find(mLastTrainSyncFullId);
+    if(it == m_networkStateData.trains.end())
+      it = m_networkStateData.trains.begin();
 
-    if(it != m_stateData.trains.end())
+    if(it != m_networkStateData.trains.end())
     {
       trainToSync = &it->second;
       it++;
 
-      if(it != m_stateData.trains.end())
+      if(it != m_networkStateData.trains.end())
         mLastTrainSyncFullId = it->first;
       else
         mLastTrainSyncFullId = invalidTrainId;
@@ -2577,7 +2606,7 @@ void Simulator::updateTrainPositions()
 
       // Train cannot proceed forward, lets see if we can reverse
       if(stoppedAndCannotContinue &&
-         train.state.prevSignal.signal && train.state.prevSignal.signal->maxSpeed > 0.0)
+          train.state.prevSignal.signal && train.state.prevSignal.signal->maxSpeed > 0.0)
       {
         // Prev signal detected and set to proceed, reverse train
         setTrainDirection(train, !train.state.reverse);
@@ -2742,13 +2771,13 @@ void Simulator::updateTrainPositions()
     if(!isReplica && train.address != invalidAddress && trainState.speedOrDirectionChanged)
     {
       send(SimulatorProtocol::LocomotiveSpeedDirection(
-             train.address,
-             train.protocol,
-             static_cast<uint8_t>(std::clamp<float>(std::round(std::numeric_limits<uint8_t>::max() * (trainState.speed / train.speedMax)),
-                                                    std::numeric_limits<uint8_t>::min(),
-                                                    std::numeric_limits<uint8_t>::max())),
-             trainState.reverse ? Direction::Reverse : Direction::Forward,
-             false));
+          train.address,
+          train.protocol,
+          static_cast<uint8_t>(std::clamp<float>(std::round(std::numeric_limits<uint8_t>::max() * (trainState.speed / train.speedMax)),
+                                                 std::numeric_limits<uint8_t>::min(),
+                                                 std::numeric_limits<uint8_t>::max())),
+          trainState.reverse ? Direction::Reverse : Direction::Forward,
+          false));
 
       trainState.speedOrDirectionChanged = false;
 
@@ -2792,7 +2821,7 @@ inline bool isTurnoutUnknownState(const Simulator::TrackSegment& segment,
   case Simulator::TrackSegment::Type::Turnout3Way:
   {
     return stateData.turnouts.at(segment.turnout.index).state
-        == Simulator::TurnoutState::State::Unknown;
+           == Simulator::TurnoutState::State::Unknown;
   }
   default:
     assert(false);
@@ -2850,17 +2879,17 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
   outRemaining = 0.0f;
 
   auto objHelper = [this](const TrackSegment::Object& obj,
-      const float facePos, const float targetPos,
-      Train &train, bool dirFwd_, bool isFirst, bool &stop,
-      bool &trainRemoved_) -> bool
+                          const float facePos, const float targetPos,
+                          Train &train, bool dirFwd_, bool isFirst, bool &stop,
+                          bool &trainRemoved_) -> bool
   {
     if(dirFwd_)
     {
       if(obj.position < facePos)
-          return true;
+        return true;
 
       if(obj.position > targetPos)
-          return false;
+        return false;
     }
     else
     {
@@ -2872,9 +2901,9 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
     }
 
     if(dirFwd_ && obj.allowedDirection == Object::AllowedDirections::Backwards)
-        return true; // Only forward or both
+      return true; // Only forward or both
     else if(!dirFwd_ && obj.allowedDirection == Object::AllowedDirections::Forward)
-        return true; // Only backwards or both
+      return true; // Only backwards or both
 
     if(obj.type == Object::Type::PositionSensor)
     {
@@ -2971,25 +3000,25 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
     const bool dirFwd = face.segmentDirectionInverted == (speed < 0);
     if(dirFwd && !isReplica)
     {
-        for(const TrackSegment::Object& obj : segment.objects)
-        {
-          if(objHelper(obj, face.distance, distance,
-                       train_, true, isFirst_, stop, trainRemoved))
-            continue;
+      for(const TrackSegment::Object& obj : segment.objects)
+      {
+        if(objHelper(obj, face.distance, distance,
+                      train_, true, isFirst_, stop, trainRemoved))
+          continue;
 
-          if(stop)
-          {
-            outRemaining = std::abs(face.distance - obj.position) - ADJ_MARGIN;
-          }
-          break;
+        if(stop)
+        {
+          outRemaining = std::abs(face.distance - obj.position) - ADJ_MARGIN;
         }
+        break;
+      }
     }
     else if(!dirFwd && !isReplica)
     {
       for(const TrackSegment::Object& obj : segment.objects | std::views::reverse)
       {
         if(objHelper(obj, face.distance, distance,
-                     train_, false, isFirst_, stop, trainRemoved))
+                      train_, false, isFirst_, stop, trainRemoved))
           continue;
 
         if(stop)
@@ -3523,7 +3552,7 @@ void Simulator::doSpawnTrain(uint16_t spawnAddress)
 
   quint32 outTrainId = invalidTrainId;
   if(addTrain(trainName, DecoderProtocol::DCCLong, 3,
-              vehicles, spawn.segmentIndex, outTrainId, spawn.posInSegment, placement))
+               vehicles, spawn.segmentIndex, outTrainId, spawn.posInSegment, placement))
   {
     // DONE!
     Train &train = m_stateData.trains.at(outTrainId);
@@ -3547,29 +3576,29 @@ bool Simulator::isStraight(const TrackSegment& segment)
 
   switch(segment.type)
   {
-    case Type::Straight:
+  case Type::Straight:
+    return true;
+
+  case Type::Curve:
+  case Type::TurnoutCurved:
+    return false;
+
+  case Type::Turnout:
+  case Type::Turnout3Way:
+    return m_stateData.turnouts[segment.turnout.index].state == State::Closed;
+
+  case Type::SingleSlipTurnout:
+  case Type::DoubleSlipTurnout:
+    const auto state = m_stateData.turnouts[segment.turnout.index].state;
+    switch (state)
+    {
+    case State::Closed:
+    case State::ClosedLeft:
+    case State::ClosedRight:
       return true;
-
-    case Type::Curve:
-    case Type::TurnoutCurved:
+    default:
       return false;
-
-    case Type::Turnout:
-    case Type::Turnout3Way:
-      return m_stateData.turnouts[segment.turnout.index].state == State::Closed;
-
-    case Type::SingleSlipTurnout:
-    case Type::DoubleSlipTurnout:
-      const auto state = m_stateData.turnouts[segment.turnout.index].state;
-      switch (state)
-      {
-      case State::Closed:
-      case State::ClosedLeft:
-      case State::ClosedRight:
-          return true;
-      default:
-          return false;
-      }
+    }
   }
   assert(false);
   return false;
@@ -3582,58 +3611,58 @@ bool Simulator::isCurve(const TrackSegment& segment, size_t& curveIndex)
 
   switch(segment.type)
   {
-    case Type::Straight:
+  case Type::Straight:
+    return false;
+
+  case Type::Curve:
+    curveIndex = 0;
+    return true;
+
+  case Type::Turnout:
+    if(m_stateData.turnouts[segment.turnout.index].state == State::Thrown)
+    {
+      curveIndex = 0;
+      return true;
+    }
+    return false;
+
+  case Type::TurnoutCurved:
+    curveIndex = m_stateData.turnouts[segment.turnout.index].state == State::Closed ? 0 : 1;
+    return true;
+
+  case Type::Turnout3Way:
+    switch(m_stateData.turnouts[segment.turnout.index].state)
+    {
+    case State::Closed:
       return false;
 
-    case Type::Curve:
+    case State::ThrownLeft:
       curveIndex = 0;
       return true;
 
-    case Type::Turnout:
-      if(m_stateData.turnouts[segment.turnout.index].state == State::Thrown)
-      {
-        curveIndex = 0;
-        return true;
-      }
-      return false;
-
-    case Type::TurnoutCurved:
-      curveIndex = m_stateData.turnouts[segment.turnout.index].state == State::Closed ? 0 : 1;
+    case State::ThrownRight:
+      curveIndex = 1;
       return true;
 
-    case Type::Turnout3Way:
-      switch(m_stateData.turnouts[segment.turnout.index].state)
-      {
-        case State::Closed:
-          return false;
-
-        case State::ThrownLeft:
-          curveIndex = 0;
-          return true;
-
-        case State::ThrownRight:
-          curveIndex = 1;
-          return true;
-
-        default:
-          break;
-      }
+    default:
       break;
+    }
+    break;
 
-    case Type::SingleSlipTurnout:
-    case Type::DoubleSlipTurnout:
-      const auto state = m_stateData.turnouts[segment.turnout.index].state;
-      switch (state)
-      {
-      case State::Thrown:
-      case State::ThrownLeft:
-      case State::ThrownRight:
-          curveIndex = 1; // TODO
-          return true;
-      default:
-          return false;
-      }
-      break;
+  case Type::SingleSlipTurnout:
+  case Type::DoubleSlipTurnout:
+    const auto state = m_stateData.turnouts[segment.turnout.index].state;
+    switch (state)
+    {
+    case State::Thrown:
+    case State::ThrownLeft:
+    case State::ThrownRight:
+      curveIndex = 1; // TODO
+      return true;
+    default:
+      return false;
+    }
+    break;
   }
   assert(false);
   return false;
@@ -3642,801 +3671,801 @@ bool Simulator::isCurve(const TrackSegment& segment, size_t& curveIndex)
 void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, StateData &stateData,
                                  TrackSegment &segment, TrainTypeInterface *iface)
 {
-    // Objects:
-    if(auto trackObjects = track.find("objects"); trackObjects != track.end() && trackObjects->is_array())
+  // Objects:
+  if(auto trackObjects = track.find("objects"); trackObjects != track.end() && trackObjects->is_array())
+  {
+    segment.objects.reserve(trackObjects->size());
+
+    float totLen = 0;
+    if(segment.type == TrackSegment::Type::Straight)
+      totLen = segment.straight.length;
+    else if(segment.type == TrackSegment::Type::Curve)
+      totLen = segment.curves[0].length;
+
+    if(totLen > 0)
     {
-        segment.objects.reserve(trackObjects->size());
-
-        float totLen = 0;
-        if(segment.type == TrackSegment::Type::Straight)
-            totLen = segment.straight.length;
-        else if(segment.type == TrackSegment::Type::Curve)
-            totLen = segment.curves[0].length;
-
-        if(totLen > 0)
+      for(const auto& item : *trackObjects)
+      {
+        if(!item.is_object())
         {
-            for(const auto& item : *trackObjects)
+          continue;
+        }
+
+        TrackSegment::Object trackObj;
+        trackObj.position = item.value("pos", std::numeric_limits<float>::quiet_NaN());
+        if(!std::isfinite(trackObj.position))
+          continue;
+
+        if(trackObj.position < 0)
+          trackObj.position = totLen + trackObj.position;
+
+        if(trackObj.position < 0 || trackObj.position >= totLen)
+          continue;
+
+        if(segment.type == TrackSegment::Type::Straight)
+        {
+          trackObj.rotation = segment.rotation;
+          trackObj.pos.x = segment.points[0].x + trackObj.position * std::cos(segment.rotation);
+          trackObj.pos.y = segment.points[0].y + trackObj.position * std::sin(segment.rotation);
+        }
+        else if(segment.type == Simulator::TrackSegment::Type::Curve)
+        {
+          const auto& curve = segment.curves[0];
+
+          float angle = segment.rotation + (trackObj.position / curve.length) * curve.angle;
+
+          // Rotation must not be adjusted by 180 degrees
+          trackObj.rotation = angle;
+
+          if(curve.angle < 0)
+          {
+            angle += pi;
+          }
+
+          trackObj.pos.x = curve.center.x + curve.radius * std::sin(angle);
+          trackObj.pos.y = curve.center.y - curve.radius * std::cos(angle);
+        }
+
+        while(trackObj.rotation > 2 * pi)
+          trackObj.rotation -= 2 * pi;
+
+        while(trackObj.rotation < 0)
+          trackObj.rotation += 2 * pi;
+
+        trackObj.dirForward = item.value("dir", true);
+
+        const std::string_view type = item.value<std::string_view>("type", {});
+        if(type == "sensor" || type == "axle_counter")
+        {
+          trackObj.type = TrackSegment::Object::Type::PositionSensor;
+          trackObj.allowedDirection = TrackSegment::Object::AllowedDirections::Both;
+          trackObj.lateralDiff = 2.0;
+
+          if(const uint16_t sensorAddress = item.value("sensor_address", invalidAddress); sensorAddress != invalidAddress)
+          {
+            const uint16_t sensorChannel = item.value("sensor_channel", defaultChannel);
+
+            auto &channelMap = data.sensorChannelMap[sensorChannel];
+            auto it = channelMap.find(sensorAddress);
+            if(it == channelMap.end())
             {
-                if(!item.is_object())
-                {
-                    continue;
-                }
+              // new sensor
+              trackObj.sensorIndex = data.sensors.size();
+              data.sensors.emplace_back(Sensor{sensorChannel, sensorAddress, Sensor::Type::PositionSensor});
+              channelMap.insert({sensorAddress, trackObj.sensorIndex});
+              if(type == "axle_counter")
+                data.sensors.at(trackObj.sensorIndex).type = Sensor::Type::AxleCounter;
+              stateData.sensors.emplace_back(SensorState{{0}, 0, 0, SensorState::Encoding::CodeAbsent, false});
+            }
+            else
+              trackObj.sensorIndex = it->second;
 
-                TrackSegment::Object trackObj;
-                trackObj.position = item.value("pos", std::numeric_limits<float>::quiet_NaN());
-                if(!std::isfinite(trackObj.position))
-                    continue;
-
-                if(trackObj.position < 0)
-                    trackObj.position = totLen + trackObj.position;
-
-                if(trackObj.position < 0 || trackObj.position >= totLen)
-                    continue;
-
-                if(segment.type == TrackSegment::Type::Straight)
-                {
-                    trackObj.rotation = segment.rotation;
-                    trackObj.pos.x = segment.points[0].x + trackObj.position * std::cos(segment.rotation);
-                    trackObj.pos.y = segment.points[0].y + trackObj.position * std::sin(segment.rotation);
-                }
-                else if(segment.type == Simulator::TrackSegment::Type::Curve)
-                {
-                    const auto& curve = segment.curves[0];
-
-                    float angle = segment.rotation + (trackObj.position / curve.length) * curve.angle;
-
-                    // Rotation must not be adjusted by 180 degrees
-                    trackObj.rotation = angle;
-
-                    if(curve.angle < 0)
-                    {
-                        angle += pi;
-                    }
-
-                    trackObj.pos.x = curve.center.x + curve.radius * std::sin(angle);
-                    trackObj.pos.y = curve.center.y - curve.radius * std::cos(angle);
-                }
-
-                while(trackObj.rotation > 2 * pi)
-                    trackObj.rotation -= 2 * pi;
-
-                while(trackObj.rotation < 0)
-                    trackObj.rotation += 2 * pi;
-
-                trackObj.dirForward = item.value("dir", true);
-
-                const std::string_view type = item.value<std::string_view>("type", {});
-                if(type == "sensor" || type == "axle_counter")
-                {
-                    trackObj.type = TrackSegment::Object::Type::PositionSensor;
-                    trackObj.allowedDirection = TrackSegment::Object::AllowedDirections::Both;
-                    trackObj.lateralDiff = 2.0;
-
-                    if(const uint16_t sensorAddress = item.value("sensor_address", invalidAddress); sensorAddress != invalidAddress)
-                    {
-                        const uint16_t sensorChannel = item.value("sensor_channel", defaultChannel);
-
-                        auto &channelMap = data.sensorChannelMap[sensorChannel];
-                        auto it = channelMap.find(sensorAddress);
-                        if(it == channelMap.end())
-                        {
-                          // new sensor
-                          trackObj.sensorIndex = data.sensors.size();
-                          data.sensors.emplace_back(Sensor{sensorChannel, sensorAddress, Sensor::Type::PositionSensor});
-                          channelMap.insert({sensorAddress, trackObj.sensorIndex});
-                          if(type == "axle_counter")
-                            data.sensors.at(trackObj.sensorIndex).type = Sensor::Type::AxleCounter;
-                          stateData.sensors.emplace_back(SensorState{{0}, 0, 0, SensorState::Encoding::CodeAbsent, false});
-                        }
-                        else
-                          trackObj.sensorIndex = it->second;
-
-                        switch(data.sensors.at(trackObj.sensorIndex).type)
-                        {
-                        case Sensor::Type::PositionSensor:
-                        {
-                          // Make it stay triggered a bit
-                          stateData.sensors[trackObj.sensorIndex].maxTime = 90; // 3 seconds
-                          stateData.sensors[trackObj.sensorIndex].occupied = 0;
-                          break;
-                        }
-                        case Sensor::Type::AxleCounter:
-                        {
-                          // This is just for visual effect
-                          stateData.sensors[trackObj.sensorIndex].maxTime = 30; // 1 second
-                          stateData.sensors[trackObj.sensorIndex].axleCount = 0;
-                          break;
-                        }
-                        default:
-                          assert(false);
-                        }
-
-                    }
-
-                    if(trackObj.sensorIndex == invalidIndex) // invalid sensor
-                        continue;
-                }
-                else if(type == "main_signal")
-                {
-                    trackObj.type = TrackSegment::Object::Type::MainSignal;
-                    trackObj.allowedDirection = trackObj.dirForward ?
-                                                    TrackSegment::Object::AllowedDirections::Forward :
-                                                    TrackSegment::Object::AllowedDirections::Backwards;
-                    trackObj.lateralDiff = -1.7; // Default on left side
-
-                    const std::string_view signalName = item.value<std::string_view>("name", {});
-                    const uint16_t signalAddress = item.value("address", invalidAddress);
-                    const uint16_t signalChannel = item.value("channel", defaultChannel);
-                    if(signalName.empty() || signalAddress == invalidAddress)
-                        continue;
-
-                    MainSignal *mainSignal = nullptr;
-                    auto signIt = stateData.mainSignals.find(signalName);
-                    if(signIt == stateData.mainSignals.end())
-                    {
-                      MainSignal mainSignal_;
-                      mainSignal_.name = signalName;
-                      mainSignal_.address = signalAddress;
-                      mainSignal_.channel = signalChannel;
-                      mainSignal_.lights.push_back({});
-                      auto res = stateData.mainSignals.insert({mainSignal_.name, mainSignal_});
-                      mainSignal = &res.first->second;
-                    }
-                    else
-                        mainSignal = &signIt->second;
-
-                    trackObj.signalName = mainSignal->name;
-
-                    size_t nLights = item.value("n_lights", std::max(size_t(1), mainSignal->lights.size()));
-                    nLights = std::clamp(nLights, size_t(1), size_t(3));
-                    mainSignal->lights.resize(nLights);
-
-                    mainSignal->square = item.value("square", false);
-                    if(mainSignal->square)
-                      mainSignal->hasSquareArrowLight = item.value("arrow_light", false);
-
-                    const size_t fixedLimit = item.value("fixed_limit", size_t(0));
-                    switch (fixedLimit)
-                    {
-                    case 30:
-                      mainSignal->fixedLimit = MainSignal::FixedLimit::Limit30;
-                      break;
-                    case 60:
-                      mainSignal->fixedLimit = MainSignal::FixedLimit::Limit60;
-                      break;
-                    default:
-                      mainSignal->fixedLimit = MainSignal::FixedLimit::NoLimit;
-                      break;
-                    }
-
-                    mainSignal->hasAdvanceSignal = item.value("advance_light", false);
-                    mainSignal->hasRappel = item.value("rappel", false);
-                    mainSignal->hasDirectionIndicator = item.value("direction_ind", false);
-                    mainSignal->isPureDistantSignal = item.value("pure_distant", false);
-                    mainSignal->zoomLateralDiff = item.value("zoom_lat", true);
-
-                    if(mainSignal->hasRappel)
-                      mainSignal->fixedLimit = MainSignal::FixedLimit::NoLimit;
-
-                    if(mainSignal->hasRappel || mainSignal->hasDirectionIndicator ||
-                        mainSignal->hasAdvanceSignal || mainSignal->fixedLimit != MainSignal::FixedLimit::NoLimit ||
-                        mainSignal->lights.size() > 2)
-                      mainSignal->isPureDistantSignal = false;
-                }
-                else if(type == "aux_signal")
-                {
-                  trackObj.type = TrackSegment::Object::Type::AuxSignal;
-                  trackObj.allowedDirection = trackObj.dirForward ?
-                                                  TrackSegment::Object::AllowedDirections::Forward :
-                                                  TrackSegment::Object::AllowedDirections::Backwards;
-                  trackObj.lateralDiff = -1.7; // Default on left side
-
-                  const std::string_view signalName = item.value<std::string_view>("name", {});
-                  const uint16_t signalAddress = item.value("address", invalidAddress);
-                  const uint16_t signalChannel = item.value("channel", defaultChannel);
-                  if(signalName.empty() || signalAddress == invalidAddress)
-                    continue;
-
-                  AuxSignal::SubType subType = AuxSignal::SubType::LightDwarfSignal;
-                  const std::string_view subTypeName = item.value<std::string_view>("sub_type", {});
-                  if(subTypeName == "light_dwarf_signal")
-                    subType = AuxSignal::SubType::LightDwarfSignal;
-                  else if(subTypeName == "rot_dwarf_signal")
-                    subType = Simulator::AuxSignal::SubType::RotatingDwarfSignal;
-                  else if(subTypeName == "high_departure_ind")
-                    subType = Simulator::AuxSignal::SubType::HighDepartureIndicator;
-                  else
-                    continue;
-
-                  AuxSignal *auxSignal = nullptr;
-                  auto signIt = stateData.auxSignals.find(signalName);
-                  if(signIt == stateData.auxSignals.end())
-                  {
-                    AuxSignal auxSignal_;
-                    auxSignal_.name = signalName;
-                    auxSignal_.address = signalAddress;
-                    auxSignal_.channel = signalChannel;
-                    auto res = stateData.auxSignals.insert({auxSignal_.name, auxSignal_});
-                    auxSignal = &res.first->second;
-                  }
-                  else
-                    auxSignal = &signIt->second;
-
-                  trackObj.signalName = auxSignal->name;
-
-                  auxSignal->subType = subType;
-                  auxSignal->zoomLateralDiff = item.value("zoom_lat", true);
-                }
-                else if(type == "reverse_dir")
-                {
-                  trackObj.type = TrackSegment::Object::Type::ReverseDirection;
-                  trackObj.allowedDirection = trackObj.dirForward ?
-                                                  TrackSegment::Object::AllowedDirections::Forward :
-                                                  TrackSegment::Object::AllowedDirections::Backwards;
-                  trackObj.lateralDiff = 0; // Default on center
-                }
-                else if(type == "remove_train")
-                {
-                  trackObj.type = TrackSegment::Object::Type::RemoveTrain;
-                  trackObj.allowedDirection = trackObj.dirForward ?
-                                                  TrackSegment::Object::AllowedDirections::Forward :
-                                                  TrackSegment::Object::AllowedDirections::Backwards;
-                  trackObj.lateralDiff = 0; // Default on center
-                }
-                else if(type == "spawn_train")
-                {
-                  trackObj.type = TrackSegment::Object::Type::SpawnTrain;
-                  trackObj.allowedDirection = trackObj.dirForward ?
-                                                  TrackSegment::Object::AllowedDirections::Forward :
-                                                  TrackSegment::Object::AllowedDirections::Backwards;
-                  trackObj.lateralDiff = 0; // Default on center
-
-                  const size_t spawnAddress = item.value("address", invalidAddress);
-                  if(spawnAddress == invalidAddress || stateData.spawns.contains(spawnAddress))
-                    continue;
-
-                  Spawn spawn;
-                  spawn.address = spawnAddress;
-                  spawn.segmentIndex = data.trackSegments.size(); // TODO: HACK still has to be inserted
-                  spawn.maxWagons = item.value("max_wagons", spawn.maxWagons);
-                  spawn.wagonLength = item.value("wagons_length", spawn.wagonLength);
-                  spawn.defaultSpeedKmH = item.value("speed", spawn.defaultSpeedKmH);
-
-                  if(auto allowList = item.find("allow_list"); allowList != item.end() && allowList->is_array())
-                    spawn.allowList = iface->convertTypeList(*allowList);
-
-                  if(auto blackList = item.find("black_list"); blackList != item.end() && blackList->is_array())
-                    spawn.blackList = iface->convertTypeList(*blackList);
-
-                  stateData.spawns.insert({spawn.address, SpawnState{}});
-                  data.spawns.insert({spawn.address, std::move(spawn)});
-
-                  trackObj.sensorIndex = spawn.address;
-                }
-                else if(type == "station_stop_point")
-                {
-                  trackObj.type = TrackSegment::Object::Type::StationStopPoint;
-                  trackObj.allowedDirection = TrackSegment::Object::AllowedDirections::Both;
-                  trackObj.lateralDiff = 0; // Default on center
-                }
-                else
-                {
-                    // Unknown object type
-                    continue;
-                }
-
-                const std::string_view allowedDir = item.value<std::string_view>("allowed_dir", {});
-                if(allowedDir == "both")
-                    trackObj.allowedDirection = TrackSegment::Object::AllowedDirections::Both;
-                if(allowedDir == "forward")
-                    trackObj.allowedDirection = TrackSegment::Object::AllowedDirections::Forward;
-                if(allowedDir == "backwards")
-                    trackObj.allowedDirection = TrackSegment::Object::AllowedDirections::Backwards;
-
-                trackObj.lateralDiff = item.value("lat_delta", trackObj.lateralDiff);
-
-                if(trackObj.type == TrackSegment::Object::Type::SpawnTrain)
-                {
-                  // Post init
-                  Spawn &spawn = data.spawns.at(trackObj.sensorIndex);
-                  spawn.forward = trackObj.allowedDirection == TrackSegment::Object::AllowedDirections::Forward;
-                  spawn.posInSegment = trackObj.position;
-                }
-
-                segment.objects.push_back(trackObj);
+            switch(data.sensors.at(trackObj.sensorIndex).type)
+            {
+            case Sensor::Type::PositionSensor:
+            {
+              // Make it stay triggered a bit
+              stateData.sensors[trackObj.sensorIndex].maxTime = 90; // 3 seconds
+              stateData.sensors[trackObj.sensorIndex].occupied = 0;
+              break;
+            }
+            case Sensor::Type::AxleCounter:
+            {
+              // This is just for visual effect
+              stateData.sensors[trackObj.sensorIndex].maxTime = 30; // 1 second
+              stateData.sensors[trackObj.sensorIndex].axleCount = 0;
+              break;
+            }
+            default:
+              assert(false);
             }
 
-            std::stable_sort(segment.objects.begin(),
-                             segment.objects.end(),
-                             [](const TrackSegment::Object& a, const TrackSegment::Object& b) -> bool
-                             {
-                                 return a.position < b.position;
-                             });
+          }
+
+          if(trackObj.sensorIndex == invalidIndex) // invalid sensor
+            continue;
         }
+        else if(type == "main_signal")
+        {
+          trackObj.type = TrackSegment::Object::Type::MainSignal;
+          trackObj.allowedDirection = trackObj.dirForward ?
+                                          TrackSegment::Object::AllowedDirections::Forward :
+                                          TrackSegment::Object::AllowedDirections::Backwards;
+          trackObj.lateralDiff = -1.7; // Default on left side
+
+          const std::string_view signalName = item.value<std::string_view>("name", {});
+          const uint16_t signalAddress = item.value("address", invalidAddress);
+          const uint16_t signalChannel = item.value("channel", defaultChannel);
+          if(signalName.empty() || signalAddress == invalidAddress)
+            continue;
+
+          MainSignal *mainSignal = nullptr;
+          auto signIt = stateData.mainSignals.find(signalName);
+          if(signIt == stateData.mainSignals.end())
+          {
+            MainSignal mainSignal_;
+            mainSignal_.name = signalName;
+            mainSignal_.address = signalAddress;
+            mainSignal_.channel = signalChannel;
+            mainSignal_.lights.push_back({});
+            auto res = stateData.mainSignals.insert({mainSignal_.name, mainSignal_});
+            mainSignal = &res.first->second;
+          }
+          else
+            mainSignal = &signIt->second;
+
+          trackObj.signalName = mainSignal->name;
+
+          size_t nLights = item.value("n_lights", std::max(size_t(1), mainSignal->lights.size()));
+          nLights = std::clamp(nLights, size_t(1), size_t(3));
+          mainSignal->lights.resize(nLights);
+
+          mainSignal->square = item.value("square", false);
+          if(mainSignal->square)
+            mainSignal->hasSquareArrowLight = item.value("arrow_light", false);
+
+          const size_t fixedLimit = item.value("fixed_limit", size_t(0));
+          switch (fixedLimit)
+          {
+          case 30:
+            mainSignal->fixedLimit = MainSignal::FixedLimit::Limit30;
+            break;
+          case 60:
+            mainSignal->fixedLimit = MainSignal::FixedLimit::Limit60;
+            break;
+          default:
+            mainSignal->fixedLimit = MainSignal::FixedLimit::NoLimit;
+            break;
+          }
+
+          mainSignal->hasAdvanceSignal = item.value("advance_light", false);
+          mainSignal->hasRappel = item.value("rappel", false);
+          mainSignal->hasDirectionIndicator = item.value("direction_ind", false);
+          mainSignal->isPureDistantSignal = item.value("pure_distant", false);
+          mainSignal->zoomLateralDiff = item.value("zoom_lat", true);
+
+          if(mainSignal->hasRappel)
+            mainSignal->fixedLimit = MainSignal::FixedLimit::NoLimit;
+
+          if(mainSignal->hasRappel || mainSignal->hasDirectionIndicator ||
+              mainSignal->hasAdvanceSignal || mainSignal->fixedLimit != MainSignal::FixedLimit::NoLimit ||
+              mainSignal->lights.size() > 2)
+            mainSignal->isPureDistantSignal = false;
+        }
+        else if(type == "aux_signal")
+        {
+          trackObj.type = TrackSegment::Object::Type::AuxSignal;
+          trackObj.allowedDirection = trackObj.dirForward ?
+                                          TrackSegment::Object::AllowedDirections::Forward :
+                                          TrackSegment::Object::AllowedDirections::Backwards;
+          trackObj.lateralDiff = -1.7; // Default on left side
+
+          const std::string_view signalName = item.value<std::string_view>("name", {});
+          const uint16_t signalAddress = item.value("address", invalidAddress);
+          const uint16_t signalChannel = item.value("channel", defaultChannel);
+          if(signalName.empty() || signalAddress == invalidAddress)
+            continue;
+
+          AuxSignal::SubType subType = AuxSignal::SubType::LightDwarfSignal;
+          const std::string_view subTypeName = item.value<std::string_view>("sub_type", {});
+          if(subTypeName == "light_dwarf_signal")
+            subType = AuxSignal::SubType::LightDwarfSignal;
+          else if(subTypeName == "rot_dwarf_signal")
+            subType = Simulator::AuxSignal::SubType::RotatingDwarfSignal;
+          else if(subTypeName == "high_departure_ind")
+            subType = Simulator::AuxSignal::SubType::HighDepartureIndicator;
+          else
+            continue;
+
+          AuxSignal *auxSignal = nullptr;
+          auto signIt = stateData.auxSignals.find(signalName);
+          if(signIt == stateData.auxSignals.end())
+          {
+            AuxSignal auxSignal_;
+            auxSignal_.name = signalName;
+            auxSignal_.address = signalAddress;
+            auxSignal_.channel = signalChannel;
+            auto res = stateData.auxSignals.insert({auxSignal_.name, auxSignal_});
+            auxSignal = &res.first->second;
+          }
+          else
+            auxSignal = &signIt->second;
+
+          trackObj.signalName = auxSignal->name;
+
+          auxSignal->subType = subType;
+          auxSignal->zoomLateralDiff = item.value("zoom_lat", true);
+        }
+        else if(type == "reverse_dir")
+        {
+          trackObj.type = TrackSegment::Object::Type::ReverseDirection;
+          trackObj.allowedDirection = trackObj.dirForward ?
+                                          TrackSegment::Object::AllowedDirections::Forward :
+                                          TrackSegment::Object::AllowedDirections::Backwards;
+          trackObj.lateralDiff = 0; // Default on center
+        }
+        else if(type == "remove_train")
+        {
+          trackObj.type = TrackSegment::Object::Type::RemoveTrain;
+          trackObj.allowedDirection = trackObj.dirForward ?
+                                          TrackSegment::Object::AllowedDirections::Forward :
+                                          TrackSegment::Object::AllowedDirections::Backwards;
+          trackObj.lateralDiff = 0; // Default on center
+        }
+        else if(type == "spawn_train")
+        {
+          trackObj.type = TrackSegment::Object::Type::SpawnTrain;
+          trackObj.allowedDirection = trackObj.dirForward ?
+                                          TrackSegment::Object::AllowedDirections::Forward :
+                                          TrackSegment::Object::AllowedDirections::Backwards;
+          trackObj.lateralDiff = 0; // Default on center
+
+          const size_t spawnAddress = item.value("address", invalidAddress);
+          if(spawnAddress == invalidAddress || stateData.spawns.contains(spawnAddress))
+            continue;
+
+          Spawn spawn;
+          spawn.address = spawnAddress;
+          spawn.segmentIndex = data.trackSegments.size(); // TODO: HACK still has to be inserted
+          spawn.maxWagons = item.value("max_wagons", spawn.maxWagons);
+          spawn.wagonLength = item.value("wagons_length", spawn.wagonLength);
+          spawn.defaultSpeedKmH = item.value("speed", spawn.defaultSpeedKmH);
+
+          if(auto allowList = item.find("allow_list"); allowList != item.end() && allowList->is_array())
+            spawn.allowList = iface->convertTypeList(*allowList);
+
+          if(auto blackList = item.find("black_list"); blackList != item.end() && blackList->is_array())
+            spawn.blackList = iface->convertTypeList(*blackList);
+
+          stateData.spawns.insert({spawn.address, SpawnState{}});
+          data.spawns.insert({spawn.address, std::move(spawn)});
+
+          trackObj.sensorIndex = spawn.address;
+        }
+        else if(type == "station_stop_point")
+        {
+          trackObj.type = TrackSegment::Object::Type::StationStopPoint;
+          trackObj.allowedDirection = TrackSegment::Object::AllowedDirections::Both;
+          trackObj.lateralDiff = 0; // Default on center
+        }
+        else
+        {
+          // Unknown object type
+          continue;
+        }
+
+        const std::string_view allowedDir = item.value<std::string_view>("allowed_dir", {});
+        if(allowedDir == "both")
+          trackObj.allowedDirection = TrackSegment::Object::AllowedDirections::Both;
+        if(allowedDir == "forward")
+          trackObj.allowedDirection = TrackSegment::Object::AllowedDirections::Forward;
+        if(allowedDir == "backwards")
+          trackObj.allowedDirection = TrackSegment::Object::AllowedDirections::Backwards;
+
+        trackObj.lateralDiff = item.value("lat_delta", trackObj.lateralDiff);
+
+        if(trackObj.type == TrackSegment::Object::Type::SpawnTrain)
+        {
+          // Post init
+          Spawn &spawn = data.spawns.at(trackObj.sensorIndex);
+          spawn.forward = trackObj.allowedDirection == TrackSegment::Object::AllowedDirections::Forward;
+          spawn.posInSegment = trackObj.position;
+        }
+
+        segment.objects.push_back(trackObj);
+      }
+
+      std::stable_sort(segment.objects.begin(),
+                       segment.objects.end(),
+                       [](const TrackSegment::Object& a, const TrackSegment::Object& b) -> bool
+                       {
+                         return a.position < b.position;
+                       });
     }
+  }
 }
 
 void Simulator::loadTrackplan(const nlohmann::json& world, StaticData &data, StateData& stateData, TrainTypeInterface *iface)
 {
-    if(auto trackPlan = world.find("trackplan"); trackPlan != world.end() && trackPlan->is_array())
+  if(auto trackPlan = world.find("trackplan"); trackPlan != world.end() && trackPlan->is_array())
+  {
+    data.trackSegments.reserve(trackPlan->size());
+
+    size_t fromPointIndex = invalidIndex;
+    size_t fromSegmentIndex = invalidIndex;
+    Point curPoint{0.0f, 0.0f};
+    float curRotation = 0;
+
+    for(const auto& obj : *trackPlan)
     {
-        data.trackSegments.reserve(trackPlan->size());
+      if(!obj.is_object())
+      {
+        continue;
+      }
 
-        size_t fromPointIndex = invalidIndex;
-        size_t fromSegmentIndex = invalidIndex;
-        Point curPoint{0.0f, 0.0f};
-        float curRotation = 0;
+      size_t startPointIndex = 0;
+      size_t nextPointIndex = 1;
+      TrackSegment segment;
 
-        for(const auto& obj : *trackPlan)
+      if(auto id = obj.value<std::string_view>("id", {}); !id.empty())
+      {
+        segment.m_id = id;
+        data.trackSegmentId.emplace(std::move(id), data.trackSegments.size());
+      }
+
+      const auto type = obj.value<std::string_view>("type", {});
+      if(type == "straight")
+      {
+        segment.type = TrackSegment::Type::Straight;
+      }
+      else if(type == "curve")
+      {
+        segment.type = TrackSegment::Type::Curve;
+      }
+      else if(type == "turnout")
+      {
+        segment.type = TrackSegment::Type::Turnout;
+      }
+      else if(type == "turnout_curved")
+      {
+        segment.type = TrackSegment::Type::TurnoutCurved;
+      }
+      else if(type == "turnout_3way")
+      {
+        segment.type = TrackSegment::Type::Turnout3Way;
+      }
+      else if(type == "turnout_single_slip")
+      {
+        segment.type = TrackSegment::Type::SingleSlipTurnout;
+      }
+      else if(type == "turnout_double_slip")
+      {
+        segment.type = TrackSegment::Type::DoubleSlipTurnout;
+      }
+      else
+      {
+        throw std::runtime_error("unknown track element type");
+      }
+
+      if(segment.type == TrackSegment::Type::Straight || segment.type == TrackSegment::Type::Turnout || segment.type == TrackSegment::Type::Turnout3Way)
+      {
+        segment.straight.length = obj.value("length", segment.straight.length);
+      }
+      if(segment.type == TrackSegment::Type::Curve ||
+          segment.type == TrackSegment::Type::Turnout ||
+          segment.type == TrackSegment::Type::TurnoutCurved ||
+          segment.type == TrackSegment::Type::SingleSlipTurnout ||
+          segment.type == TrackSegment::Type::DoubleSlipTurnout)
+      {
+        segment.curves[0].radius = obj.value("radius", 100.0f);
+        segment.curves[0].angle = deg2rad(obj.value("angle", 45.0f));
+      }
+      if(segment.type == TrackSegment::Type::TurnoutCurved)
+      {
+        segment.curves[1].radius = obj.value("radius_2", 100.0f);
+        segment.curves[1].angle = deg2rad(obj.value("angle_2", 45.0f));
+      }
+      if(segment.type == TrackSegment::Type::Turnout3Way)
+      {
+        const float angleMin = 0.0f;
+        const float angleMax = 90.0f;
+        const float radius = std::max(1.0f, obj.value("radius", 100.0f));
+        const float angle = std::clamp(obj.value("angle", 45.0f), angleMin, angleMax);
+
+        segment.curves[0].radius = std::max(1.0f,obj.value("radius_left", radius));
+        segment.curves[0].angle = deg2rad(-std::clamp(obj.value("angle_left", angle), angleMin, angleMax));
+
+        segment.curves[1].radius = std::max(1.0f,obj.value("radius_right", radius));
+        segment.curves[1].angle = deg2rad(std::clamp(obj.value("angle_right", angle), angleMin, angleMax));
+      }
+      if(segment.type == TrackSegment::Type::Turnout ||
+          segment.type == TrackSegment::Type::TurnoutCurved ||
+          segment.type == TrackSegment::Type::Turnout3Way ||
+          segment.type == TrackSegment::Type::SingleSlipTurnout ||
+          segment.type == TrackSegment::Type::DoubleSlipTurnout)
+      {
+        segment.turnout.channel = obj.value("channel", defaultChannel);
+
+        if(segment.type == TrackSegment::Type::Turnout3Way ||
+            segment.type == TrackSegment::Type::SingleSlipTurnout ||
+            segment.type == TrackSegment::Type::DoubleSlipTurnout)
         {
-            if(!obj.is_object())
+          const auto address = obj.value("address", invalidAddress);
+          segment.turnout.addresses[0] = obj.value("address_left", address);
+          segment.turnout.addresses[1] = obj.value("address_right", (address != invalidAddress) ? static_cast<uint16_t>(address + 1) : invalidAddress);
+        }
+        else
+        {
+          segment.turnout.addresses[0] = obj.value("address", invalidAddress);
+        }
+        segment.turnout.index = stateData.turnouts.size();
+        auto& turnoutState = stateData.turnouts.emplace_back(TurnoutState{});
+        if(segment.type == TrackSegment::Type::Turnout3Way ||
+            segment.type == TrackSegment::Type::SingleSlipTurnout ||
+            segment.type == TrackSegment::Type::DoubleSlipTurnout)
+        {
+          turnoutState.coils = 0x0A; // both closed
+        }
+      }
+
+      if(getPointCount(segment.type) > 2)
+      {
+        if(const size_t n = obj.value("side", invalidIndex); n < getPointCount(segment.type))
+        {
+          startPointIndex = n;
+        }
+      }
+
+      if(const auto fromId = obj.value<std::string>("from_id", {}); !fromId.empty())
+      {
+        const size_t fromPoint = obj.value("from_point", invalidIndex);
+
+        if(auto it = data.trackSegmentId.find(fromId); it != data.trackSegmentId.end())
+        {
+          auto& fromSegment = data.trackSegments[it->second];
+          const auto pointCount = getPointCount(fromSegment.type);
+          bool unconnectedPointFound = false;
+          for(size_t i = 0; i < pointCount; ++i)
+          {
+            if((fromSegment.nextSegmentIndex[i] == invalidIndex && fromPoint == invalidIndex) || fromPoint == i)
             {
-                continue;
+              if(fromSegment.nextSegmentIndex[i] != invalidIndex)
+              {
+                throw std::runtime_error("point already connected");
+              }
+              curPoint = fromSegment.points[i];
+              curRotation = getPointRotation(fromSegment, i);
+              fromPointIndex = i;
+              fromSegmentIndex = it->second;
+              unconnectedPointFound = true;
+              break;
             }
+          }
 
-            size_t startPointIndex = 0;
-            size_t nextPointIndex = 1;
-            TrackSegment segment;
+          if(!unconnectedPointFound)
+          {
+            throw std::runtime_error("track element is already fully connected");
+          }
+        }
+        else
+        {
+          throw std::runtime_error("from_id contains unknown id");
+        }
+      }
+      else if(const auto fromSide = obj.value("from_side", invalidIndex);
+               fromSide != invalidIndex &&
+               fromSegmentIndex != invalidIndex &&
+               getPointCount(data.trackSegments[fromSegmentIndex].type) > 2 &&
+               fromSide < getPointCount(data.trackSegments[fromSegmentIndex].type) &&
+               data.trackSegments[fromSegmentIndex].nextSegmentIndex[fromSide] == invalidIndex)
+      {
+        const auto& fromSegment = data.trackSegments[fromSegmentIndex];
+        curPoint = fromSegment.points[fromSide];
+        curRotation = getPointRotation(fromSegment, fromSide);
+        fromPointIndex = fromSide;
+      }
+      else
+      {
+        if(obj.contains("x"))
+        {
+          curPoint.x = obj.value("x", 0.0f);
+          fromSegmentIndex = invalidIndex;
+        }
+        if(obj.contains("y"))
+        {
+          curPoint.y = obj.value("y", 0.0f);
+          fromSegmentIndex = invalidIndex;
+        }
+        if(obj.contains("rotation"))
+        {
+          curRotation = deg2rad(obj.value("rotation", 0.0f));
+          fromSegmentIndex = invalidIndex;
+        }
+        updateView(data.view, curPoint);
+      }
 
-            if(auto id = obj.value<std::string_view>("id", {}); !id.empty())
-            {
-                segment.m_id = id;
-                data.trackSegmentId.emplace(std::move(id), data.trackSegments.size());
-            }
+      if((segment.type == TrackSegment::Type::Turnout ||
+           segment.type == TrackSegment::Type::Turnout3Way ||
+           segment.type == TrackSegment::Type::SingleSlipTurnout ||
+           segment.type == TrackSegment::Type::DoubleSlipTurnout) &&
+          startPointIndex == 1)
+      {
+        segment.rotation = curRotation + pi;
+        if(segment.rotation >= 2 * pi)
+        {
+          segment.rotation -= 2 * pi;
+        }
+        else if(segment.rotation < 0)
+        {
+          segment.rotation += 2 * pi;
+        }
 
-            const auto type = obj.value<std::string_view>("type", {});
-            if(type == "straight")
-            {
-                segment.type = TrackSegment::Type::Straight;
-            }
-            else if(type == "curve")
-            {
-                segment.type = TrackSegment::Type::Curve;
-            }
-            else if(type == "turnout")
-            {
-                segment.type = TrackSegment::Type::Turnout;
-            }
-            else if(type == "turnout_curved")
-            {
-                segment.type = TrackSegment::Type::TurnoutCurved;
-            }
-            else if(type == "turnout_3way")
-            {
-                segment.type = TrackSegment::Type::Turnout3Way;
-            }
-            else if(type == "turnout_single_slip")
-            {
-                segment.type = TrackSegment::Type::SingleSlipTurnout;
-            }
-            else if(type == "turnout_double_slip")
-            {
-                segment.type = TrackSegment::Type::DoubleSlipTurnout;
-            }
-            else
-            {
-                throw std::runtime_error("unknown track element type");
-            }
+        segment.points[0].x = curPoint.x + segment.straight.length * std::cos(curRotation);
+        segment.points[0].y = curPoint.y + segment.straight.length * std::sin(curRotation);
+        nextPointIndex = 0;
+      }
+      else if((segment.type == TrackSegment::Type::Turnout && startPointIndex == 2) ||
+               (segment.type == TrackSegment::Type::TurnoutCurved && (startPointIndex == 1 || startPointIndex == 2)) ||
+               (segment.type == TrackSegment::Type::Turnout3Way && (startPointIndex == 2 || startPointIndex == 3)) ||
+               (segment.type == TrackSegment::Type::SingleSlipTurnout && startPointIndex == 2) ||
+               (segment.type == TrackSegment::Type::DoubleSlipTurnout && startPointIndex == 2))
+      {
+        const size_t curveIndex = ((segment.type == TrackSegment::Type::TurnoutCurved && startPointIndex == 2) || (segment.type == TrackSegment::Type::Turnout3Way && startPointIndex == 3)) ? 1 : 0;
+        auto& curve = segment.curves[curveIndex];
 
-            if(segment.type == TrackSegment::Type::Straight || segment.type == TrackSegment::Type::Turnout || segment.type == TrackSegment::Type::Turnout3Way)
-            {
-                segment.straight.length = obj.value("length", segment.straight.length);
-            }
-            if(segment.type == TrackSegment::Type::Curve ||
-                segment.type == TrackSegment::Type::Turnout ||
-                segment.type == TrackSegment::Type::TurnoutCurved ||
-                segment.type == TrackSegment::Type::SingleSlipTurnout ||
-                segment.type == TrackSegment::Type::DoubleSlipTurnout)
-            {
-                segment.curves[0].radius = obj.value("radius", 100.0f);
-                segment.curves[0].angle = deg2rad(obj.value("angle", 45.0f));
-            }
-            if(segment.type == TrackSegment::Type::TurnoutCurved)
-            {
-                segment.curves[1].radius = obj.value("radius_2", 100.0f);
-                segment.curves[1].angle = deg2rad(obj.value("angle_2", 45.0f));
-            }
-            if(segment.type == TrackSegment::Type::Turnout3Way)
-            {
-                const float angleMin = 0.0f;
-                const float angleMax = 90.0f;
-                const float radius = std::max(1.0f, obj.value("radius", 100.0f));
-                const float angle = std::clamp(obj.value("angle", 45.0f), angleMin, angleMax);
+        const float curAngle = (curve.angle > 0) ? (curRotation + pi) : curRotation;
 
-                segment.curves[0].radius = std::max(1.0f,obj.value("radius_left", radius));
-                segment.curves[0].angle = deg2rad(-std::clamp(obj.value("angle_left", angle), angleMin, angleMax));
+        // Calc circle center:
+        curve.center.x = curPoint.x - curve.radius * std::sin(curAngle);
+        curve.center.y = curPoint.y + curve.radius * std::cos(curAngle);
 
-                segment.curves[1].radius = std::max(1.0f,obj.value("radius_right", radius));
-                segment.curves[1].angle = deg2rad(std::clamp(obj.value("angle_right", angle), angleMin, angleMax));
-            }
-            if(segment.type == TrackSegment::Type::Turnout ||
-                segment.type == TrackSegment::Type::TurnoutCurved ||
-                segment.type == TrackSegment::Type::Turnout3Way ||
-                segment.type == TrackSegment::Type::SingleSlipTurnout ||
-                segment.type == TrackSegment::Type::DoubleSlipTurnout)
-            {
-                segment.turnout.channel = obj.value("channel", defaultChannel);
+        // Calc origin:
+        segment.points[0].x = curve.center.x - curve.radius * std::sin(curAngle - curve.angle + pi);
+        segment.points[0].y = curve.center.y + curve.radius * std::cos(curAngle - curve.angle + pi);
 
-                if(segment.type == TrackSegment::Type::Turnout3Way ||
-                    segment.type == TrackSegment::Type::SingleSlipTurnout ||
-                    segment.type == TrackSegment::Type::DoubleSlipTurnout)
-                {
-                    const auto address = obj.value("address", invalidAddress);
-                    segment.turnout.addresses[0] = obj.value("address_left", address);
-                    segment.turnout.addresses[1] = obj.value("address_right", (address != invalidAddress) ? static_cast<uint16_t>(address + 1) : invalidAddress);
-                }
-                else
-                {
-                    segment.turnout.addresses[0] = obj.value("address", invalidAddress);
-                }
-                segment.turnout.index = stateData.turnouts.size();
-                auto& turnoutState = stateData.turnouts.emplace_back(TurnoutState{});
-                if(segment.type == TrackSegment::Type::Turnout3Way ||
-                    segment.type == TrackSegment::Type::SingleSlipTurnout ||
-                    segment.type == TrackSegment::Type::DoubleSlipTurnout)
-                {
-                    turnoutState.coils = 0x0A; // both closed
-                }
-            }
+        curRotation -= curve.angle;
 
-            if(getPointCount(segment.type) > 2)
-            {
-                if(const size_t n = obj.value("side", invalidIndex); n < getPointCount(segment.type))
-                {
-                    startPointIndex = n;
-                }
-            }
+        segment.rotation = curRotation + pi;
+        if(segment.rotation >= 2 * pi)
+        {
+          segment.rotation -= 2 * pi;
+        }
+        else if(segment.rotation < 0)
+        {
+          segment.rotation += 2 * pi;
+        }
 
-            if(const auto fromId = obj.value<std::string>("from_id", {}); !fromId.empty())
-            {
-                const size_t fromPoint = obj.value("from_point", invalidIndex);
+        nextPointIndex = 0;
+      }
+      else
+      {
+        segment.points[0] = curPoint;
+        segment.rotation = curRotation;
+        if(segment.rotation >= 2 * pi)
+        {
+          segment.rotation -= 2 * pi;
+        }
+        else if(segment.rotation < 0)
+        {
+          segment.rotation += 2 * pi;
+        }
 
-                if(auto it = data.trackSegmentId.find(fromId); it != data.trackSegmentId.end())
-                {
-                    auto& fromSegment = data.trackSegments[it->second];
-                    const auto pointCount = getPointCount(fromSegment.type);
-                    bool unconnectedPointFound = false;
-                    for(size_t i = 0; i < pointCount; ++i)
-                    {
-                        if((fromSegment.nextSegmentIndex[i] == invalidIndex && fromPoint == invalidIndex) || fromPoint == i)
-                        {
-                            if(fromSegment.nextSegmentIndex[i] != invalidIndex)
-                            {
-                                throw std::runtime_error("point already connected");
-                            }
-                            curPoint = fromSegment.points[i];
-                            curRotation = getPointRotation(fromSegment, i);
-                            fromPointIndex = i;
-                            fromSegmentIndex = it->second;
-                            unconnectedPointFound = true;
-                            break;
-                        }
-                    }
+        if(segment.type == TrackSegment::Type::Curve || segment.type == TrackSegment::Type::TurnoutCurved)
+        {
+          curRotation += segment.curves[0].angle;
+        }
+      }
 
-                    if(!unconnectedPointFound)
-                    {
-                        throw std::runtime_error("track element is already fully connected");
-                    }
-                }
-                else
-                {
-                    throw std::runtime_error("from_id contains unknown id");
-                }
-            }
-            else if(const auto fromSide = obj.value("from_side", invalidIndex);
-                     fromSide != invalidIndex &&
-                     fromSegmentIndex != invalidIndex &&
-                     getPointCount(data.trackSegments[fromSegmentIndex].type) > 2 &&
-                     fromSide < getPointCount(data.trackSegments[fromSegmentIndex].type) &&
-                     data.trackSegments[fromSegmentIndex].nextSegmentIndex[fromSide] == invalidIndex)
-            {
-                const auto& fromSegment = data.trackSegments[fromSegmentIndex];
-                curPoint = fromSegment.points[fromSide];
-                curRotation = getPointRotation(fromSegment, fromSide);
-                fromPointIndex = fromSide;
-            }
-            else
-            {
-                if(obj.contains("x"))
-                {
-                    curPoint.x = obj.value("x", 0.0f);
-                    fromSegmentIndex = invalidIndex;
-                }
-                if(obj.contains("y"))
-                {
-                    curPoint.y = obj.value("y", 0.0f);
-                    fromSegmentIndex = invalidIndex;
-                }
-                if(obj.contains("rotation"))
-                {
-                    curRotation = deg2rad(obj.value("rotation", 0.0f));
-                    fromSegmentIndex = invalidIndex;
-                }
-                updateView(data.view, curPoint);
-            }
+      // Keep value in range [0, 2 * pi)
+      if(curRotation >= 2 * pi)
+      {
+        curRotation -= 2 * pi;
+      }
+      else if(curRotation < 0)
+      {
+        curRotation += 2 * pi;
+      }
 
-            if((segment.type == TrackSegment::Type::Turnout ||
-                 segment.type == TrackSegment::Type::Turnout3Way ||
-                 segment.type == TrackSegment::Type::SingleSlipTurnout ||
-                 segment.type == TrackSegment::Type::DoubleSlipTurnout) &&
-                startPointIndex == 1)
-            {
-                segment.rotation = curRotation + pi;
-                if(segment.rotation >= 2 * pi)
-                {
-                    segment.rotation -= 2 * pi;
-                }
-                else if(segment.rotation < 0)
-                {
-                  segment.rotation += 2 * pi;
-                }
+      assert(segment.points[0].isFinite()); // origin must be known now
 
-                segment.points[0].x = curPoint.x + segment.straight.length * std::cos(curRotation);
-                segment.points[0].y = curPoint.y + segment.straight.length * std::sin(curRotation);
-                nextPointIndex = 0;
-            }
-            else if((segment.type == TrackSegment::Type::Turnout && startPointIndex == 2) ||
-                     (segment.type == TrackSegment::Type::TurnoutCurved && (startPointIndex == 1 || startPointIndex == 2)) ||
-                     (segment.type == TrackSegment::Type::Turnout3Way && (startPointIndex == 2 || startPointIndex == 3)) ||
-                     (segment.type == TrackSegment::Type::SingleSlipTurnout && startPointIndex == 2) ||
-                     (segment.type == TrackSegment::Type::DoubleSlipTurnout && startPointIndex == 2))
-            {
-                const size_t curveIndex = ((segment.type == TrackSegment::Type::TurnoutCurved && startPointIndex == 2) || (segment.type == TrackSegment::Type::Turnout3Way && startPointIndex == 3)) ? 1 : 0;
-                auto& curve = segment.curves[curveIndex];
+      // Calculate center/length of curves:
+      for(size_t i = 0; i < getCurveCount(segment.type); ++i)
+      {
+        auto& curve = segment.curves[i];
+        if(!curve.center.isFinite()) // skip if already known
+        {
+          const float startAngle = (curve.angle < 0) ? (segment.rotation + pi) : segment.rotation;
+          curve.center.x = segment.points[0].x - curve.radius * std::sin(startAngle);
+          curve.center.y = segment.points[0].y + curve.radius * std::cos(startAngle);
+        }
+        curve.length = std::abs(curve.radius * curve.angle);
+        assert(curve.center.isFinite());
+      }
 
-                const float curAngle = (curve.angle > 0) ? (curRotation + pi) : curRotation;
+      // Calculate points if not known:
+      switch(segment.type)
+      {
+      case TrackSegment::Type::Straight:
+        if(!segment.points[1].isFinite())
+        {
+          segment.points[1] = straightEnd(segment);
+          updateView(data.view, segment.points[1]);
+        }
+        break;
 
-                // Calc circle center:
-                curve.center.x = curPoint.x - curve.radius * std::sin(curAngle);
-                curve.center.y = curPoint.y + curve.radius * std::cos(curAngle);
+      case TrackSegment::Type::Curve:
+        if(!segment.points[1].isFinite())
+        {
+          segment.points[1] = curveEnd(segment, 0);
+          updateView(data.view, segment.curves[0], segment.rotation);
+        }
+        break;
 
-                // Calc origin:
-                segment.points[0].x = curve.center.x - curve.radius * std::sin(curAngle - curve.angle + pi);
-                segment.points[0].y = curve.center.y + curve.radius * std::cos(curAngle - curve.angle + pi);
+      case TrackSegment::Type::Turnout:
+        if(!segment.points[1].isFinite())
+        {
+          segment.points[1] = straightEnd(segment);
+          updateView(data.view, segment.points[1]);
+        }
+        if(!segment.points[2].isFinite())
+        {
+          segment.points[2] = curveEnd(segment, 0);
+          updateView(data.view, segment.curves[0], segment.rotation);
+        }
+        break;
 
-                curRotation -= curve.angle;
+      case TrackSegment::Type::TurnoutCurved:
+        if(!segment.points[1].isFinite())
+        {
+          segment.points[1] = curveEnd(segment, 0);
+          updateView(data.view, segment.curves[0], segment.rotation);
+        }
+        if(!segment.points[2].isFinite())
+        {
+          segment.points[2] = curveEnd(segment, 1);
+          updateView(data.view, segment.curves[1], segment.rotation);
+        }
+        break;
 
-                segment.rotation = curRotation + pi;
-                if(segment.rotation >= 2 * pi)
-                {
-                    segment.rotation -= 2 * pi;
-                }
-                else if(segment.rotation < 0)
-                {
-                  segment.rotation += 2 * pi;
-                }
+      case TrackSegment::Type::Turnout3Way:
+        if(!segment.points[1].isFinite())
+        {
+          segment.points[1] = straightEnd(segment);
+          updateView(data.view, segment.points[1]);
+        }
+        if(!segment.points[2].isFinite())
+        {
+          segment.points[2] = curveEnd(segment, 0);
+          updateView(data.view, segment.curves[0], segment.rotation);
+        }
+        if(!segment.points[3].isFinite())
+        {
+          segment.points[3] = curveEnd(segment, 1);
+          updateView(data.view, segment.curves[1], segment.rotation);
+        }
+        break;
 
-                nextPointIndex = 0;
-            }
-            else
-            {
-                segment.points[0] = curPoint;
-                segment.rotation = curRotation;
-                if(segment.rotation >= 2 * pi)
-                {
-                  segment.rotation -= 2 * pi;
-                }
-                else if(segment.rotation < 0)
-                {
-                  segment.rotation += 2 * pi;
-                }
-
-                if(segment.type == TrackSegment::Type::Curve || segment.type == TrackSegment::Type::TurnoutCurved)
-                {
-                    curRotation += segment.curves[0].angle;
-                }
-            }
-
-            // Keep value in range [0, 2 * pi)
-            if(curRotation >= 2 * pi)
-            {
-              curRotation -= 2 * pi;
-            }
-            else if(curRotation < 0)
-            {
-              curRotation += 2 * pi;
-            }
-
-            assert(segment.points[0].isFinite()); // origin must be known now
-
-            // Calculate center/length of curves:
-            for(size_t i = 0; i < getCurveCount(segment.type); ++i)
-            {
-                auto& curve = segment.curves[i];
-                if(!curve.center.isFinite()) // skip if already known
-                {
-                    const float startAngle = (curve.angle < 0) ? (segment.rotation + pi) : segment.rotation;
-                    curve.center.x = segment.points[0].x - curve.radius * std::sin(startAngle);
-                    curve.center.y = segment.points[0].y + curve.radius * std::cos(startAngle);
-                }
-                curve.length = std::abs(curve.radius * curve.angle);
-                assert(curve.center.isFinite());
-            }
-
-            // Calculate points if not known:
-            switch(segment.type)
-            {
-            case TrackSegment::Type::Straight:
-                if(!segment.points[1].isFinite())
-                {
-                    segment.points[1] = straightEnd(segment);
-                    updateView(data.view, segment.points[1]);
-                }
-                break;
-
-            case TrackSegment::Type::Curve:
-                if(!segment.points[1].isFinite())
-                {
-                    segment.points[1] = curveEnd(segment, 0);
-                    updateView(data.view, segment.curves[0], segment.rotation);
-                }
-                break;
-
-            case TrackSegment::Type::Turnout:
-                if(!segment.points[1].isFinite())
-                {
-                    segment.points[1] = straightEnd(segment);
-                    updateView(data.view, segment.points[1]);
-                }
-                if(!segment.points[2].isFinite())
-                {
-                    segment.points[2] = curveEnd(segment, 0);
-                    updateView(data.view, segment.curves[0], segment.rotation);
-                }
-                break;
-
-            case TrackSegment::Type::TurnoutCurved:
-                if(!segment.points[1].isFinite())
-                {
-                    segment.points[1] = curveEnd(segment, 0);
-                    updateView(data.view, segment.curves[0], segment.rotation);
-                }
-                if(!segment.points[2].isFinite())
-                {
-                    segment.points[2] = curveEnd(segment, 1);
-                    updateView(data.view, segment.curves[1], segment.rotation);
-                }
-                break;
-
-            case TrackSegment::Type::Turnout3Way:
-                if(!segment.points[1].isFinite())
-                {
-                    segment.points[1] = straightEnd(segment);
-                    updateView(data.view, segment.points[1]);
-                }
-                if(!segment.points[2].isFinite())
-                {
-                    segment.points[2] = curveEnd(segment, 0);
-                    updateView(data.view, segment.curves[0], segment.rotation);
-                }
-                if(!segment.points[3].isFinite())
-                {
-                    segment.points[3] = curveEnd(segment, 1);
-                    updateView(data.view, segment.curves[1], segment.rotation);
-                }
-                break;
-
-            default:
-                assert(false);
-                break;
-            }
+      default:
+        assert(false);
+        break;
+      }
 #ifndef NDEBUG
-            for(size_t i = 1; i < getPointCount(segment.type); ++i)
-            {
-                assert(segment.points[i].isFinite()); // all points must be known now
-            }
+      for(size_t i = 1; i < getPointCount(segment.type); ++i)
+      {
+        assert(segment.points[i].isFinite()); // all points must be known now
+      }
 #endif
 
-            // Set current point:
-            assert(nextPointIndex < getPointCount(segment.type));
-            curPoint = segment.points[nextPointIndex];
+      // Set current point:
+      assert(nextPointIndex < getPointCount(segment.type));
+      curPoint = segment.points[nextPointIndex];
 
-            // Sensors:
-            if(const uint16_t sensorAddress = obj.value("sensor_address", invalidAddress); sensorAddress != invalidAddress)
-            {
-                const uint16_t sensorChannel = obj.value("sensor_channel", defaultChannel);
+      // Sensors:
+      if(const uint16_t sensorAddress = obj.value("sensor_address", invalidAddress); sensorAddress != invalidAddress)
+      {
+        const uint16_t sensorChannel = obj.value("sensor_channel", defaultChannel);
 
-                auto &channelMap = data.sensorChannelMap[sensorChannel];
-                auto it = channelMap.find(sensorAddress);
-                if(it == channelMap.end())
-                {
-                  // new sensor
-                  segment.sensor.index = data.sensors.size();
-                  data.sensors.emplace_back(Sensor{sensorChannel, sensorAddress, Sensor::Type::TrackCircuit});
-                  channelMap.insert({sensorAddress, segment.sensor.index});
-                  stateData.sensors.emplace_back(SensorState{{0}, 0, 0, SensorState::Encoding::CodeAbsent, false});
-                }
-                else
-                  segment.sensor.index = it->second;
-            }
-
-            loadTrackObjects(obj, data, stateData, segment, iface);
-
-            if(fromSegmentIndex != invalidIndex)
-            {
-                assert(startPointIndex < getPointCount(segment.type));
-                segment.nextSegmentIndex[startPointIndex] = fromSegmentIndex;
-
-                assert(fromPointIndex < getPointCount(data.trackSegments[fromSegmentIndex].type));
-                data.trackSegments[fromSegmentIndex].nextSegmentIndex[fromPointIndex] = data.trackSegments.size();
-            }
-
-            data.trackSegments.emplace_back(std::move(segment));
-
-            switch(startPointIndex)
-            {
-            case 0:
-                fromPointIndex = 1;
-                if(segment.type == TrackSegment::Type::Turnout || segment.type == TrackSegment::Type::TurnoutCurved)
-                {
-                    if(segment.nextSegmentIndex[1] != invalidIndex)
-                    {
-                        fromPointIndex = 2;
-                    }
-                }
-                if(segment.type == TrackSegment::Type::Turnout3Way)
-                {
-                    if(segment.nextSegmentIndex[1] != invalidIndex)
-                    {
-                        fromPointIndex = 2;
-                    }
-                    if(segment.nextSegmentIndex[2] != invalidIndex)
-                    {
-                        fromPointIndex = 3;
-                    }
-                }
-                break;
-
-            case 1:
-            case 2:
-            case 3:
-                fromPointIndex = 0;
-                break;
-
-            default:
-                assert(false);
-                break;
-            }
-
-            fromSegmentIndex = data.trackSegments.size() - 1;
-        }
-
-        // Connect open ends:
+        auto &channelMap = data.sensorChannelMap[sensorChannel];
+        auto it = channelMap.find(sensorAddress);
+        if(it == channelMap.end())
         {
-            auto findSegment = [&data](size_t start, Point point, size_t& index)
-            {
-                const size_t count = data.trackSegments.size();
-                for(size_t i = start + 1; i < count; ++i)
-                {
-                    auto& segment = data.trackSegments[i];
-                    const auto pointCount = getPointCount(segment.type);
-                    for(size_t j = 0; j < pointCount; ++j)
-                    {
-                        if(segment.nextSegmentIndex[j] == invalidIndex && pointsClose(point, segment.points[j]))
-                        {
-                            segment.nextSegmentIndex[j] = start;
-                            index = i;
-                            return;
-                        }
-                    }
-                }
-            };
-
-            const size_t count = data.trackSegments.size() - 1;
-            for(size_t i = 0; i < count; ++i)
-            {
-                auto& segment = data.trackSegments[i];
-                const auto pointCount = getPointCount(segment.type);
-                for(size_t j = 0; j < pointCount; ++j)
-                {
-                    if(segment.nextSegmentIndex[j] == invalidIndex)
-                    {
-                        findSegment(i, segment.points[j], segment.nextSegmentIndex[j]);
-                    }
-                }
-            }
+          // new sensor
+          segment.sensor.index = data.sensors.size();
+          data.sensors.emplace_back(Sensor{sensorChannel, sensorAddress, Sensor::Type::TrackCircuit});
+          channelMap.insert({sensorAddress, segment.sensor.index});
+          stateData.sensors.emplace_back(SensorState{{0}, 0, 0, SensorState::Encoding::CodeAbsent, false});
         }
+        else
+          segment.sensor.index = it->second;
+      }
+
+      loadTrackObjects(obj, data, stateData, segment, iface);
+
+      if(fromSegmentIndex != invalidIndex)
+      {
+        assert(startPointIndex < getPointCount(segment.type));
+        segment.nextSegmentIndex[startPointIndex] = fromSegmentIndex;
+
+        assert(fromPointIndex < getPointCount(data.trackSegments[fromSegmentIndex].type));
+        data.trackSegments[fromSegmentIndex].nextSegmentIndex[fromPointIndex] = data.trackSegments.size();
+      }
+
+      data.trackSegments.emplace_back(std::move(segment));
+
+      switch(startPointIndex)
+      {
+      case 0:
+        fromPointIndex = 1;
+        if(segment.type == TrackSegment::Type::Turnout || segment.type == TrackSegment::Type::TurnoutCurved)
+        {
+          if(segment.nextSegmentIndex[1] != invalidIndex)
+          {
+            fromPointIndex = 2;
+          }
+        }
+        if(segment.type == TrackSegment::Type::Turnout3Way)
+        {
+          if(segment.nextSegmentIndex[1] != invalidIndex)
+          {
+            fromPointIndex = 2;
+          }
+          if(segment.nextSegmentIndex[2] != invalidIndex)
+          {
+            fromPointIndex = 3;
+          }
+        }
+        break;
+
+      case 1:
+      case 2:
+      case 3:
+        fromPointIndex = 0;
+        break;
+
+      default:
+        assert(false);
+        break;
+      }
+
+      fromSegmentIndex = data.trackSegments.size() - 1;
     }
+
+    // Connect open ends:
+    {
+      auto findSegment = [&data](size_t start, Point point, size_t& index)
+      {
+        const size_t count = data.trackSegments.size();
+        for(size_t i = start + 1; i < count; ++i)
+        {
+          auto& segment = data.trackSegments[i];
+          const auto pointCount = getPointCount(segment.type);
+          for(size_t j = 0; j < pointCount; ++j)
+          {
+            if(segment.nextSegmentIndex[j] == invalidIndex && pointsClose(point, segment.points[j]))
+            {
+              segment.nextSegmentIndex[j] = start;
+              index = i;
+              return;
+            }
+          }
+        }
+      };
+
+      const size_t count = data.trackSegments.size() - 1;
+      for(size_t i = 0; i < count; ++i)
+      {
+        auto& segment = data.trackSegments[i];
+        const auto pointCount = getPointCount(segment.type);
+        for(size_t j = 0; j < pointCount; ++j)
+        {
+          if(segment.nextSegmentIndex[j] == invalidIndex)
+          {
+            findSegment(i, segment.points[j], segment.nextSegmentIndex[j]);
+          }
+        }
+      }
+    }
+  }
 }
 
 Simulator::StaticData Simulator::load(const nlohmann::json& world, StateData& stateData, TrainTypeInterface *iface)
@@ -4446,7 +4475,7 @@ Simulator::StaticData Simulator::load(const nlohmann::json& world, StateData& st
   const float scaleA = world.value("scale_num", 1.0);
   const float scaleB = world.value("scale_den", 1.0);
   if(scaleB > 0.0001)
-      data.worldScale = scaleA / scaleB;
+    data.worldScale = scaleA / scaleB;
 
   data.trainWidth = world.value("train_width", data.trainWidth);
   data.trainCouplingLength = world.value("train_coupling_length", data.trainCouplingLength);
@@ -4513,15 +4542,15 @@ Simulator::StaticData Simulator::load(const nlohmann::json& world, StateData& st
       updateView(data.view, item.origin);
       switch(item.type)
       {
-        case Misc::Type::Rectangle:
-        {
-          const float cosRotation = std::cos(item.rotation);
-          const float sinRotation = std::sin(item.rotation);
-          updateView(data.view, {item.origin.x + item.width * cosRotation, item.origin.y + item.width * sinRotation}); // top right
-          updateView(data.view, {item.origin.x - item.height * sinRotation, item.origin.y + item.height * cosRotation}); // bottom left
-          updateView(data.view, {item.origin.x - item.height * sinRotation + item.width * cosRotation, item.origin.y + item.height * cosRotation + item.width * sinRotation}); // bottom right
-          break;
-        }
+      case Misc::Type::Rectangle:
+      {
+        const float cosRotation = std::cos(item.rotation);
+        const float sinRotation = std::sin(item.rotation);
+        updateView(data.view, {item.origin.x + item.width * cosRotation, item.origin.y + item.width * sinRotation}); // top right
+        updateView(data.view, {item.origin.x - item.height * sinRotation, item.origin.y + item.height * cosRotation}); // bottom left
+        updateView(data.view, {item.origin.x - item.height * sinRotation + item.width * cosRotation, item.origin.y + item.height * cosRotation + item.width * sinRotation}); // bottom right
+        break;
+      }
       }
 
       data.misc.emplace_back(std::move(item));
@@ -4703,7 +4732,7 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
 
   // And check if there are vehicles forward
   otherVehicle = getVehicleNear(segmentIndex, startPos, train->length + placingMargin,
-                                         true, false, &otherVehicleDistance);
+                                true, false, &otherVehicleDistance);
   if(otherVehicle)
   {
     otherVehicleDistance -= placingMargin;
@@ -4917,27 +4946,27 @@ bool Simulator::removeTrainUser(quint32 trainId)
 
 bool Simulator::removeTrain(quint32 trainId, bool removeWagons, quint32 suggestedTrainId)
 {
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+  std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-    auto it = m_stateData.trains.find(trainId);
-    if(it == m_stateData.trains.end())
-        return false;
+  auto it = m_stateData.trains.find(trainId);
+  if(it == m_stateData.trains.end())
+    return false;
 
-    if(!m_stateData.trains.contains(suggestedTrainId))
-      suggestedTrainId = invalidTrainId;
+  if(!m_stateData.trains.contains(suggestedTrainId))
+    suggestedTrainId = invalidTrainId;
 
-    Train &train = it->second;
-    destroyTrain(train, removeWagons);
-    it = m_stateData.trains.erase(it);
-    onTrainAddedRemoved(false, trainId, suggestedTrainId);
+  Train &train = it->second;
+  destroyTrain(train, removeWagons);
+  it = m_stateData.trains.erase(it);
+  onTrainAddedRemoved(false, trainId, suggestedTrainId);
 
-    if(getSimModeUnlocked() == SimMode::Master)
-    {
-      // TODO: suggest new active train
-      sendReplicas(SimulatorProtocol::TrainRemoved(trainId, false, suggestedTrainId));
-    }
+  if(getSimModeUnlocked() == SimMode::Master)
+  {
+    // TODO: suggest new active train
+    sendReplicas(SimulatorProtocol::TrainRemoved(trainId, false, suggestedTrainId));
+  }
 
-    return true;
+  return true;
 }
 
 Simulator::Vehicle *Simulator::addVehicle(float length, Color color, size_t typeIdx, quint32 suggestId)
@@ -4961,49 +4990,49 @@ Simulator::Vehicle *Simulator::addVehicle(float length, Color color, size_t type
 
 bool Simulator::removeVehicle(Vehicle *vehicle)
 {
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-    auto it = m_stateData.vehicles.find(vehicle->vehicleId);
-    if(it == m_stateData.vehicles.end())
-        return false;
+  std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+  auto it = m_stateData.vehicles.find(vehicle->vehicleId);
+  if(it == m_stateData.vehicles.end())
+    return false;
 
-    if(&it->second != vehicle)
-        return false;
+  if(&it->second != vehicle)
+    return false;
 
-    if(vehicle->activeTrainId != invalidTrainId)
-        return false;
+  if(vehicle->activeTrainId != invalidTrainId)
+    return false;
 
-    // Free track sensors
-    if(vehicle->state.front.segmentIndex != invalidIndex)
+  // Free track sensors
+  if(vehicle->state.front.segmentIndex != invalidIndex)
+  {
+    const size_t oldSegmentIndex = vehicle->state.front.segmentIndex;
+    vehicle->state.front.segmentIndex = invalidIndex;
+
+    const auto& segment = staticData.trackSegments[oldSegmentIndex];
+    if(segment.sensor.index != invalidIndex)
     {
-      const size_t oldSegmentIndex = vehicle->state.front.segmentIndex;
-      vehicle->state.front.segmentIndex = invalidIndex;
-
-      const auto& segment = staticData.trackSegments[oldSegmentIndex];
-      if(segment.sensor.index != invalidIndex)
-      {
-        auto& sensor = m_stateData.sensors[segment.sensor.index];
-        sensor.occupied--;
-      }
-
-      maybeRemoveVehicleSegment(vehicle, oldSegmentIndex);
+      auto& sensor = m_stateData.sensors[segment.sensor.index];
+      sensor.occupied--;
     }
 
-    if(vehicle->state.rear.segmentIndex != invalidIndex)
+    maybeRemoveVehicleSegment(vehicle, oldSegmentIndex);
+  }
+
+  if(vehicle->state.rear.segmentIndex != invalidIndex)
+  {
+    const size_t oldSegmentIndex = vehicle->state.rear.segmentIndex;
+    vehicle->state.rear.segmentIndex = invalidIndex;
+
+    const auto& segment = staticData.trackSegments[oldSegmentIndex];
+    if(segment.sensor.index != invalidIndex)
     {
-      const size_t oldSegmentIndex = vehicle->state.rear.segmentIndex;
-      vehicle->state.rear.segmentIndex = invalidIndex;
-
-      const auto& segment = staticData.trackSegments[oldSegmentIndex];
-      if(segment.sensor.index != invalidIndex)
-      {
-        auto& sensor = m_stateData.sensors[segment.sensor.index];
-        sensor.occupied--;
-      }
-      maybeRemoveVehicleSegment(vehicle, oldSegmentIndex);
+      auto& sensor = m_stateData.sensors[segment.sensor.index];
+      sensor.occupied--;
     }
+    maybeRemoveVehicleSegment(vehicle, oldSegmentIndex);
+  }
 
-    m_stateData.vehicles.erase(it);
-    return true;
+  m_stateData.vehicles.erase(it);
+  return true;
 }
 
 void Simulator::sendTrainFullRefreshReplica(SimulatorProtocol::OpCode op, Train *train)
@@ -5175,8 +5204,8 @@ void Simulator::destroyTrain(Train &train, bool removeWagons)
   {
     Vehicle *vehicle = m_stateData.getVehicleById(item.vehicleId);
     vehicle->activeTrainId = invalidTrainId;
-      if(removeWagons)
-          removeVehicle(vehicle);
+    if(removeWagons)
+      removeVehicle(vehicle);
   }
   train.vehicles.clear();
 }
@@ -5227,24 +5256,24 @@ bool Simulator::checkNextSignal(Train &train)
     float targetSpeed = train.speedMax;
 
     static const std::pair<float, float> SpeedCurve[] = {
-      {30, 0},
-      {32, 1},
-      {35, 3},
-      {50, 7},
-      {60, 15},
-      {70, 22},
-      {80, 30},
-      {110, 50},
-      {150, 70},
-      {280, 100},
-      {320, 130},
-      {380, 140},
-      {430, 150},
-      {450, 170},
-      {500, 190},
-      {550, 210},
-      {600, 230},
-      {650, 250}
+        {30, 0},
+        {32, 1},
+        {35, 3},
+        {50, 7},
+        {60, 15},
+        {70, 22},
+        {80, 30},
+        {110, 50},
+        {150, 70},
+        {280, 100},
+        {320, 130},
+        {380, 140},
+        {430, 150},
+        {450, 170},
+        {500, 190},
+        {550, 210},
+        {600, 230},
+        {650, 250}
     };
 
     for(const auto& entry : SpeedCurve)
@@ -5789,7 +5818,7 @@ bool Simulator::coupleTrain(Train &train, bool fwd, quint32& removedTrainIdOut)
           const float frontDist = std::min(otherHeadVehicle->state.front.distance,
                                            otherHeadVehicle->state.rear.distance);
           const float backDist  = std::min(otherTailVehicle->state.front.distance,
-                                           otherTailVehicle->state.rear.distance);
+                                          otherTailVehicle->state.rear.distance);
           flipList = (backDist < frontDist);
 
           if(!goForward)
@@ -5926,80 +5955,89 @@ TrainTypeInterface::~TrainTypeInterface()
 
 void Simulator::setSimMode(SimMode m)
 {
-  std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+  boost::asio::post(
+      m_networkContext, [this, m]()
+      {
+        if(mNetworkSimMode == m)
+          return;
 
-  if(mSimMode == m)
-    return;
+        const SimMode oldMode = mNetworkSimMode;
+        mNetworkSimMode = m;
 
-  const SimMode oldMode = mSimMode;
-  mSimMode = m;
+        if(oldMode != SimMode::Master)
+        {
+          m_syncReplicaStateTimer.cancel();
+          m_syncReplicaTrainFullStateTimer.cancel();
 
-  if(oldMode != SimMode::Master)
-  {
-    m_syncReplicaStateTimer.cancel();
-    m_syncReplicaTrainFullStateTimer.cancel();
+          while(!m_repliacas.empty())
+          {
+            auto connection =  m_repliacas.back();
+            m_repliacas.pop_back();
+            connection->stop();
+          }
+        }
 
-    while(!m_repliacas.empty())
-    {
-      auto connection =  m_repliacas.back();
-      m_repliacas.pop_back();
-      connection->stop();
-    }
-  }
+        if(oldMode == SimMode::Replica)
+        {
+          m_replicaDiscoverSendTimer.cancel();
+        }
+        else
+        {
+          m_syncSensorStateTimer.cancel();
+        }
 
-  if(oldMode == SimMode::Replica)
-  {
-    m_replicaDiscoverSendTimer.cancel();
-  }
-  else
-  {
-    m_syncSensorStateTimer.cancel();
-  }
+        if(mNetworkSimMode == SimMode::Master)
+        {
+          syncReplicaState();
+          syncReplicaTrainFull();
+        }
+        else if(mNetworkSimMode == SimMode::Replica)
+        {
+          m_stateData.powerOn = false; // Wait Master
 
-  if(mSimMode == SimMode::Master)
-  {
-    syncReplicaState();
-    syncReplicaTrainFull();
-  }
-  else if(mSimMode == SimMode::Replica)
-  {
-    m_stateData.powerOn = false; // Wait Master
+          // Stop UDP discovery
+          boost::system::error_code ec;
+          m_socketUDP.close(ec);
 
-    // Stop UDP discovery
-    boost::system::error_code ec;
-    m_socketUDP.close(ec);
+          // Restart UDP to send discover message
+          // TODO: make unified
+          m_socketUDP.open(boost::asio::ip::udp::v4(), ec);
+          if(ec)
+            assert(false);
 
-    // Restart UDP to send discover message
-    // TODO: make unified
-    m_socketUDP.open(boost::asio::ip::udp::v4(), ec);
-    if(ec)
-        assert(false);
+          m_socketUDP.set_option(boost::asio::socket_base::reuse_address(true), ec);
+          if(ec)
+            assert(false);
 
-    m_socketUDP.set_option(boost::asio::socket_base::reuse_address(true), ec);
-    if(ec)
-        assert(false);
+          m_socketUDP.set_option(boost::asio::socket_base::broadcast(true), ec);
+          if(ec)
+            assert(false);
 
-    m_socketUDP.set_option(boost::asio::socket_base::broadcast(true), ec);
-    if(ec)
-        assert(false);
+          m_socketUDP.bind(boost::asio::ip::udp::endpoint(boost::asio::ip::address_v4::any(), defaultPort), ec);
+          if(ec)
+            assert(false);
 
-    m_socketUDP.bind(boost::asio::ip::udp::endpoint(boost::asio::ip::address_v4::any(), defaultPort), ec);
-    if(ec)
-      assert(false);
+          broadcastAddresses.clear();
+          doSendReplicaDiscover();
+          doReceiveReplicaDiscover();
+        }
 
-    broadcastAddresses.clear();
-    doSendReplicaDiscover();
-    doReceiveReplicaDiscover();
-  }
+        if(mNetworkSimMode != SimMode::Replica)
+        {
+          syncSensorState();
+        }
 
-  if(mSimMode != SimMode::Replica)
-  {
-    syncSensorState();
-  }
+        boost::asio::post(
+            m_coreContext, [=, this, m=mNetworkSimMode]()
+            {
+              std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+              mCoreSimMode = m;
+            });
+      });
 }
 
 Simulator::SimMode Simulator::getSimMode() const
 {
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-  return mSimMode;
+  return mCoreSimMode;
 }
