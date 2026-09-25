@@ -387,16 +387,16 @@ void clearTrainSignalCache(Simulator::StateData &data, Simulator::Train &train, 
 Simulator::Simulator(const nlohmann::json& world, TrainTypeInterface *iface)
   : staticData(load(world, m_stateData, iface))
   , m_tickTimer{m_coreContext}
-  , m_handShakeSendTimer{m_coreContext}
-  , m_handShakeRecvTimer{m_coreContext}
-  , m_acceptor{m_coreContext}
-  , m_socketUDP{m_coreContext}
+  , m_handShakeSendTimer{m_networkContext}
+  , m_handShakeRecvTimer{m_networkContext}
+  , m_acceptor{m_networkContext}
+  , m_socketUDP{m_networkContext}
   , m_signalBlinkStateTimer{m_coreContext}
   , m_syncSensorStateTimer{m_coreContext}
-  , m_syncReplicaStateTimer{m_coreContext}
-  , m_syncReplicaTrainFullStateTimer{m_coreContext}
+  , m_syncReplicaStateTimer{m_networkContext}
+  , m_syncReplicaTrainFullStateTimer{m_networkContext}
   , m_garbageCollectTimer{m_coreContext}
-  , m_replicaDiscoverSendTimer{m_coreContext}
+  , m_replicaDiscoverSendTimer{m_networkContext}
   , trainTypeInterface(iface)
 {
   loadTrains(world);
@@ -1481,8 +1481,12 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       break;
 
     const auto& m = static_cast<const TrainSpeedFactorChanged&>(message);
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-    setTrainSpeedFactor(m.trainSpeedFactor);
+    boost::asio::post(
+        m_coreContext, [this, m=m]()
+        {
+          std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+          setTrainSpeedFactor(m.trainSpeedFactor);
+        });
     break;
   }
   case OpCode::TrainRequestSetMode:
@@ -1491,13 +1495,17 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       break;
 
     const auto& m = static_cast<const TrainRequestSetMode&>(message);
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+    boost::asio::post(
+        m_coreContext, [this, m=m]()
+        {
+          std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-    auto train = m_stateData.getTrainById(m.getTrainId());
-    if(!train)
-      break;
+          auto train = m_stateData.getTrainById(m.getTrainId());
+          if(!train)
+            return;
 
-    setTrainMode(*train, m.mode);
+          setTrainMode(*train, m.mode);
+        });
     break;
   }
   case OpCode::TrainRequestSetDirection:
@@ -1506,13 +1514,17 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       break;
 
     const auto& m = static_cast<const TrainRequestSetDirection&>(message);
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+    boost::asio::post(
+        m_coreContext, [this, m=m]()
+        {
+          std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-    auto train = m_stateData.getTrainById(m.getTrainId());
-    if(!train)
-      break;
+          auto train = m_stateData.getTrainById(m.getTrainId());
+          if(!train)
+            return;
 
-    setTrainDirection(*train, m.reverse);
+          setTrainDirection(*train, m.reverse);
+        });
     break;
   }
   case OpCode::TrainRequestChangeSpeed:
@@ -1521,34 +1533,38 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       break;
 
     const auto& m = static_cast<const TrainRequestChangeSpeed&>(message);
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+    boost::asio::post(
+        m_coreContext, [this, m=m]()
+        {
+          std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-    auto train = m_stateData.getTrainById(m.getTrainId());
-    if(!train)
-      break;
+          auto train = m_stateData.getTrainById(m.getTrainId());
+          if(!train)
+            return;
 
-    // NOTE: match what SimulatorView does
-    switch (m.step)
-    {
-    case TrainRequestChangeSpeed::Stop:
-    {
-      setTrainMode(*train, Simulator::TrainState::Mode::Manual);
-      setTrainSpeed(*train, 0.0f, true);
-      break;
-    }
-    case TrainRequestChangeSpeed::IncreaseStep:
-    {
-      applyTrainSpeedDelta(*train, train->speedMax / 20);
-      break;
-    }
-    case TrainRequestChangeSpeed::DecreaseStep:
-    {
-      applyTrainSpeedDelta(*train, - train->speedMax / 20);
-      break;
-    }
-    default:
-      break;
-    }
+          // NOTE: match what SimulatorView does
+          switch (m.step)
+          {
+          case TrainRequestChangeSpeed::Stop:
+          {
+            setTrainMode(*train, Simulator::TrainState::Mode::Manual);
+            setTrainSpeed(*train, 0.0f, true);
+            break;
+          }
+          case TrainRequestChangeSpeed::IncreaseStep:
+          {
+            applyTrainSpeedDelta(*train, train->speedMax / 20);
+            break;
+          }
+          case TrainRequestChangeSpeed::DecreaseStep:
+          {
+            applyTrainSpeedDelta(*train, - train->speedMax / 20);
+            break;
+          }
+          default:
+            break;
+          }
+        });
     break;
   }
   case OpCode::TrainRequestCoupleSplit:
@@ -1557,41 +1573,44 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       break;
 
     const auto& m = static_cast<const TrainRequestCoupleSplit&>(message);
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+    boost::asio::post(
+        m_coreContext, [this, m=m]()
+        {
+          std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-    auto train = m_stateData.getTrainById(m.getTrainId());
-    if(!train)
-      break;
+          auto train = m_stateData.getTrainById(m.getTrainId());
+          if(!train)
+            return;
 
-    quint32 otherTrainId = invalidTrainId;
+          quint32 otherTrainId = invalidTrainId;
 
-    // NOTE: match what SimulatorView does
-    switch (m.coupleOp)
-    {
-    case TrainRequestCoupleSplit::CoupleFront:
-    {
-      coupleTrain(*train, true, otherTrainId);
-      break;
-    }
-    case TrainRequestCoupleSplit::CoupleRear:
-    {
-      coupleTrain(*train, false, otherTrainId);
-      break;
-    }
-    case TrainRequestCoupleSplit::SplitFront:
-    {
-      splitTrain(*train, m.getVehicleIdx(),
-                 true, otherTrainId);
-      break;
-    }
-    case TrainRequestCoupleSplit::SplitRear:
-    {
-      splitTrain(*train, m.getVehicleIdx(),
-                 false, otherTrainId);
-      break;
-    }
-    }
-
+          // NOTE: match what SimulatorView does
+          switch (m.coupleOp)
+          {
+          case TrainRequestCoupleSplit::CoupleFront:
+          {
+            coupleTrain(*train, true, otherTrainId);
+            break;
+          }
+          case TrainRequestCoupleSplit::CoupleRear:
+          {
+            coupleTrain(*train, false, otherTrainId);
+            break;
+          }
+          case TrainRequestCoupleSplit::SplitFront:
+          {
+            splitTrain(*train, m.getVehicleIdx(),
+                       true, otherTrainId);
+            break;
+          }
+          case TrainRequestCoupleSplit::SplitRear:
+          {
+            splitTrain(*train, m.getVehicleIdx(),
+                       false, otherTrainId);
+            break;
+          }
+          }
+        });
     break;
   }
   case OpCode::TrainRequestRemove:
@@ -1600,7 +1619,11 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       break;
 
     const auto& m = static_cast<const TrainRemoved&>(message);
-    removeTrain(m.getTrainId(), true);
+    boost::asio::post(
+        m_coreContext, [this, m=m]()
+        {
+          removeTrain(m.getTrainId(), true);
+        });
     break;
   }
   case OpCode::TrainRemoved:
@@ -1609,7 +1632,11 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       break;
 
     const auto& m = static_cast<const TrainRemoved&>(message);
-    removeTrain(m.getTrainId(), true, m.getNextSelectedTrainId());
+    boost::asio::post(
+        m_coreContext, [this, m=m]()
+        {
+          removeTrain(m.getTrainId(), true, m.getNextSelectedTrainId());
+        });
     break;
   }
   case OpCode::TrainRequestAddReply:
@@ -1619,9 +1646,12 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
 
     const auto& m = static_cast<const TrainRequestAddReply&>(message);
 
-    if(trainTypeInterface)
-      trainTypeInterface->onAddTrainReply(m.getTrainId(), m.getToken(), m.isError);
-
+    boost::asio::post(
+        m_coreContext, [this, m=m]()
+        {
+          if(trainTypeInterface)
+            trainTypeInterface->onAddTrainReply(m.getTrainId(), m.getToken(), m.isError);
+        });
     break;
   }
   case OpCode::TrainAdded:
@@ -1673,143 +1703,146 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message, s
                      trainId, trainState, speedMax,
                      true);
 
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-
-    Train *train = m_stateData.getTrainById(trainId);
-    if(train && (isNewTrain || vehicles.empty()))
-    {
-      removeTrain(trainId, true, trainId);
-      train = nullptr;
-    }
-
-    if(vehicles.empty())
-      return;
-
-    std::unique_ptr<Train> guard;
-
-    if(!train)
-    {
-      train = new Train;
-      guard.reset(train);
-      isNewTrain = true;
-    }
-
-    train->address = 3;
-    train->protocol = DecoderProtocol::DCCShort;
-    train->trainId = trainId;
-    train->name = trainName;
-    train->speedMax = speedMax;
-    train->state = trainState;
-
-    std::unordered_set<quint32> vehiclesToRemove;
-
-    if(train->vehicles.size() < vehicles.size())
-      train->vehicles.reserve(vehicles.size());
-    else
-    {
-      size_t nVehiclesToRemove = train->vehicles.size() - vehicles.size();
-      while (nVehiclesToRemove > 0)
-      {
-        Vehicle *vehicle = m_stateData.getVehicleById(train->vehicles.back().vehicleId);
-        assert(vehicle);
-        vehicle->activeTrainId = invalidTrainId;
-        vehiclesToRemove.insert(vehicle->vehicleId);
-        train->vehicles.pop_back();
-        nVehiclesToRemove--;
-      }
-    }
-
-    size_t idx = 0;
-    for(const Simulator::Train::VehicleItemFull &v : vehicles)
-    {
-      Vehicle *result = m_stateData.getVehicleById(v.vehicle.vehicleId);
-      if(result)
-      {
-        result->typeIdx = v.vehicle.typeIdx;
-        result->color = v.vehicle.color;
-        result->length = v.vehicle.length;
-      }
-      else
-      {
-        result = addVehicle(v.vehicle.length, v.vehicle.color, v.vehicle.typeIdx,
-                            v.vehicle.vehicleId);
-      }
-
-      if(vehiclesToRemove.contains(result->vehicleId))
-        vehiclesToRemove.erase(vehiclesToRemove.find(result->vehicleId));
-
-      if(trainTypeInterface && result->typeIdx != invalidIndex)
-        trainTypeInterface->fillVehicleProperties(result);
-
-      const auto oldState = result->state;
-      result->state = v.vehicle.state;
-      updateReplicaTracking(result, oldState);
-
-      if(isNewTrain || idx >= train->vehicles.size())
-        train->vehicles.push_back({result->vehicleId, v.reversed});
-      else
-      {
-        Train::VehicleItem &item = train->vehicles[idx];
-        if(item.vehicleId != result->vehicleId)
+    boost::asio::post(
+        m_coreContext, [this, isNewTrain, vehicles, trainName, trainId, trainState, speedMax]()
         {
-          vehiclesToRemove.insert(item.vehicleId);
-          item.vehicleId = result->vehicleId;
-        }
+          std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-        item.reversed = v.reversed;
-      }
-      train->length += result->length + (idx == 0 ? 0.0f : staticData.trainCouplingLength);
-      idx++;
-    }
-
-    if(idx == 0)
-      break;
-
-    for(const Simulator::Train::VehicleItem &v : train->vehicles)
-    {
-      Vehicle *vehicle = m_stateData.getVehicleById(v.vehicleId);
-      if(vehicle->activeTrainId != invalidTrainId && vehicle->activeTrainId != train->trainId)
-      {
-        Train &otherTrain = m_stateData.trains.at(vehicle->activeTrainId);
-        auto &otherVehicles = otherTrain.vehicles;
-        if(otherVehicles.size() == 1 && otherVehicles.front().vehicleId == v.vehicleId)
-        {
-          // After removing this vehicle, train will be empty
-          removeTrain(vehicle->activeTrainId, false, train->trainId);
-          vehicle->activeTrainId = invalidTrainId;
-        }
-        else
-        {
-          for(auto it = otherVehicles.begin(); it != otherVehicles.end(); it++)
+          Train *train = m_stateData.getTrainById(trainId);
+          if(train && (isNewTrain || vehicles.empty()))
           {
-            if(it->vehicleId == v.vehicleId)
+            removeTrain(trainId, true, trainId);
+            train = nullptr;
+          }
+
+          if(vehicles.empty())
+            return;
+
+          std::unique_ptr<Train> guard;
+
+          if(!train)
+          {
+            train = new Train;
+            guard.reset(train);
+          }
+
+          train->address = 3;
+          train->protocol = DecoderProtocol::DCCShort;
+          train->trainId = trainId;
+          train->name = trainName;
+          train->speedMax = speedMax;
+          train->state = trainState;
+
+          std::unordered_set<quint32> vehiclesToRemove;
+
+          if(train->vehicles.size() < vehicles.size())
+            train->vehicles.reserve(vehicles.size());
+          else
+          {
+            size_t nVehiclesToRemove = train->vehicles.size() - vehicles.size();
+            while (nVehiclesToRemove > 0)
             {
-              otherVehicles.erase(it);
+              Vehicle *vehicle = m_stateData.getVehicleById(train->vehicles.back().vehicleId);
+              assert(vehicle);
               vehicle->activeTrainId = invalidTrainId;
-              break;
+              vehiclesToRemove.insert(vehicle->vehicleId);
+              train->vehicles.pop_back();
+              nVehiclesToRemove--;
             }
           }
-        }
-      }
 
-      vehicle->activeTrainId = train->trainId;
-    }
+          size_t idx = 0;
+          for(const Simulator::Train::VehicleItemFull &v : vehicles)
+          {
+            Vehicle *result = m_stateData.getVehicleById(v.vehicle.vehicleId);
+            if(result)
+            {
+              result->typeIdx = v.vehicle.typeIdx;
+              result->color = v.vehicle.color;
+              result->length = v.vehicle.length;
+            }
+            else
+            {
+              result = addVehicle(v.vehicle.length, v.vehicle.color, v.vehicle.typeIdx,
+                                  v.vehicle.vehicleId);
+            }
 
-    for(quint32 vehicleId : vehiclesToRemove)
-    {
-      auto vehicle = m_stateData.getVehicleById(vehicleId);
-      if(vehicle)
-        removeVehicle(vehicle);
-    }
-    vehiclesToRemove.clear();
+            if(vehiclesToRemove.contains(result->vehicleId))
+              vehiclesToRemove.erase(vehiclesToRemove.find(result->vehicleId));
 
-    if(trainTypeInterface)
-    {
-      trainTypeInterface->setupTrainSpeedPowered(this, train);
-    }
+            if(trainTypeInterface && result->typeIdx != invalidIndex)
+              trainTypeInterface->fillVehicleProperties(result);
 
-    m_stateData.trains.insert({train->trainId, *train});
-    onTrainAddedRemoved(true, train->trainId, invalidTrainId);
+            const auto oldState = result->state;
+            result->state = v.vehicle.state;
+            updateReplicaTracking(result, oldState);
+
+            if(guard.get() || idx >= train->vehicles.size()) // If guard has Train, it's new
+              train->vehicles.push_back({result->vehicleId, v.reversed});
+            else
+            {
+              Train::VehicleItem &item = train->vehicles[idx];
+              if(item.vehicleId != result->vehicleId)
+              {
+                vehiclesToRemove.insert(item.vehicleId);
+                item.vehicleId = result->vehicleId;
+              }
+
+              item.reversed = v.reversed;
+            }
+            train->length += result->length + (idx == 0 ? 0.0f : staticData.trainCouplingLength);
+            idx++;
+          }
+
+          if(idx == 0)
+            return;
+
+          for(const Simulator::Train::VehicleItem &v : train->vehicles)
+          {
+            Vehicle *vehicle = m_stateData.getVehicleById(v.vehicleId);
+            if(vehicle->activeTrainId != invalidTrainId && vehicle->activeTrainId != train->trainId)
+            {
+              Train &otherTrain = m_stateData.trains.at(vehicle->activeTrainId);
+              auto &otherVehicles = otherTrain.vehicles;
+              if(otherVehicles.size() == 1 && otherVehicles.front().vehicleId == v.vehicleId)
+              {
+                // After removing this vehicle, train will be empty
+                removeTrain(vehicle->activeTrainId, false, train->trainId);
+                vehicle->activeTrainId = invalidTrainId;
+              }
+              else
+              {
+                for(auto it = otherVehicles.begin(); it != otherVehicles.end(); it++)
+                {
+                  if(it->vehicleId == v.vehicleId)
+                  {
+                    otherVehicles.erase(it);
+                    vehicle->activeTrainId = invalidTrainId;
+                    break;
+                  }
+                }
+              }
+            }
+
+            vehicle->activeTrainId = train->trainId;
+          }
+
+          for(quint32 vehicleId : vehiclesToRemove)
+          {
+            auto vehicle = m_stateData.getVehicleById(vehicleId);
+            if(vehicle)
+              removeVehicle(vehicle);
+          }
+          vehiclesToRemove.clear();
+
+          if(trainTypeInterface)
+          {
+            trainTypeInterface->setupTrainSpeedPowered(this, train);
+          }
+
+          m_stateData.trains.insert({train->trainId, *train});
+          onTrainAddedRemoved(true, train->trainId, invalidTrainId);
+        });
     break;
   }
   case OpCode::TrainStateRefresh:
@@ -1824,37 +1857,40 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message, s
                      trainId, trainState, speedMax,
                      false);
 
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+    boost::asio::post(
+        m_coreContext, [this, vehicles, trainName, trainId, trainState, speedMax]()
+        {
+          std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-    Train *train = m_stateData.getTrainById(trainId);
-    if(!train)
-      return;
+          Train *train = m_stateData.getTrainById(trainId);
+          if(!train)
+            return;
 
-    train->state.speed = trainState.speed;
-    train->state.targetSpeed = trainState.targetSpeed;
-    train->state.waitToStart_ms = trainState.waitToStart_ms;
-    train->state.reverse = trainState.reverse;
-    train->state.mode = trainState.mode;
-    train->state.isOnStationStop = trainState.isOnStationStop;
+          train->state.speed = trainState.speed;
+          train->state.targetSpeed = trainState.targetSpeed;
+          train->state.waitToStart_ms = trainState.waitToStart_ms;
+          train->state.reverse = trainState.reverse;
+          train->state.mode = trainState.mode;
+          train->state.isOnStationStop = trainState.isOnStationStop;
 
-    size_t maxIdx = std::min(train->vehicles.size(), vehicles.size());
-    for(size_t i = 0; i < maxIdx; i++)
-    {
-      Train::VehicleItem &item = train->vehicles[i];
-      const Train::VehicleItemFull &source = vehicles.at(i);
-      Vehicle *vehicle = m_stateData.getVehicleById(item.vehicleId);
+          size_t maxIdx = std::min(train->vehicles.size(), vehicles.size());
+          for(size_t i = 0; i < maxIdx; i++)
+          {
+            Train::VehicleItem &item = train->vehicles[i];
+            const Train::VehicleItemFull &source = vehicles.at(i);
+            Vehicle *vehicle = m_stateData.getVehicleById(item.vehicleId);
 
-      item.reversed = source.reversed;
-      const auto oldState = vehicle->state;
-      vehicle->state = source.vehicle.state;
-      updateReplicaTracking(vehicle, oldState);
-    }
-
+            item.reversed = source.reversed;
+            const auto oldState = vehicle->state;
+            vehicle->state = source.vehicle.state;
+            updateReplicaTracking(vehicle, oldState);
+          }
+        });
     break;
   }
   case OpCode::TrainRequestAdd:
   {
-    std::vector<Simulator::Train::VehicleItemFull> vehicles;
+    std::vector<Simulator::Train::VehicleItemFull> vehicles_;
     std::string trainName;
     size_t segmentIndex = invalidIndex;
     quint32 token = 0;
@@ -1862,63 +1898,57 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message, s
     TrainPlacement placement = TrainPlacement::PlaceCenter;
     bool invertDir = false;
 
-    deserializeTrainAddRequest(stream, trainName, vehicles,
+    deserializeTrainAddRequest(stream, trainName, vehicles_,
                                segmentIndex, token, startPos,
                                placement, invertDir);
 
-    if(trainTypeInterface)
-    {
-      for(Train::VehicleItemFull &item : vehicles)
-      {
-        if(item.vehicle.typeIdx != invalidIndex)
-          trainTypeInterface->fillVehicleProperties(&item.vehicle);
-      }
-    }
+    boost::asio::post(
+        m_coreContext, [this, trainName, vehicles_=vehicles_,
+         segmentIndex, token, startPos,
+         placement, invertDir, fromConnId]()
+        {
+          std::vector<Simulator::Train::VehicleItemFull> vehicles = vehicles_; // TODO: it's captured const
+          if(trainTypeInterface)
+          {
+            for(Train::VehicleItemFull &item : vehicles)
+            {
+              if(item.vehicle.typeIdx != invalidIndex)
+                trainTypeInterface->fillVehicleProperties(&item.vehicle);
+            }
+          }
 
-    if(trainName.empty() || segmentIndex == invalidIndex || segmentIndex >= staticData.trackSegments.size()
-        || vehicles.empty())
-    {
-      for(const std::shared_ptr<SimulatorConnection>& connection : m_repliacas)
-      {
-        if(connection->connectionId() != fromConnId)
-          continue;
+          if(trainName.empty() || segmentIndex == invalidIndex || segmentIndex >= staticData.trackSegments.size()
+              || vehicles.empty())
+          {
+            boost::asio::post(
+                m_networkContext, [this, fromConnId, token]()
+                {
+                  sendTo(fromConnId, SimulatorProtocol::TrainRequestAddReply(token, true));
+                });
+            return;
+          }
 
-        connection->send(SimulatorProtocol::TrainRequestAddReply(token, true));
-        break;
-      }
-      break;
-    }
+          std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+          quint32 trainId = invalidTrainId;
+          if(!addTrain(trainName, DecoderProtocol::DCCShort, 3,
+                        vehicles, segmentIndex, trainId, startPos, placement, invertDir))
+          {
+            boost::asio::post(
+                m_networkContext, [this, fromConnId, token]()
+                {
+                  sendTo(fromConnId, SimulatorProtocol::TrainRequestAddReply(token, true));
+                });
+            return;
+          }
 
-    quint32 trainId = invalidTrainId;
-    if(!addTrain(trainName, DecoderProtocol::DCCShort, 3,
-                  vehicles, segmentIndex, trainId, startPos, placement))
-    {
-      for(const std::shared_ptr<SimulatorConnection>& connection : m_repliacas)
-      {
-        if(connection->connectionId() != fromConnId)
-          continue;
-
-        connection->send(SimulatorProtocol::TrainRequestAddReply(token, true));
-        break;
-      }
-      break;
-    }
-
-    // Set direction
-    if(invertDir)
-      setTrainDirection(m_stateData.trains.at(trainId), true);
-
-    // Success
-    for(const std::shared_ptr<SimulatorConnection>& connection : m_repliacas)
-    {
-      if(connection->connectionId() != fromConnId)
-        continue;
-
-      connection->send(SimulatorProtocol::TrainRequestAddReply(token, false, trainId));
-      break;
-    }
+          // Success
+          boost::asio::post(
+              m_networkContext, [this, fromConnId, token, trainId]()
+              {
+                sendTo(fromConnId, SimulatorProtocol::TrainRequestAddReply(token, false, trainId));
+              });
+        });
     break;
   }
   default:
@@ -4674,7 +4704,7 @@ Simulator::StaticData Simulator::load(const nlohmann::json& world, StateData& st
 
 bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, uint16_t addr,
                          const std::vector<Train::VehicleItemFull> &vehicles, size_t segmentIndex,
-                         quint32 &trainIdOut, float startPos, TrainPlacement placement)
+                         quint32 &trainIdOut, float startPos, TrainPlacement placement, bool reverse)
 {
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
@@ -4689,6 +4719,7 @@ bool Simulator::addTrain(const std::string_view& name, DecoderProtocol proto, ui
   train->protocol = proto;
   train->address = addr;
   train->vehicles.reserve(vehicles.size());
+  train->state.reverse = reverse;
 
   bool empty = true;
   for(const auto& item : vehicles)

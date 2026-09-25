@@ -791,7 +791,7 @@ public:
   bool addTrain(const std::string_view& name,
                 DecoderProtocol proto, uint16_t addr,
                 const std::vector<Train::VehicleItemFull> &vehicles, size_t segmentIndex,
-                quint32 &trainIdOut, float startPos = -1.0, TrainPlacement placement = TrainPlacement::PlaceCenter);
+                quint32 &trainIdOut, float startPos = -1.0, TrainPlacement placement = TrainPlacement::PlaceCenter, bool reverse = false);
 
   bool requestAddTrain(const std::string &name,
                        const std::vector<Train::VehicleItemFull> &vehicles, size_t segmentIndex,

@@ -111,14 +111,11 @@ bool TrainsModel::addTrain(const QString &name,
 
     quint32 trainId = Simulator::invalidTrainId;
     if(!mSimulator->addTrain(name.toStdString(), DecoderProtocol::DCCShort, 3,
-                             vehicles, segmentIdx, trainId, startPos, placement))
+                             vehicles, segmentIdx, trainId, startPos, placement, invert))
     {
         *errOut = tr("Train is too long");
         return false;
     }
-
-    if(invert)
-      mSimulator->setTrainDirection(trainId, true);
 
     beginResetModel();
     mTrains.insert(name, Train{name, 0.0});
