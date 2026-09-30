@@ -784,8 +784,8 @@ public:
                       quint32 suggestId = invalidTrainId);
   bool removeVehicle(Vehicle *vehicle);
 
-  void sendTrainFullRefreshReplica(SimulatorProtocol::OpCode op, Train *train);
-  void sendTrainStateRefreshReplica(Train *train);
+  void sendTrainFullRefreshReplica(SimulatorProtocol::OpCode op, Train *train, bool networkThread = false);
+  void sendTrainStateRefreshReplica(Train *train, bool networkThread = false);
 
   Vehicle *getVehicleNear(size_t segmentIdx, float pos, float maxDistance,
                           bool canGoForward = true, bool canGoBackwards = true,

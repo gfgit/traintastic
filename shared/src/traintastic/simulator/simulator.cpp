@@ -2595,7 +2595,7 @@ void Simulator::syncReplicaTrainFull()
 
   if(trainToSync)
     sendTrainFullRefreshReplica(SimulatorProtocol::OpCode::TrainChangedVehicles,
-                                trainToSync);
+                                trainToSync, true);
 }
 
 void Simulator::garbageCollectSegmentState()
@@ -2769,10 +2769,12 @@ void Simulator::updateTrainPositions()
 
         if(getSimModeUnlocked() == SimMode::Master)
         {
-          // TODO: suggest new active train
-          sendReplicas(SimulatorProtocol::TrainRemoved(trainId, false));
+          boost::asio::post(
+              m_networkContext, [this, trainId]()
+              {
+                sendReplicas(SimulatorProtocol::TrainRemoved(trainId, false));
+              });
         }
-
         continue;
       }
     }
@@ -2816,14 +2818,18 @@ void Simulator::updateTrainPositions()
 
     if(!isReplica && train.address != invalidAddress && trainState.speedOrDirectionChanged)
     {
-      send(SimulatorProtocol::LocomotiveSpeedDirection(
-          train.address,
-          train.protocol,
-          static_cast<uint8_t>(std::clamp<float>(std::round(std::numeric_limits<uint8_t>::max() * (trainState.speed / train.speedMax)),
-                                                 std::numeric_limits<uint8_t>::min(),
-                                                 std::numeric_limits<uint8_t>::max())),
-          trainState.reverse ? Direction::Reverse : Direction::Forward,
-          false));
+      boost::asio::post(
+          m_networkContext, [this, train=train]()
+          {
+            send(SimulatorProtocol::LocomotiveSpeedDirection(
+                train.address,
+                train.protocol,
+                static_cast<uint8_t>(std::clamp<float>(std::round(std::numeric_limits<uint8_t>::max() * (train.state.speed / train.speedMax)),
+                                                       std::numeric_limits<uint8_t>::min(),
+                                                       std::numeric_limits<uint8_t>::max())),
+                train.state.reverse ? Direction::Reverse : Direction::Forward,
+                false));
+          });
 
       trainState.speedOrDirectionChanged = false;
 
@@ -3461,14 +3467,17 @@ void Simulator::updateSensors()
 
     if(sensorState.value != sensorValue || axleCount != 0)
     {
-      if(getSimModeUnlocked() != SimMode::Replica || axleCount != 0)
+      if(getSimModeUnlocked() != SimMode::Replica)
       {
         sensorState.value = sensorValue;
 
         // TODO: maybe update networkStateData to avoid sending old state in syncSensorState() until next network state sync
         boost::asio::post(
-            m_networkContext, [this, sensor=sensor, sensorState=sensorState, axleCount]()
+            m_networkContext, [this, i, sensor=sensor, sensorState=sensorState, axleCount]()
             {
+              // Cherry pick new state
+              m_networkStateData.sensors[i] = sensorState;
+
               for(const auto& connection : m_connections)
               {
                 // Only send to subscribed clients or clients with no subscriptions
@@ -3477,17 +3486,13 @@ void Simulator::updateSensors()
                   continue;
                 connection->send(SimulatorProtocol::SensorChanged(sensor.channel, sensor.address, axleCount, sensorState.value));
               }
-            });
-      }
 
-      if(getSimModeUnlocked() == SimMode::Master)
-      {
-        boost::asio::post(
-            m_networkContext, [this, sensor=sensor, sensorState=sensorState, axleCount]()
-            {
-              for(const auto& connection : m_repliacas)
+              if(getSimModeNetwork() == SimMode::Master)
               {
-                connection->send(SimulatorProtocol::SensorChanged(sensor.channel, sensor.address, axleCount, sensorState.value));
+                for(const auto& connection : m_repliacas)
+                {
+                  connection->send(SimulatorProtocol::SensorChanged(sensor.channel, sensor.address, axleCount, sensorState.value));
+                }
               }
             });
       }
@@ -3511,15 +3516,16 @@ void Simulator::updateSpawns()
       if(spawnState.waitingResetCount == 0 && spawnState.ownerConnectionId != invalidIndex)
       {
         spawnState.state = SpawnState::State::Ready;
-        for(const auto& connection : m_connections)
-        {
-          if(connection->connectionId() != spawnState.ownerConnectionId)
-            continue;
 
-          connection->send(SimulatorProtocol::SpawnStateChange(spawn.address,
-                                                               SimulatorProtocol::SpawnStateChange::Ready));
-          break;
-        }
+        boost::asio::post(
+            m_networkContext, [this, spawnAddress=spawn.address, spawnState=spawnState]
+            {
+              // Cherry pick new state
+              m_networkStateData.spawns.at(spawnAddress) = spawnState;
+
+              sendTo(spawnState.ownerConnectionId,
+                     SimulatorProtocol::SpawnStateChange(spawnAddress, SimulatorProtocol::SpawnStateChange::Ready));
+            });
       }
     }
   }
@@ -5090,7 +5096,7 @@ bool Simulator::removeVehicle(Vehicle *vehicle)
   return true;
 }
 
-void Simulator::sendTrainFullRefreshReplica(SimulatorProtocol::OpCode op, Train *train)
+void Simulator::sendTrainFullRefreshReplica(SimulatorProtocol::OpCode op, Train *train, bool networkThread)
 {
   QByteArray buf;
   buf.reserve(100);
@@ -5099,12 +5105,28 @@ void Simulator::sendTrainFullRefreshReplica(SimulatorProtocol::OpCode op, Train 
   stream.setByteOrder(QDataStream::LittleEndian);
   stream << uint8_t(op);
   stream << uint16_t(0); // Size placeholder
-  serializeTrain(stream, *train, true, m_stateData);
+  serializeTrain(stream, *train, true, networkThread ? m_networkStateData : m_stateData);
 
-  sendReplicas(buf);
+  if(networkThread)
+  {
+    sendReplicas(buf);
+  }
+  else
+  {
+    boost::asio::post(
+        m_networkContext, [this, buf=buf, trainCopy=*train]()
+        {
+          // Cherry pick new state
+          m_networkStateData.trains[trainCopy.trainId] = trainCopy;
+
+          // TODO: avoid another buf copy
+          QByteArray bufCopy = buf;
+          sendReplicas(bufCopy);
+        });
+  }
 }
 
-void Simulator::sendTrainStateRefreshReplica(Train *train)
+void Simulator::sendTrainStateRefreshReplica(Train *train, bool networkThread)
 {
   QByteArray buf;
   buf.reserve(100);
@@ -5113,9 +5135,25 @@ void Simulator::sendTrainStateRefreshReplica(Train *train)
   stream.setByteOrder(QDataStream::LittleEndian);
   stream << uint8_t(SimulatorProtocol::OpCode::TrainStateRefresh);
   stream << uint16_t(0); // Size placeholder
-  serializeTrain(stream, *train, false, m_stateData);
+  serializeTrain(stream, *train, false, networkThread ? m_networkStateData : m_stateData);
 
-  sendReplicas(buf);
+  if(networkThread)
+  {
+    sendReplicas(buf);
+  }
+  else
+  {
+    boost::asio::post(
+        m_networkContext, [this, buf=buf, trainCopy=*train]()
+        {
+          // Cherry pick new state
+          m_networkStateData.trains[trainCopy.trainId] = trainCopy;
+
+          // TODO: avoid another buf copy
+          QByteArray bufCopy = buf;
+          sendReplicas(bufCopy);
+        });
+  }
 }
 
 void Simulator::updateTrainNextSignal(Train &train, bool next)
