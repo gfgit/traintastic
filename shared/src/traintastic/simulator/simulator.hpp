@@ -871,7 +871,7 @@ private:
   void doReceive();
   void doSendReplicaDiscover();
   void doReceiveReplicaDiscover();
-  void onConnectionRemoved(const std::shared_ptr<SimulatorConnection> &connection);
+  void onConnectionRemoved(const size_t connId, const std::vector<uint16_t> &subscribedChannels);
   void onReplicaRemoved(const std::shared_ptr<SimulatorConnection> &connection);
 
   void tick();

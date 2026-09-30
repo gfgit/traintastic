@@ -1979,11 +1979,11 @@ void Simulator::removeConnection(const std::shared_ptr<SimulatorConnection>& con
         broadcastAddresses.clear();
         doSendReplicaDiscover();
         doReceiveReplicaDiscover();
-        onConnectionRemoved({});
 
         boost::asio::post(
             m_coreContext, [this]()
             {
+              onConnectionRemoved(invalidIndex, {});
               onReplicaRemoved({});
             });
       }
@@ -1991,18 +1991,16 @@ void Simulator::removeConnection(const std::shared_ptr<SimulatorConnection>& con
     else
     {
       boost::asio::post(
-          m_coreContext, [this, conn=connection]()
+          m_coreContext, [this, connId=connection->connectionId(), subscribedChannels=connection->subscribedChannels]()
           {
-            onConnectionRemoved(conn);
+            onConnectionRemoved(connId, subscribedChannels);
           });
     }
   }
 }
 
-void Simulator::onConnectionRemoved(const std::shared_ptr<SimulatorConnection>& connection)
+void Simulator::onConnectionRemoved(const size_t connId, const std::vector<uint16_t> &subscribedChannels)
 {
-  const size_t connId = connection ? connection->connectionId() : invalidIndex;
-
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
   const bool isReplica = getSimModeUnlocked() == SimMode::Replica;
@@ -2011,7 +2009,7 @@ void Simulator::onConnectionRemoved(const std::shared_ptr<SimulatorConnection>& 
   // TODO: does not seem to be called when master connection gets closed???
 
   // Turn off encoded tracks
-  if(isReplica || !connection)
+  if(isReplica || connId == invalidIndex)
   {
     for(size_t idx = 0; idx < m_stateData.sensors.size(); idx++)
     {
@@ -2045,7 +2043,7 @@ void Simulator::onConnectionRemoved(const std::shared_ptr<SimulatorConnection>& 
     // But only one must be allowed to set encoding
 
     // FIXME: subscribedChannels should only be accessed by network thread
-    for(uint16_t channel : connection->subscribedChannels)
+    for(uint16_t channel : subscribedChannels)
     {
       auto channelMap = staticData.sensorChannelMap.find(channel);
       if(channelMap == staticData.sensorChannelMap.end())
