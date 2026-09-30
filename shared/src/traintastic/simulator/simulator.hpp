@@ -829,7 +829,6 @@ public:
 
   inline SimMode getSimModeNetwork() const { return mNetworkSimMode; };
 
-
   inline SimMode getSimModeUnlocked() const { return mNetworkSimMode; };
 
 private:

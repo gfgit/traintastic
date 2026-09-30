@@ -917,22 +917,23 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
   {
   case OpCode::Power:
   {
+    const auto &m = static_cast<const Power &>(message);
     boost::asio::post(
-        m_coreContext, [this, isReplica, message=message]()
+        m_coreContext, [this, isReplica, m=m]()
         {
           std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
           const bool wasPowerOn = m_stateData.powerOn;
 
           // NOTE: for replica we set local value here matching master value
-          m_stateData.powerOn = static_cast<const Power&>(message).powerOn;;
+          m_stateData.powerOn = m.powerOn;
 
           if(!isReplica && wasPowerOn != m_stateData.powerOn)
           {
             boost::asio::post(
-                m_networkContext, [this, message=message]()
+                m_networkContext, [this, m=m]()
                 {
-                  send(message);
-                  sendReplicas(message);
+                  send(m);
+                  sendReplicas(m);
                 });
           }
         });
