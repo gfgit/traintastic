@@ -2273,7 +2273,7 @@ void Simulator::doReceiveReplicaDiscover()
             if(!m_serverLocalHostOnly || m_remoteEndpoint.address().is_loopback())
             {
               const uint16_t *response = reinterpret_cast< const uint16_t*>(recvMsg);
-              uint16_t remotePort = le16toh(response[2]);
+              const uint16_t remotePort = be16toh(response[2]);
 
               boost::asio::ip::tcp::endpoint masterServer;
               masterServer.port(remotePort);
