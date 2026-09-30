@@ -387,7 +387,6 @@ void clearTrainSignalCache(Simulator::StateData &data, Simulator::Train &train, 
 Simulator::Simulator(const nlohmann::json& world, TrainTypeInterface *iface)
   : staticData(load(world, m_stateData, iface))
   , m_tickTimer{m_coreContext}
-  , m_signalBlinkStateTimer{m_coreContext}
   , m_syncSensorStateTimer{m_coreContext}
   , m_garbageCollectTimer{m_coreContext}
   , m_handShakeSendTimer{m_networkContext}
@@ -455,7 +454,6 @@ void Simulator::start(bool discoverable)
       [this]()
       {
         tick();
-        //blinkSignals();
         syncSensorState();
         garbageCollectSegmentState();
 
@@ -534,7 +532,6 @@ void Simulator::stop()
   m_tickTimer.cancel();
   m_handShakeSendTimer.cancel();
   m_handShakeRecvTimer.cancel();
-  m_signalBlinkStateTimer.cancel();
   m_syncSensorStateTimer.cancel();
   m_syncReplicaStateTimer.cancel();
   m_syncReplicaTrainFullStateTimer.cancel();
@@ -1147,23 +1144,12 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
             std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
             MainSignal &mainSignal = m_stateData.mainSignals.at(signalName);
 
-            bool wasBlinking = false;
-            bool isBlinking = false;
-
             for(size_t i = 0; i < mainSignal.lights.size(); i++)
             {
               if(i < (sizeof(m.lights) / sizeof(m.lights[0])))
               {
-                if(mainSignal.lights[i].state == MainSignal::State::BlikOn ||
-                    mainSignal.lights[i].state == MainSignal::State::BlinkReverseOn)
-                  wasBlinking = true;
-
                 mainSignal.lights[i].color = MainSignal::Light::Color(m.lights[i].color);
                 mainSignal.lights[i].state = MainSignal::State(m.lights[i].state);
-
-                if(mainSignal.lights[i].state == MainSignal::State::BlikOn ||
-                    mainSignal.lights[i].state == MainSignal::State::BlinkReverseOn)
-                  isBlinking = true;
               }
               else
               {
@@ -1183,28 +1169,10 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
               mainSignal.maxSpeed = std::min(mainSignal.maxSpeed, 30.0);
             }
 
-            // If just started blinking, sync with current blink phase
-            if(isBlinking && !wasBlinking)
-              mainSignal.setSignalBlinkStart(false, m_stateData.signalBlinkState);
-
             mainSignal.setArrowLightOn(m.isArrowLightOn());
             mainSignal.directionIndicatorText = m.directionIndication;
             mainSignal.rappelState = Simulator::MainSignal::RappelState(m.rappelState);
-
-            MainSignal::State advanceSignalState = mainSignal.getAdvanceSignalState();
-            if(advanceSignalState == MainSignal::State::BlikOn ||
-                advanceSignalState == MainSignal::State::BlinkReverseOn)
-              wasBlinking = true;
-
-            advanceSignalState = MainSignal::State(m.getAdvanceSignalState());
-            mainSignal.setAdvanceSignalState(advanceSignalState);
-
-            if(advanceSignalState == MainSignal::State::BlikOn ||
-                advanceSignalState == MainSignal::State::BlinkReverseOn)
-              isBlinking = true;
-
-            if(isBlinking && !wasBlinking)
-              mainSignal.setSignalBlinkStart(true, m_stateData.signalBlinkState);
+            mainSignal.setAdvanceSignalState(MainSignal::State(m.getAdvanceSignalState()));
           });
       break;
     }
@@ -2406,26 +2374,6 @@ void Simulator::handShakeRecv()
 
     (*it)->setHandShakeResponseReceived(false);
     it++;
-  }
-}
-
-void Simulator::blinkSignals()
-{
-  m_signalBlinkStateTimer.expires_after(signalBlinkRate);
-  m_signalBlinkStateTimer.async_wait(
-      [this](std::error_code ec)
-      {
-        if(!ec)
-        {
-          blinkSignals();
-        }
-      });
-
-  {
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-    m_stateData.signalBlinkState++;
-    if(m_stateData.signalBlinkState >= 8)
-      m_stateData.signalBlinkState = 0;
   }
 }
 

@@ -255,9 +255,7 @@ struct SignalSetState : Message
   enum State
   {
     Off = 0,
-    On,
-    Blink,
-    BlinkReverse,
+    On
   };
 
   enum RappelState
@@ -267,7 +265,7 @@ struct SignalSetState : Message
     TwoLines_100
   };
 
-  static constexpr uint8_t StateMask = uint8_t(State::BlinkReverse);
+  static constexpr uint8_t StateMask = uint8_t(State::On);
   static constexpr uint8_t ArrowLight = 0x04;
 
   struct LightState

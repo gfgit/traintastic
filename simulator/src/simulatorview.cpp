@@ -1372,13 +1372,6 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
 
         painter->setPen(signalLightPen);
 
-        // Calculate current blink state, keep in range [0, 7]
-        int8_t blinkState = int8_t(m_stateData.signalBlinkState) - int8_t(signal->getSignalBlinkStart(false));
-        if(blinkState >= 8)
-          blinkState -= 8;
-        else if(blinkState < 0)
-          blinkState += 8;
-
         // Light 0 is always topmost
         for(size_t i = 0; i < signal->lights.size(); i++)
         {
@@ -1402,14 +1395,6 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
             on = true;
             break;
 
-          case Simulator::MainSignal::State::BlikOn:
-            // Blink relay start off
-            on = blinkState >= 4;
-            break;
-
-          case Simulator::MainSignal::State::BlinkReverseOn:
-            on = blinkState < 4;
-            break;
           default:
             break;
           }
@@ -1481,13 +1466,6 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
 
         if(signal->hasAdvanceSignal)
         {
-          // Start signal blink is independent from main light blink
-          blinkState = int8_t(m_stateData.signalBlinkState) - int8_t(signal->getSignalBlinkStart(true));
-          if(blinkState >= 8)
-            blinkState -= 8;
-          else if(blinkState < 0)
-            blinkState += 8;
-
           const QPointF ct(lateralDiff, lightRect.top() + advanceSignalHeight * 1.2);
           QRectF startSignalRect(0, 0, advanceSignalWidth, advanceSignalHeight);
           startSignalRect.moveCenter(ct);
@@ -1507,14 +1485,6 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
             on = true;
             break;
 
-          case Simulator::MainSignal::State::BlikOn:
-            // Blink relay start off
-            on = blinkState >= 4;
-            break;
-
-          case Simulator::MainSignal::State::BlinkReverseOn:
-            on = blinkState < 4;
-            break;
           default:
             break;
           }

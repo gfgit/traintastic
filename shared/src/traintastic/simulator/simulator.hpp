@@ -307,9 +307,7 @@ public:
     enum class State
     {
       Off = 0,
-      On,
-      BlikOn,
-      BlinkReverseOn
+      On
     };
 
     enum class RappelState
@@ -319,7 +317,7 @@ public:
       TwoLines_100
     };
 
-    static constexpr uint8_t StateMask = uint8_t(State::BlinkReverseOn);
+    static constexpr uint8_t StateMask = uint8_t(State::On);
     static constexpr uint8_t ArrowLight = 0x04;
 
     uint16_t channel = defaultChannel;
@@ -330,8 +328,6 @@ public:
     double maxSpeed = 0;
 
     uint8_t advanceSignalStateAndArrow = 0;
-    // Signal blink phase
-    uint8_t blinkStart = 0;
 
     char directionIndicatorText = ' ';
 
@@ -360,21 +356,6 @@ public:
         advanceSignalStateAndArrow |= ArrowLight;
       else
         advanceSignalStateAndArrow &= ~ArrowLight;
-    }
-
-    inline uint8_t getSignalBlinkStart(bool startSignal) const
-    {
-      if(startSignal)
-        return (blinkStart >> 4) & 0x0F;
-      return blinkStart & 0x0F;
-    }
-
-    inline void setSignalBlinkStart(bool startSignal, uint8_t state)
-    {
-      if(startSignal)
-        blinkStart = (advanceSignalStateAndArrow & 0x0F) | (state << 4);
-      else
-        blinkStart = (advanceSignalStateAndArrow & 0xF0) | state;
     }
 
     enum class FixedLimit
@@ -585,8 +566,6 @@ public:
     quint32 mLastVehicleId = 0;
 
     bool powerOn = false;
-
-    uint8_t signalBlinkState = 0; // Goes from 0 to 7 TODO: remove
 
     std::vector<SensorState> sensors;
     std::vector<TurnoutState> turnouts;
@@ -836,7 +815,6 @@ private:
   constexpr static auto tickRate = std::chrono::milliseconds(1000 / 30);
   constexpr static auto handShakeRateSend = std::chrono::milliseconds(3000);
   constexpr static auto handShakeRateRecv = std::chrono::milliseconds(10000);
-  constexpr static auto signalBlinkRate = std::chrono::milliseconds(275);
   constexpr static auto syncSensorRate = std::chrono::milliseconds(150);
   constexpr static auto syncReplicaRate = std::chrono::milliseconds(220);
   constexpr static auto syncReplicaFullRate = std::chrono::milliseconds(1500);
@@ -852,7 +830,6 @@ private:
 
   // Core thread
   boost::asio::steady_timer m_tickTimer;
-  boost::asio::steady_timer m_signalBlinkStateTimer;
   boost::asio::steady_timer m_syncSensorStateTimer;
   boost::asio::steady_timer m_garbageCollectTimer;
 
