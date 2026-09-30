@@ -2565,6 +2565,26 @@ void Simulator::syncReplicaState()
 
     connection->send(SimulatorProtocol::SensorBatchState(0, connection->m_nextSyncBatchIdx, stateBuf));
     connection->m_nextSyncBatchIdx++;
+
+    if(mLastTurnoutSyncIdx >= staticData.turnoutSegmentIndexes.size())
+      mLastTurnoutSyncIdx = 0;
+
+    const size_t maxIdxToSync = std::min(mLastTurnoutSyncIdx + 11, staticData.turnoutSegmentIndexes.size());
+    for(; mLastTurnoutSyncIdx < maxIdxToSync; mLastTurnoutSyncIdx++)
+    {
+      const size_t turnoutSegmentIdx = staticData.turnoutSegmentIndexes.at(mLastTurnoutSyncIdx);
+      const auto &segment = staticData.trackSegments.at(turnoutSegmentIdx);
+      const auto &turnout = m_networkStateData.turnouts.at(mLastTurnoutSyncIdx);
+
+      uint8_t val = 0;
+      if(turnout.state == TurnoutState::State::Thrown)
+        val = 2;
+      else if(turnout.state == TurnoutState::State::Closed)
+        val = 1;
+
+      auto msg = SimulatorProtocol::AccessorySetState(segment.turnout.channel, segment.turnout.addresses[0], val);
+      sendReplicas(msg);
+    }
   }
 }
 
@@ -4170,6 +4190,7 @@ void Simulator::loadTrackplan(const nlohmann::json& world, StaticData &data, Sta
           segment.turnout.addresses[0] = obj.value("address", invalidAddress);
         }
         segment.turnout.index = stateData.turnouts.size();
+        data.turnoutSegmentIndexes.push_back(data.trackSegments.size()); // Current segment index
         auto& turnoutState = stateData.turnouts.emplace_back(TurnoutState{});
         if(segment.type == TrackSegment::Type::Turnout3Way ||
             segment.type == TrackSegment::Type::SingleSlipTurnout ||

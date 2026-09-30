@@ -239,6 +239,7 @@ public:
       }
     } view;
     std::vector<TrackSegment> trackSegments;
+    std::vector<size_t> turnoutSegmentIndexes;
     std::vector<Sensor> sensors;
     std::vector<Misc> misc;
 
@@ -861,6 +862,7 @@ private:
   size_t mLastSpawnSyncIdx = 0;
   quint32 mLastTrainSyncId = invalidTrainId;
   quint32 mLastTrainSyncFullId = invalidTrainId;
+  size_t mLastTurnoutSyncIdx = invalidIndex;
 
   TrainTypeInterface *trainTypeInterface = nullptr;
 
