@@ -387,15 +387,15 @@ void clearTrainSignalCache(Simulator::StateData &data, Simulator::Train &train, 
 Simulator::Simulator(const nlohmann::json& world, TrainTypeInterface *iface)
   : staticData(load(world, m_stateData, iface))
   , m_tickTimer{m_coreContext}
+  , m_signalBlinkStateTimer{m_coreContext}
+  , m_syncSensorStateTimer{m_coreContext}
+  , m_garbageCollectTimer{m_coreContext}
   , m_handShakeSendTimer{m_networkContext}
   , m_handShakeRecvTimer{m_networkContext}
   , m_acceptor{m_networkContext}
   , m_socketUDP{m_networkContext}
-  , m_signalBlinkStateTimer{m_coreContext}
-  , m_syncSensorStateTimer{m_coreContext}
   , m_syncReplicaStateTimer{m_networkContext}
   , m_syncReplicaTrainFullStateTimer{m_networkContext}
-  , m_garbageCollectTimer{m_coreContext}
   , m_replicaDiscoverSendTimer{m_networkContext}
   , trainTypeInterface(iface)
 {

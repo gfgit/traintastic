@@ -849,7 +849,14 @@ private:
 
   boost::asio::io_context m_coreContext;
   boost::asio::io_context m_networkContext;
+
+  // Core thread
   boost::asio::steady_timer m_tickTimer;
+  boost::asio::steady_timer m_signalBlinkStateTimer;
+  boost::asio::steady_timer m_syncSensorStateTimer;
+  boost::asio::steady_timer m_garbageCollectTimer;
+
+  // Network thread
   boost::asio::steady_timer m_handShakeSendTimer;
   boost::asio::steady_timer m_handShakeRecvTimer;
   boost::asio::ip::tcp::acceptor m_acceptor;
@@ -859,11 +866,8 @@ private:
 
   std::vector<boost::asio::ip::address> broadcastAddresses;
 
-  boost::asio::steady_timer m_signalBlinkStateTimer;
-  boost::asio::steady_timer m_syncSensorStateTimer;
   boost::asio::steady_timer m_syncReplicaStateTimer;
   boost::asio::steady_timer m_syncReplicaTrainFullStateTimer;
-  boost::asio::steady_timer m_garbageCollectTimer;
   boost::asio::steady_timer m_replicaDiscoverSendTimer;
 
   std::thread m_coreThread;
