@@ -1431,7 +1431,8 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
           if(spawnState.state != SpawnState::State::Ready || m.state != SpawnStateChange::RequestActivate)
             return;
 
-          doSpawnTrain(m.address);
+          if(getSimModeUnlocked() != SimMode::Replica)
+            doSpawnTrain(m.address);
 
           boost::asio::post(
               m_networkContext, [this, spawnState=spawnState, address=m.address, fromConnId]()
