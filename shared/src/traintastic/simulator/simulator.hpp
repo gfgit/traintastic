@@ -124,6 +124,7 @@ public:
       size_t index = invalidIndex;
       uint16_t channel = 0;
       std::array<uint16_t, 2> addresses{{invalidAddress, invalidAddress}};
+      float step = 0.15; // step = 0.5 * (1 / time seconds)
     } turnout;
 
     struct Object
@@ -296,6 +297,8 @@ public:
       ClosedRight = 6
     };
 
+    float currentPosition = 0;
+    float requestedPosition = 0;
     State state = State::Closed;
     uint8_t coils = 0;
 
@@ -748,7 +751,7 @@ public:
 
   bool segmentOccupied(size_t segmentIdx) const;
 
-  void setTurnoutState(size_t segmentIndex, TurnoutState::State state, bool sendChange = true);
+  void requestTurnoutState(size_t segmentIndex, TurnoutState::State state);
   void toggleTurnoutState(size_t segmentIndex, bool setUnknown);
 
   void send(const SimulatorProtocol::Message& message);
@@ -821,6 +824,8 @@ private:
   constexpr static auto syncReplicaFullRate = std::chrono::milliseconds(1500);
   constexpr static auto replicaDiscoverSendRate = std::chrono::milliseconds(1000);
   constexpr static auto garbageCollectRate = std::chrono::milliseconds(500);
+  constexpr static auto turnoutMovementRate = std::chrono::milliseconds(500);
+  constexpr static size_t DefaultTurnoutMovement_ms = 3000;
 
   constexpr static float defaultSpeedKmH = 200;
   constexpr static float SpeedKmHtoTick = tickRate.count() / 3600.0;
@@ -832,6 +837,7 @@ private:
   // Core thread
   boost::asio::steady_timer m_tickTimer;
   boost::asio::steady_timer m_garbageCollectTimer;
+  boost::asio::steady_timer m_turnoutMoveTimer;
 
   // Network thread
   boost::asio::ip::tcp::acceptor m_acceptor;
@@ -863,6 +869,7 @@ private:
   quint32 mLastTrainSyncId = invalidTrainId;
   quint32 mLastTrainSyncFullId = invalidTrainId;
   size_t mLastTurnoutSyncIdx = invalidIndex;
+  size_t mTurnoutsCurrentlyMoving = 0;
 
   TrainTypeInterface *trainTypeInterface = nullptr;
 
@@ -884,6 +891,8 @@ private:
   void syncReplicaState();
   void syncReplicaTrainFull();
   void garbageCollectSegmentState();
+  void updateTurnoutMovement();
+  void setTurnoutIsMoving(bool val);
 
   void updateTrainPositions();
 

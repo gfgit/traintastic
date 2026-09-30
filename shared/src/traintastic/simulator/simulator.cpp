@@ -41,6 +41,11 @@ static std::mt19937 rng = std::mt19937(std::random_device{}());
 
 constexpr static float ADJ_MARGIN = 0.000001;
 
+inline bool almostEqual(float a, float b)
+{
+  return std::abs(a - b) < 0.00001;
+}
+
 template <typename T>
 inline bool vec_contains(const std::vector<T>& vec, const T& item)
 {
@@ -388,6 +393,7 @@ Simulator::Simulator(const nlohmann::json& world, TrainTypeInterface *iface)
   : staticData(load(world, m_stateData, iface))
   , m_tickTimer{m_coreContext}
   , m_garbageCollectTimer{m_coreContext}
+  , m_turnoutMoveTimer{m_coreContext}
   , m_acceptor{m_networkContext}
   , m_socketUDP{m_networkContext}
   , m_handShakeSendTimer{m_networkContext}
@@ -538,6 +544,7 @@ void Simulator::stop()
 
   m_tickTimer.cancel();
   m_garbageCollectTimer.cancel();
+  m_turnoutMoveTimer.cancel();
 
   if(m_coreThread.joinable())
   {
@@ -747,62 +754,60 @@ bool Simulator::segmentOccupied(size_t segmentIdx) const
   return sensor.value;
 }
 
-void Simulator::setTurnoutState(size_t segmentIndex, TurnoutState::State state, bool sendChange)
+void Simulator::requestTurnoutState(size_t segmentIndex, TurnoutState::State state)
 {
   using Type = TrackSegment::Type;
-  using State = TurnoutState::State;
 
-  if(segmentIndex < staticData.trackSegments.size() && staticData.trackSegments[segmentIndex].turnout.index != invalidIndex)
+  if(segmentIndex >= staticData.trackSegments.size() || staticData.trackSegments[segmentIndex].turnout.index == invalidIndex)
+    return;
+
+  std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+  const auto& segment = staticData.trackSegments[segmentIndex];
+
+  if(getSimModeUnlocked() == SimMode::Replica)
   {
-    const auto& segment = staticData.trackSegments[segmentIndex];
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-    auto& turnout = m_stateData.turnouts[segment.turnout.index];
-    if(turnout.state != state)
-    {
-      if(segment.type == Type::Turnout || segment.type == Type::TurnoutCurved)
-      {
-        if(segment.turnout.addresses[0] != invalidAddress)
+    // Send request to master
+    boost::asio::post(
+        m_networkContext, [this, state,
+         channel=segment.turnout.channel,
+         address=segment.turnout.addresses[0]]()
         {
-          if(sendChange)
-          {
-            boost::asio::post(
-                m_networkContext, [this, state,
-                                   idx=segment.turnout.index,
-                                   channel=segment.turnout.channel,
-                                   address=segment.turnout.addresses[0]]()
-                {
-                  // Cherry pick state
-                  m_networkStateData.turnouts[idx].state = state;
+          uint8_t val = 0;
+          if(state == TurnoutState::State::Thrown)
+            val = 2;
+          else if(state == TurnoutState::State::Closed)
+            val = 1;
 
-                  uint8_t val = 0;
-                  if(state == State::Thrown)
-                    val = 2;
-                  else if(state == State::Closed)
-                    val = 1;
+          auto msg = SimulatorProtocol::AccessorySetState(channel, address, val);
+          send(msg);
+        });
+    return;
+  }
 
-                  auto msg = SimulatorProtocol::AccessorySetState(channel, address, val);
-                  send(msg);
-                  sendReplicas(msg);
-                });
-          }
-        }
-      }
-      else if(segment.type == Type::Turnout3Way)
-      {
+  auto& turnout = m_stateData.turnouts[segment.turnout.index];
+
+  float newRequestedPosition = 0.5; // Middle, unknown
+  if(state == TurnoutState::State::Closed)
+    newRequestedPosition = 0;
+  else if(state == TurnoutState::State::Thrown)
+    newRequestedPosition = 1;
+
+  if(almostEqual(newRequestedPosition, turnout.requestedPosition))
+    return; // Already in requested state
+
+  if(segment.type == Type::Turnout || segment.type == Type::TurnoutCurved)
+  {
+    const bool wasCompleted = almostEqual(turnout.currentPosition, turnout.requestedPosition);
+    turnout.requestedPosition = newRequestedPosition;
+    if(wasCompleted)
+      setTurnoutIsMoving(true); // Start turnout movement if needed
+  }
+  else if(segment.type == Type::Turnout3Way)
+  {
 
 
 
-        return; // FIXME
-      }
-      turnout.state = state;
-
-      for(quint32 trainId : turnout.watchingTrainIDs)
-      {
-        Train &train = m_stateData.trains.at(trainId);
-        train.state.nextSignal.dirty = true;
-        train.state.prevSignal.dirty = true;
-      }
-    }
+    return; // FIXME
   }
 }
 
@@ -849,7 +854,7 @@ void Simulator::toggleTurnoutState(size_t segmentIndex, bool setUnknown)
       }
     }
 
-    setTurnoutState(segmentIndex, state);
+    requestTurnoutState(segmentIndex, state);
   }
 }
 
@@ -996,18 +1001,20 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
           newState = Simulator::TurnoutState::State::Thrown;
         }
 
-        if(getSimModeNetwork() == SimMode::Master)
-        {
-          for(const auto& connection : m_repliacas)
-          {
-            connection->send(m);
-          }
-        }
-
         boost::asio::post(
-            m_coreContext, [this, i, isReplica, newState=newState]()
+            m_coreContext, [this, i, isReplica, newState=newState, turnoutIdx=segment.turnout.index]()
             {
-              setTurnoutState(i, newState, !isReplica);
+              if(isReplica)
+              {
+                // Obey to master and set turnout position
+                std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+                auto& turnout = m_stateData.turnouts[turnoutIdx];
+                turnout.state = newState;
+              }
+              else
+              {
+                requestTurnoutState(i, newState);
+              }
             });
         break;
       }
@@ -2583,6 +2590,7 @@ void Simulator::syncReplicaState()
         val = 1;
 
       auto msg = SimulatorProtocol::AccessorySetState(segment.turnout.channel, segment.turnout.addresses[0], val);
+      send(msg); // NOTE: also update clients
       sendReplicas(msg);
     }
   }
@@ -2652,6 +2660,112 @@ void Simulator::garbageCollectSegmentState()
       it = m_stateData.segmentVehicles.erase(it);
     else
       it++;
+  }
+}
+
+void Simulator::updateTurnoutMovement()
+{
+  std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+
+  for(size_t turnoutIdx = 0; turnoutIdx < m_stateData.turnouts.size(); turnoutIdx++)
+  {
+    TurnoutState &turnout = m_stateData.turnouts.at(turnoutIdx);
+    if(almostEqual(turnout.currentPosition, turnout.requestedPosition))
+      continue;
+
+    const TrackSegment &segment = staticData.trackSegments.at(staticData.turnoutSegmentIndexes.at(turnoutIdx));
+
+    if(turnout.currentPosition < turnout.requestedPosition)
+    {
+      turnout.currentPosition += segment.turnout.step;
+      if(turnout.currentPosition > turnout.requestedPosition)
+        turnout.currentPosition = turnout.requestedPosition;
+    }
+    else
+    {
+      turnout.currentPosition -= segment.turnout.step;
+      if(turnout.currentPosition < turnout.requestedPosition)
+        turnout.currentPosition = turnout.requestedPosition;
+    }
+
+    turnout.currentPosition = std::clamp(turnout.currentPosition, 0.0f, 1.0f);
+
+    if(almostEqual(turnout.currentPosition, turnout.requestedPosition))
+    {
+      // We reached target position
+      setTurnoutIsMoving(false);
+    }
+
+
+    TurnoutState::State newState = TurnoutState::State::Unknown;
+    if(almostEqual(turnout.currentPosition, 0))
+      newState = TurnoutState::State::Closed;
+    else if(almostEqual(turnout.currentPosition, 1))
+      newState = TurnoutState::State::Thrown;
+
+    if(newState != turnout.state)
+    {
+      // Turnout changed state!
+      turnout.state = newState;
+
+      for(quint32 trainId : turnout.watchingTrainIDs)
+      {
+        Train &train = m_stateData.trains.at(trainId);
+        train.state.nextSignal.dirty = true;
+        train.state.prevSignal.dirty = true;
+      }
+
+      boost::asio::post(
+          m_networkContext, [this, state=turnout.state,
+           turnoutIdx,
+           channel=segment.turnout.channel,
+           address=segment.turnout.addresses[0]]()
+          {
+            // Cherry pick state
+            m_networkStateData.turnouts[turnoutIdx].state = state;
+
+            uint8_t val = 0;
+            if(state == TurnoutState::State::Thrown)
+              val = 2;
+            else if(state == TurnoutState::State::Closed)
+              val = 1;
+
+            auto msg = SimulatorProtocol::AccessorySetState(channel, address, val);
+            send(msg);
+            sendReplicas(msg);
+          });
+    }
+  }
+
+  if(mTurnoutsCurrentlyMoving > 0)
+  {
+    m_turnoutMoveTimer.expires_after(turnoutMovementRate);
+    m_turnoutMoveTimer.async_wait(
+        [this](std::error_code ec)
+        {
+          if(!ec)
+          {
+            updateTurnoutMovement();
+          }
+        });
+  }
+}
+
+void Simulator::setTurnoutIsMoving(bool val)
+{
+  const bool wasActive = mTurnoutsCurrentlyMoving > 0;
+  if(val)
+  {
+    mTurnoutsCurrentlyMoving++;
+    if(!wasActive)
+    {
+      updateTurnoutMovement();
+    }
+  }
+  else
+  {
+    assert(mTurnoutsCurrentlyMoving > 0);
+    mTurnoutsCurrentlyMoving--;
   }
 }
 
@@ -3246,7 +3360,7 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
           {
             // Turnout is not in good state, train will hit switch blades and derail
             // We simulate by stopping train and setting turnout to unknown position
-            setTurnoutState(nextSegmentIndex, TurnoutState::State::Unknown);
+            requestTurnoutState(nextSegmentIndex, TurnoutState::State::Unknown);
           }
         }
 
@@ -3328,7 +3442,7 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
           {
             // Turnout is not in good state, train will hit switch blades and derail
             // We simulate by stopping train and setting turnout to unknown position
-            setTurnoutState(nextSegmentIndex, TurnoutState::State::Unknown);
+            requestTurnoutState(nextSegmentIndex, TurnoutState::State::Unknown);
           }
         }
 
@@ -4189,6 +4303,10 @@ void Simulator::loadTrackplan(const nlohmann::json& world, StaticData &data, Sta
         {
           segment.turnout.addresses[0] = obj.value("address", invalidAddress);
         }
+
+        const size_t movementTimeMillis = obj.value("move_ms", DefaultTurnoutMovement_ms);
+        segment.turnout.step = 500.0f / float(movementTimeMillis);
+
         segment.turnout.index = stateData.turnouts.size();
         data.turnoutSegmentIndexes.push_back(data.trackSegments.size()); // Current segment index
         auto& turnoutState = stateData.turnouts.emplace_back(TurnoutState{});
