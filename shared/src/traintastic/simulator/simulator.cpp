@@ -763,19 +763,27 @@ void Simulator::setTurnoutState(size_t segmentIndex, TurnoutState::State state, 
       {
         if(segment.turnout.addresses[0] != invalidAddress)
         {
-          uint8_t val = 0;
-          if(state == State::Thrown)
-            val = 2;
-          else if(state == State::Closed)
-            val = 1;
-
           if(sendChange)
           {
-            auto msg = SimulatorProtocol::AccessorySetState(segment.turnout.channel,
-                                                            segment.turnout.addresses[0],
-                                                            val);
-            send(msg);
-            sendReplicas(msg);
+            boost::asio::post(
+                m_networkContext, [this, state,
+                                   idx=segment.turnout.index,
+                                   channel=segment.turnout.channel,
+                                   address=segment.turnout.addresses[0]]()
+                {
+                  // Cherry pick state
+                  m_networkStateData.turnouts[idx].state = state;
+
+                  uint8_t val = 0;
+                  if(state == State::Thrown)
+                    val = 2;
+                  else if(state == State::Closed)
+                    val = 1;
+
+                  auto msg = SimulatorProtocol::AccessorySetState(channel, address, val);
+                  send(msg);
+                  sendReplicas(msg);
+                });
           }
         }
       }
@@ -1380,15 +1388,17 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
                                  SpawnState::State::WaitingReset :
                                  SpawnState::State::Ready;
 
-          uint8_t state = SpawnStateChange::Reset;
-          if(spawnState.state == SpawnState::State::Ready)
-            state = SpawnStateChange::Ready;
-          else if(spawnState.state == SpawnState::State::WaitingReset)
-            state = SpawnStateChange::WaitingReset;
-
           boost::asio::post(
-              m_networkContext, [this, state, address=m.address, fromConnId]()
+              m_networkContext, [this, spawnState=spawnState, address=m.address, fromConnId]()
               {
+                // Cherry pick state
+                m_networkStateData.spawns.at(address) = spawnState;
+
+                uint8_t state = SpawnStateChange::Reset;
+                if(spawnState.state == SpawnState::State::Ready)
+                  state = SpawnStateChange::Ready;
+                else if(spawnState.state == SpawnState::State::WaitingReset)
+                  state = SpawnStateChange::WaitingReset;
                 sendTo(fromConnId, SimulatorProtocol::SpawnStateChange(address, state));
               });
         });
@@ -1423,15 +1433,17 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
 
           doSpawnTrain(m.address);
 
-          uint8_t state = SpawnStateChange::Reset;
-          if(spawnState.state == SpawnState::State::Ready)
-            state = SpawnStateChange::Ready;
-          else if(spawnState.state == SpawnState::State::WaitingReset)
-            state = SpawnStateChange::WaitingReset;
-
           boost::asio::post(
-              m_networkContext, [this, state, address=m.address, fromConnId]()
+              m_networkContext, [this, spawnState=spawnState, address=m.address, fromConnId]()
               {
+                // Cherry pick state
+                m_networkStateData.spawns.at(address) = spawnState;
+
+                uint8_t state = SpawnStateChange::Reset;
+                if(spawnState.state == SpawnState::State::Ready)
+                  state = SpawnStateChange::Ready;
+                else if(spawnState.state == SpawnState::State::WaitingReset)
+                  state = SpawnStateChange::WaitingReset;
                 sendTo(fromConnId, SimulatorProtocol::SpawnStateChange(address, state));
               });
         });
