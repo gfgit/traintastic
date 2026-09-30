@@ -527,16 +527,17 @@ void Simulator::stop()
         // Stop TCP server
         m_acceptor.cancel(ec);
         m_acceptor.close(ec);
+
+        m_handShakeSendTimer.cancel();
+        m_handShakeRecvTimer.cancel();
+        m_syncReplicaStateTimer.cancel();
+        m_syncReplicaTrainFullStateTimer.cancel();
+        m_replicaDiscoverSendTimer.cancel();
       });
 
   m_tickTimer.cancel();
-  m_handShakeSendTimer.cancel();
-  m_handShakeRecvTimer.cancel();
   m_syncSensorStateTimer.cancel();
-  m_syncReplicaStateTimer.cancel();
-  m_syncReplicaTrainFullStateTimer.cancel();
   m_garbageCollectTimer.cancel();
-  m_replicaDiscoverSendTimer.cancel();
 
   if(m_coreThread.joinable())
   {
