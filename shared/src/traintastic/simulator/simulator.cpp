@@ -387,12 +387,12 @@ void clearTrainSignalCache(Simulator::StateData &data, Simulator::Train &train, 
 Simulator::Simulator(const nlohmann::json& world, TrainTypeInterface *iface)
   : staticData(load(world, m_stateData, iface))
   , m_tickTimer{m_coreContext}
-  , m_syncSensorStateTimer{m_coreContext}
   , m_garbageCollectTimer{m_coreContext}
-  , m_handShakeSendTimer{m_networkContext}
-  , m_handShakeRecvTimer{m_networkContext}
   , m_acceptor{m_networkContext}
   , m_socketUDP{m_networkContext}
+  , m_handShakeSendTimer{m_networkContext}
+  , m_handShakeRecvTimer{m_networkContext}
+  , m_syncSensorStateTimer{m_networkContext}
   , m_syncReplicaStateTimer{m_networkContext}
   , m_syncReplicaTrainFullStateTimer{m_networkContext}
   , m_replicaDiscoverSendTimer{m_networkContext}
@@ -454,7 +454,6 @@ void Simulator::start(bool discoverable)
       [this]()
       {
         tick();
-        syncSensorState();
         garbageCollectSegmentState();
 
         m_coreContext.run();
@@ -496,6 +495,7 @@ void Simulator::start(bool discoverable)
 
         handShakeSend();
         handShakeRecv();
+        syncSensorState();
 
         m_networkContext.run();
       });
@@ -530,13 +530,13 @@ void Simulator::stop()
 
         m_handShakeSendTimer.cancel();
         m_handShakeRecvTimer.cancel();
+        m_syncSensorStateTimer.cancel();
         m_syncReplicaStateTimer.cancel();
         m_syncReplicaTrainFullStateTimer.cancel();
         m_replicaDiscoverSendTimer.cancel();
       });
 
   m_tickTimer.cancel();
-  m_syncSensorStateTimer.cancel();
   m_garbageCollectTimer.cancel();
 
   if(m_coreThread.joinable())
@@ -1270,68 +1270,60 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
       if(connection->connectionId() != fromConnId)
         continue;
 
-      boost::asio::post(
-          m_coreContext, [this, fromConnId, connection=connection, newChannel=m.channel]()
+      // Subscribe client to this channel
+      if(!vec_contains(connection->subscribedChannels, m.channel))
+        connection->subscribedChannels.push_back(m.channel);
+
+      const auto& channelMap = staticData.sensorChannelMap.at(m.channel);
+
+      size_t batchIdx = 0;
+      bool sensorFound = false;
+
+      uint16_t stateBuf = 0;
+      std::map<size_t, size_t>::const_iterator it;
+
+      while(true)
+      {
+        const size_t firstAddress = batchIdx * 16 + 1;
+        const size_t lastAddress = (batchIdx + 1) * 16;
+
+        it = channelMap.lower_bound(firstAddress);
+        stateBuf = 0;
+        sensorFound = false;
+
+        while(it != channelMap.end())
+        {
+          if(it->first > lastAddress)
+            break;
+
+          const auto& sensor = staticData.sensors[it->second];
+
+          // Axle counter sensor send diffs so there is no point in querying them
+          if(sensor.type == Sensor::Type::AxleCounter)
           {
-            // Subscribe client to this channel
-            if(!vec_contains(connection->subscribedChannels, newChannel))
-              connection->subscribedChannels.push_back(newChannel);
+            it++;
+            continue;
+          }
 
-            const auto& channelMap = staticData.sensorChannelMap.at(newChannel);
+          const auto& sensorState = m_networkStateData.sensors[it->second];
+          if(sensorState.value)
+            bitSet(stateBuf, sensor.address - firstAddress);
 
-            size_t batchIdx = 0;
-            bool sensorFound = false;
+          sensorFound = true;
+          it++;
+        }
 
-            uint16_t stateBuf = 0;
-            std::map<size_t, size_t>::const_iterator it;
+        if(sensorFound)
+        {
+          connection->send(SimulatorProtocol::SensorBatchState(m.channel, batchIdx, m_networkStateData.powerOn ? stateBuf : 0));
+        }
 
-            while(true)
-            {
-              const size_t firstAddress = batchIdx * 16 + 1;
-              const size_t lastAddress = (batchIdx + 1) * 16;
+        if(it == channelMap.end())
+          break;
 
-              it = channelMap.lower_bound(firstAddress);
-              stateBuf = 0;
-              sensorFound = false;
-
-              while(it != channelMap.end())
-              {
-                if(it->first > lastAddress)
-                  break;
-
-                const auto& sensor = staticData.sensors[it->second];
-
-                // Axle counter sensor send diffs so there is no point in querying them
-                if(sensor.type == Sensor::Type::AxleCounter)
-                {
-                  it++;
-                  continue;
-                }
-
-                const auto& sensorState = m_stateData.sensors[it->second];
-                if(sensorState.value)
-                  bitSet(stateBuf, sensor.address - firstAddress);
-
-                sensorFound = true;
-                it++;
-              }
-
-              if(sensorFound)
-              {
-                boost::asio::post(
-                    m_networkContext, [this, fromConnId, newChannel, batchIdx, stateBuf]()
-                    {
-                      sendTo(fromConnId, SimulatorProtocol::SensorBatchState(newChannel, batchIdx, m_stateData.powerOn ? stateBuf : 0));
-                    });
-              }
-
-              if(it == channelMap.end())
-                break;
-
-              // Go to next batch
-              batchIdx = it->first / 16;
-            }
-          });
+        // Go to next batch
+        batchIdx = it->first / 16;
+      }
       break;
     }
     break;
@@ -2051,6 +2043,8 @@ void Simulator::onConnectionRemoved(const std::shared_ptr<SimulatorConnection>& 
   {
     // TODO: multiple connection could subscribe to same channel...
     // But only one must be allowed to set encoding
+
+    // FIXME: subscribedChannels should only be accessed by network thread
     for(uint16_t channel : connection->subscribedChannels)
     {
       auto channelMap = staticData.sensorChannelMap.find(channel);
@@ -3471,23 +3465,31 @@ void Simulator::updateSensors()
       {
         sensorState.value = sensorValue;
 
-        for(const auto& connection : m_connections)
-        {
-          // Only send to subscribed clients or clients with no subscriptions
-          if(!connection->subscribedChannels.empty() &&
-              !vec_contains(connection->subscribedChannels, sensor.channel))
-            continue;
-          connection->send(SimulatorProtocol::SensorChanged(sensor.channel, sensor.address, axleCount, sensorState.value));
-        }
+        // TODO: maybe update networkStateData to avoid sending old state in syncSensorState() until next network state sync
+        boost::asio::post(
+            m_networkContext, [this, sensor=sensor, sensorState=sensorState]()
+            {
+              for(const auto& connection : m_connections)
+              {
+                // Only send to subscribed clients or clients with no subscriptions
+                if(!connection->subscribedChannels.empty() &&
+                    !vec_contains(connection->subscribedChannels, sensor.channel))
+                  continue;
+                connection->send(SimulatorProtocol::SensorChanged(sensor.channel, sensor.address, axleCount, sensorState.value));
+              }
+            });
       }
 
       if(getSimModeUnlocked() == SimMode::Master)
       {
-        // TODO: there is a small glitch sometimes when chenging PowerOn many times fast
-        for(const auto& connection : m_repliacas)
-        {
-          connection->send(SimulatorProtocol::SensorChanged(sensor.channel, sensor.address, axleCount, sensorState.value));
-        }
+        boost::asio::post(
+            m_networkContext, [this, sensor=sensor, sensorState=sensorState]()
+            {
+              for(const auto& connection : m_repliacas)
+              {
+                connection->send(SimulatorProtocol::SensorChanged(sensor.channel, sensor.address, axleCount, sensorState.value));
+              }
+            });
       }
     }
   }

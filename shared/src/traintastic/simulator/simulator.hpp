@@ -830,12 +830,9 @@ private:
 
   // Core thread
   boost::asio::steady_timer m_tickTimer;
-  boost::asio::steady_timer m_syncSensorStateTimer;
   boost::asio::steady_timer m_garbageCollectTimer;
 
   // Network thread
-  boost::asio::steady_timer m_handShakeSendTimer;
-  boost::asio::steady_timer m_handShakeRecvTimer;
   boost::asio::ip::tcp::acceptor m_acceptor;
   boost::asio::ip::udp::socket m_socketUDP;
   std::array<char, 8> m_udpBuffer;
@@ -843,6 +840,9 @@ private:
 
   std::vector<boost::asio::ip::address> broadcastAddresses;
 
+  boost::asio::steady_timer m_handShakeSendTimer;
+  boost::asio::steady_timer m_handShakeRecvTimer;
+  boost::asio::steady_timer m_syncSensorStateTimer;
   boost::asio::steady_timer m_syncReplicaStateTimer;
   boost::asio::steady_timer m_syncReplicaTrainFullStateTimer;
   boost::asio::steady_timer m_replicaDiscoverSendTimer;
