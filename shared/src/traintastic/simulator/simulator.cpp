@@ -3467,7 +3467,7 @@ void Simulator::updateSensors()
 
         // TODO: maybe update networkStateData to avoid sending old state in syncSensorState() until next network state sync
         boost::asio::post(
-            m_networkContext, [this, sensor=sensor, sensorState=sensorState]()
+            m_networkContext, [this, sensor=sensor, sensorState=sensorState, axleCount]()
             {
               for(const auto& connection : m_connections)
               {
@@ -3483,7 +3483,7 @@ void Simulator::updateSensors()
       if(getSimModeUnlocked() == SimMode::Master)
       {
         boost::asio::post(
-            m_networkContext, [this, sensor=sensor, sensorState=sensorState]()
+            m_networkContext, [this, sensor=sensor, sensorState=sensorState, axleCount]()
             {
               for(const auto& connection : m_repliacas)
               {
