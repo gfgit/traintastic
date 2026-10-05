@@ -1237,7 +1237,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
           continue;
 
         boost::asio::post(
-            m_coreContext, [this, m=m, signalName=signalCopy.name, fromConnId]()
+            m_coreContext, [this, signalName=signalCopy.name, fromConnId]()
             {
               std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
               MainSignal &mainSignal = m_stateData.mainSignals.at(signalName);
@@ -1258,7 +1258,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
           continue;
 
         boost::asio::post(
-            m_coreContext, [this, m=m, signalName=signalCopy.name, fromConnId]()
+            m_coreContext, [this, signalName=signalCopy.name, fromConnId]()
             {
               std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
               AuxSignal &auxSignal = m_stateData.auxSignals.at(signalName);
@@ -1854,6 +1854,7 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message, s
           train->state.reverse = trainState.reverse;
           train->state.mode = trainState.mode;
           train->state.isOnStationStop = trainState.isOnStationStop;
+          train->speedMax = speedMax;
 
           size_t maxIdx = std::min(train->vehicles.size(), vehicles.size());
           for(size_t i = 0; i < maxIdx; i++)
@@ -2223,7 +2224,7 @@ void Simulator::doSendReplicaDiscover()
     boost::asio::ip::udp::endpoint udpServer(address, defaultPort);
     m_socketUDP.async_send_to(boost::asio::buffer(ReplicaRequestMessage, sizeof(ReplicaRequestMessage)),
                               udpServer,
-                              [this](const boost::system::error_code& /*ec2*/, std::size_t /*bytesTransferred*/)
+                              [](const boost::system::error_code& /*ec2*/, std::size_t /*bytesTransferred*/)
                               {
                                 // no-op
                               });
