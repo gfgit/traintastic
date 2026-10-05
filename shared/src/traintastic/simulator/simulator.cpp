@@ -4048,12 +4048,16 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
           mainSignal->hasRappel = item.value("rappel", false);
           mainSignal->hasDirectionIndicator = item.value("direction_ind", false);
           mainSignal->isPureDistantSignal = item.value("pure_distant", false);
+          mainSignal->isRipSignal = item.value("rip_signal", false);
           mainSignal->zoomLateralDiff = item.value("zoom_lat", true);
 
           if(mainSignal->hasRappel)
             mainSignal->fixedLimit = MainSignal::FixedLimit::NoLimit;
 
-          if(mainSignal->hasRappel || mainSignal->hasDirectionIndicator ||
+          if(mainSignal->hasAdvanceSignal || mainSignal->lights.size() != 1)
+            mainSignal->isRipSignal = false;
+
+          if(mainSignal->hasRappel || mainSignal->hasDirectionIndicator || mainSignal->isRipSignal ||
               mainSignal->hasAdvanceSignal || mainSignal->fixedLimit != MainSignal::FixedLimit::NoLimit ||
               mainSignal->lights.size() > 2)
             mainSignal->isPureDistantSignal = false;

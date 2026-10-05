@@ -1233,7 +1233,8 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
 
   const qreal mastBaseLength = 3.0 * m_signalsScaleFactor;
   const qreal lightDiameter = 2.0 * m_signalsScaleFactor;
-  const qreal triangleEdge = 1.9 * m_signalsScaleFactor;
+  const qreal triangleEdge = 1.7 * m_signalsScaleFactor;
+  const qreal ripRectEdge = 1.7 * m_signalsScaleFactor;
   const qreal advanceSignalWidth = 1.6 * m_signalsScaleFactor;
   const qreal advanceSignalHeight = 0.8 * m_signalsScaleFactor;
   const qreal directionIndicatorWidth = 1.2 * m_signalsScaleFactor;
@@ -1242,7 +1243,10 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
 
   QFont triangleFont;
   triangleFont.setBold(true);
-  triangleFont.setPointSizeF(triangleEdge * 0.3);
+  triangleFont.setPointSizeF(triangleEdge * 0.35);
+
+  QFont ripFont = triangleFont;
+  ripFont.setPointSizeF(ripRectEdge * 0.7);
 
   QFont directionFont;
   directionFont.setBold(true);
@@ -1462,6 +1466,26 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
 
           // Go down to next element
           lightRect.moveTop(lightRect.top() + triangleEdge);
+        }
+
+        if(signal->isRipSignal)
+        {
+          const double topMargin = ripRectEdge * 0.14;
+          const QRectF ripRect(lateralDiff - ripRectEdge / 2.0,
+                               lightRect.top() + topMargin,
+                               ripRectEdge, ripRectEdge);
+
+          painter->setPen(signalTrianglePen);
+          painter->setBrush(Qt::white);
+          painter->drawRect(ripRect);
+
+          painter->setFont(triangleFont);
+          painter->setPen(Qt::black);
+          painter->setBrush(Qt::NoBrush);
+          painter->drawText(ripRect, Qt::AlignCenter, QLatin1String("RIP."));
+
+          // Go down to next element
+          lightRect.moveTop(lightRect.top() + topMargin + triangleEdge);
         }
 
         if(signal->hasAdvanceSignal)

@@ -335,12 +335,14 @@ public:
 
     char directionIndicatorText = ' ';
 
+    // TODO: make common binary flag
     bool square = false;
     bool hasSquareArrowLight = false;
     bool hasAdvanceSignal = false;
     bool hasDirectionIndicator = false;
     bool hasRappel = false;
     bool isPureDistantSignal = false;
+    bool isRipSignal = false;
 
     // Increase lateral diff with signal scale factor
     // This prevents 2 parallel signals to overlap each other
