@@ -753,7 +753,7 @@ public:
 
   bool segmentOccupied(size_t segmentIdx) const;
 
-  void requestTurnoutState(size_t segmentIndex, TurnoutState::State state);
+  void requestTurnoutState(size_t segmentIndex, TurnoutState::State state, bool immediate = false);
   void toggleTurnoutState(size_t segmentIndex, bool setUnknown);
 
   void send(const SimulatorProtocol::Message& message);
@@ -936,6 +936,8 @@ private:
   void applyTrainSpeedDelta(Train &train, float delta);
   void setTrainMode(Train &train, TrainState::Mode mode);
   void stopTrainAndSetManual(Train &train);
+
+  void doSetTurnoutState(const TurnoutState::State newState, TurnoutState &turnout, size_t turnoutIdx, uint16_t channel, uint16_t address);
 
   void sendReplicas(const SimulatorProtocol::Message& message);
   void sendReplicas(QByteArray &buf);

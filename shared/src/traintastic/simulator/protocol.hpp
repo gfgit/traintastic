@@ -230,13 +230,20 @@ struct AccessorySetState : Message
   uint16_t address;
   uint8_t state;
 
-  AccessorySetState(uint16_t ch, uint16_t addr, uint8_t st)
+  static constexpr uint8_t ImmediateFlag = (1 << 7);
+
+  AccessorySetState(uint16_t ch, uint16_t addr, uint8_t st, bool immediate = false)
     : Message(OpCode::AccessorySetState, sizeof(AccessorySetState))
     , channel{ch}
     , address{addr}
     , state{st}
   {
+    if(immediate)
+      state |= ImmediateFlag;
   }
+
+  inline bool isImmediate() const { return (state & ImmediateFlag) == ImmediateFlag; }
+  inline uint8_t getState() const { return (state & ~ImmediateFlag); }
 } ATTRIBUTE_PACKED;
 static_assert(sizeof(AccessorySetState) == 8);
 

@@ -729,6 +729,41 @@ void Simulator::stopTrainAndSetManual(Train &train)
   setTrainSpeed(train, 0.0f, true);
 }
 
+void Simulator::doSetTurnoutState(const TurnoutState::State newState, TurnoutState &turnout, size_t turnoutIdx, uint16_t channel, uint16_t address)
+{
+  if(newState == turnout.state)
+    return;
+  // Turnout changed state!
+  turnout.state = newState;
+
+  for(quint32 trainId : turnout.watchingTrainIDs)
+  {
+    Train &train = m_stateData.trains.at(trainId);
+    train.state.nextSignal.dirty = true;
+    train.state.prevSignal.dirty = true;
+  }
+
+  boost::asio::post(
+      m_networkContext, [this, state=turnout.state,
+       turnoutIdx,
+       channel,
+       address]()
+      {
+        // Cherry pick state
+        m_networkStateData.turnouts[turnoutIdx].state = state;
+
+        uint8_t val = 0;
+        if(state == TurnoutState::State::Thrown)
+          val = 2;
+        else if(state == TurnoutState::State::Closed)
+          val = 1;
+
+        auto msg = SimulatorProtocol::AccessorySetState(channel, address, val);
+        send(msg);
+        sendReplicas(msg);
+      });
+}
+
 void Simulator::stopAllTrains()
 {
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
@@ -754,7 +789,7 @@ bool Simulator::segmentOccupied(size_t segmentIdx) const
   return sensor.value;
 }
 
-void Simulator::requestTurnoutState(size_t segmentIndex, TurnoutState::State state)
+void Simulator::requestTurnoutState(size_t segmentIndex, TurnoutState::State state, bool immediate)
 {
   using Type = TrackSegment::Type;
 
@@ -799,8 +834,21 @@ void Simulator::requestTurnoutState(size_t segmentIndex, TurnoutState::State sta
   {
     const bool wasCompleted = almostEqual(turnout.currentPosition, turnout.requestedPosition);
     turnout.requestedPosition = newRequestedPosition;
-    if(wasCompleted)
-      setTurnoutIsMoving(true); // Start turnout movement if needed
+
+    if(immediate)
+    {
+      turnout.currentPosition = turnout.requestedPosition;
+
+      if(!wasCompleted)
+        setTurnoutIsMoving(false);
+
+      doSetTurnoutState(state, turnout, segment.turnout.index, segment.turnout.channel, segment.turnout.addresses[0]);
+    }
+    else
+    {
+      if(wasCompleted)
+        setTurnoutIsMoving(true); // Start turnout movement if needed
+    }
   }
   else if(segment.type == Type::Turnout3Way)
   {
@@ -992,17 +1040,19 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
           m.address == segment.turnout.addresses[0] && m.channel == segment.turnout.channel)
       {
         Simulator::TurnoutState::State newState = Simulator::TurnoutState::State::Unknown;
-        if(m.state == 1)
+        if(m.getState() == 1)
         {
           newState = Simulator::TurnoutState::State::Closed;
         }
-        else if(m.state == 2)
+        else if(m.getState() == 2)
         {
           newState = Simulator::TurnoutState::State::Thrown;
         }
 
+        const bool isImmediate = m.isImmediate();
+
         boost::asio::post(
-            m_coreContext, [this, i, isReplica, newState=newState, turnoutIdx=segment.turnout.index]()
+            m_coreContext, [this, i, isReplica, newState=newState, turnoutIdx=segment.turnout.index, isImmediate]()
             {
               if(isReplica)
               {
@@ -1013,7 +1063,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
               }
               else
               {
-                requestTurnoutState(i, newState);
+                requestTurnoutState(i, newState, isImmediate);
               }
             });
         break;
@@ -2697,45 +2747,13 @@ void Simulator::updateTurnoutMovement()
       setTurnoutIsMoving(false);
     }
 
-
     TurnoutState::State newState = TurnoutState::State::Unknown;
     if(almostEqual(turnout.currentPosition, 0))
       newState = TurnoutState::State::Closed;
     else if(almostEqual(turnout.currentPosition, 1))
       newState = TurnoutState::State::Thrown;
 
-    if(newState != turnout.state)
-    {
-      // Turnout changed state!
-      turnout.state = newState;
-
-      for(quint32 trainId : turnout.watchingTrainIDs)
-      {
-        Train &train = m_stateData.trains.at(trainId);
-        train.state.nextSignal.dirty = true;
-        train.state.prevSignal.dirty = true;
-      }
-
-      boost::asio::post(
-          m_networkContext, [this, state=turnout.state,
-           turnoutIdx,
-           channel=segment.turnout.channel,
-           address=segment.turnout.addresses[0]]()
-          {
-            // Cherry pick state
-            m_networkStateData.turnouts[turnoutIdx].state = state;
-
-            uint8_t val = 0;
-            if(state == TurnoutState::State::Thrown)
-              val = 2;
-            else if(state == TurnoutState::State::Closed)
-              val = 1;
-
-            auto msg = SimulatorProtocol::AccessorySetState(channel, address, val);
-            send(msg);
-            sendReplicas(msg);
-          });
-    }
+    doSetTurnoutState(newState, turnout, turnoutIdx, segment.turnout.channel, segment.turnout.addresses[0]);
   }
 
   if(mTurnoutsCurrentlyMoving > 0)
