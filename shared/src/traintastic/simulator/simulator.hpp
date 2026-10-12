@@ -900,7 +900,7 @@ private:
 
   void calculateFacePosition(Simulator::VehicleState::Face &face);
   bool updateVehiclePosition(Vehicle *vehicle, bool frontFace,
-                             const float speed, bool isFirst_,
+                             const float speed, bool isFirst_, bool isLast_,
                              Train &train_, bool &trainRemoved, float &outRemaining);
 
   void updateReplicaTracking(Vehicle *vehicle, const VehicleState &oldState);

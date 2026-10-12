@@ -2844,7 +2844,7 @@ void Simulator::updateTrainPositions()
       }
 
       auto updateHelper = [this](Simulator::Train::VehicleItem& item, float speed,
-                                 bool reverse, bool isFirst,
+                                 bool reverse, bool isFirst, bool isLast,
                                  Train &train_, bool &trainRemoved, float &outRemaining) -> bool
       {
         if(reverse)
@@ -2852,11 +2852,11 @@ void Simulator::updateTrainPositions()
 
         Vehicle *vehicle = m_stateData.getVehicleById(item.vehicleId);
         if(item.reversed == reverse)
-          return updateVehiclePosition(vehicle, true, speed, isFirst, train_, trainRemoved, outRemaining) &&
-                 updateVehiclePosition(vehicle, false, speed, false, train_, trainRemoved, outRemaining);
+          return updateVehiclePosition(vehicle, true, speed, isFirst, false, train_, trainRemoved, outRemaining) &&
+                 updateVehiclePosition(vehicle, false, speed, false, isLast, train_, trainRemoved, outRemaining);
         else
-          return updateVehiclePosition(vehicle, false, speed, isFirst, train_, trainRemoved, outRemaining) &&
-                 updateVehiclePosition(vehicle, true, speed, false, train_, trainRemoved, outRemaining);
+          return updateVehiclePosition(vehicle, false, speed, isFirst, false, train_, trainRemoved, outRemaining) &&
+                 updateVehiclePosition(vehicle, true, speed, false, isLast, train_, trainRemoved, outRemaining);
       };
 
       const float speed = m_stateData.powerOn ? trainState.speed * m_stateData.trainSpeedFactor : 0.0f;
@@ -2878,11 +2878,14 @@ void Simulator::updateTrainPositions()
 
         bool isFirst = true;
 
-        if(!trainState.reverse)
+        if(!train.vehicles.empty())
         {
-          for(auto& vehicleItem : train.vehicles)
+          const size_t lastVehicleIdx = train.vehicles.size() - 1;
+          for(size_t i = 0; i <= lastVehicleIdx; i++)
           {
-            if(!updateHelper(vehicleItem, tickPosDelta, trainState.reverse, isFirst, train, trainRemoved, outRemaining))
+            auto& vehicleItem = train.vehicles[trainState.reverse ? (lastVehicleIdx - i) : i];
+
+            if(!updateHelper(vehicleItem, tickPosDelta, trainState.reverse, i == 0, i == lastVehicleIdx, train, trainRemoved, outRemaining))
             {
               if(trainRemoved)
                 break;
@@ -2893,29 +2896,6 @@ void Simulator::updateTrainPositions()
 
               break;
             }
-
-            if(isFirst)
-              isFirst = false;
-          }
-        }
-        else // reverse
-        {
-          for(auto& vehicleItem : train.vehicles | std::views::reverse)
-          {
-            if(!updateHelper(vehicleItem, tickPosDelta, trainState.reverse, isFirst, train, trainRemoved, outRemaining))
-            {
-              if(trainRemoved)
-                break;
-
-              setTrainSpeed(train, 0.0f, true);
-              if(isFirst)
-                wasStopped = true;
-
-              break;
-            }
-
-            if(isFirst)
-              isFirst = false;
           }
         }
 
@@ -3083,7 +3063,7 @@ void Simulator::calculateFacePosition(Simulator::VehicleState::Face &face)
 }
 
 bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
-                                      const float speed, bool isFirst_,
+                                      const float speed, bool isFirst_, bool isLast_,
                                       Train &train_, bool &trainRemoved, float &outRemaining)
 {
   using Object = Simulator::TrackSegment::Object;
@@ -3096,7 +3076,7 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
 
   auto objHelper = [this](const TrackSegment::Object& obj,
                           const float facePos, const float targetPos,
-                          Train &train, bool dirFwd_, bool isFirst, bool &stop,
+                          Train &train, bool dirFwd_, bool isFirst, bool isLast, bool &stop,
                           bool &trainRemoved_) -> bool
   {
     if(dirFwd_)
@@ -3200,6 +3180,9 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
       train.state.prevSignal.dirty = true;
     }
 
+    // TODO: release speed object
+    (void)isLast;
+
     return true;
   };
 
@@ -3219,7 +3202,7 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
       for(const TrackSegment::Object& obj : segment.objects)
       {
         if(objHelper(obj, face.distance, distance,
-                      train_, true, isFirst_, stop, trainRemoved))
+                      train_, true, isFirst_, isLast_, stop, trainRemoved))
           continue;
 
         if(stop)
@@ -3234,7 +3217,7 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
       for(const TrackSegment::Object& obj : segment.objects | std::views::reverse)
       {
         if(objHelper(obj, face.distance, distance,
-                      train_, false, isFirst_, stop, trainRemoved))
+                      train_, false, isFirst_, isLast_, stop, trainRemoved))
           continue;
 
         if(stop)
