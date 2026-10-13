@@ -5533,7 +5533,26 @@ bool Simulator::checkNextSignal(Train &train)
     return true;
   }
 
-
+  static const std::pair<float, float> SpeedCurve[] = {
+      {30, 0},
+      {32, 1},
+      {35, 3},
+      {50, 7},
+      {60, 15},
+      {70, 22},
+      {80, 30},
+      {110, 50},
+      {150, 70},
+      {280, 100},
+      {320, 130},
+      {380, 140},
+      {430, 150},
+      {450, 170},
+      {500, 190},
+      {550, 210},
+      {600, 230},
+      {650, 250}
+  };
 
   const float totalDistance = train.state.nextSignal.distance;
 
@@ -5541,27 +5560,6 @@ bool Simulator::checkNextSignal(Train &train)
   {
     // Decrease speed
     float targetSpeed = train.speedMax;
-
-    static const std::pair<float, float> SpeedCurve[] = {
-        {30, 0},
-        {32, 1},
-        {35, 3},
-        {50, 7},
-        {60, 15},
-        {70, 22},
-        {80, 30},
-        {110, 50},
-        {150, 70},
-        {280, 100},
-        {320, 130},
-        {380, 140},
-        {430, 150},
-        {450, 170},
-        {500, 190},
-        {550, 210},
-        {600, 230},
-        {650, 250}
-    };
 
     for(const auto& entry : SpeedCurve)
     {
@@ -5589,7 +5587,28 @@ bool Simulator::checkNextSignal(Train &train)
   {
     // Get near at 30 km/h to next signal if stopped or currently at less than 30 km/h
     // If stopped at less than 30 meters from signal, remain stopped
-    setTrainSpeed(train, 30 * SpeedKmHtoTick);
+    if(totalDistance >= 80 || underSignalSpeed)
+    {
+      setTrainSpeed(train, 30 * SpeedKmHtoTick);
+    }
+    else
+    {
+      float targetSpeed = train.speedMax;
+
+      for(const auto& entry : SpeedCurve)
+      {
+        if(totalDistance < entry.first)
+        {
+          targetSpeed = (train.state.nextSignal.signal->maxSpeed + entry.second) * SpeedKmHtoTick;
+          break;
+        }
+      }
+
+      targetSpeed = std::min(targetSpeed, train.speedMax);
+
+      if(train.state.targetSpeed < targetSpeed)
+        setTrainSpeed(train, targetSpeed);
+    }
   }
 
   return true;

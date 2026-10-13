@@ -3182,6 +3182,71 @@ void SimulatorView::tick(const Simulator::StateData &newStateData)
     m_futureCurrentTrainId = Simulator::invalidTrainId;
   }
 
+  bool currentTrainNeedsUpdate = false;
+
+  if(!m_stateData.trains.contains(m_currentTrainId))
+  {
+    m_oldCurrentTrainId = Simulator::invalidTrainId;
+    currentTrainNeedsUpdate = true;
+  }
+  else if(m_oldCurrentTrainId != m_currentTrainId)
+  {
+    m_oldCurrentTrainId = m_currentTrainId;
+    currentTrainNeedsUpdate = true;
+  }
+
+  if(m_oldCurrentTrainId != Simulator::invalidTrainId)
+  {
+    auto train = m_stateData.getTrainById(m_oldCurrentTrainId);
+
+    if(m_currentTrainInfo.speed != train->state.speed)
+    {
+      currentTrainNeedsUpdate = true;
+      m_currentTrainInfo.speed = train->state.speed;
+    }
+
+    if(m_currentTrainInfo.targetSpeed != train->state.targetSpeed)
+    {
+      currentTrainNeedsUpdate = true;
+      m_currentTrainInfo.targetSpeed = train->state.targetSpeed;
+    }
+
+    if(m_currentTrainInfo.maxSpeed != train->speedMax)
+    {
+      currentTrainNeedsUpdate = true;
+      m_currentTrainInfo.maxSpeed = train->speedMax;
+    }
+
+    if(train->state.nextSignal.signal)
+    {
+      if(m_currentTrainInfo.distanceToSignal != train->state.nextSignal.distance)
+      {
+        currentTrainNeedsUpdate = true;
+        m_currentTrainInfo.distanceToSignal = train->state.nextSignal.distance;
+      }
+
+      if(m_currentTrainInfo.signalSpeed != train->state.nextSignal.signal->maxSpeed)
+      {
+        currentTrainNeedsUpdate = true;
+        m_currentTrainInfo.signalSpeed = train->state.nextSignal.signal->maxSpeed;
+      }
+    }
+    else
+    {
+      if(m_currentTrainInfo.distanceToSignal != -1.0 || m_currentTrainInfo.signalSpeed != -1.0)
+      {
+        currentTrainNeedsUpdate = true;
+        m_currentTrainInfo.distanceToSignal = -1.0;
+        m_currentTrainInfo.signalSpeed = -1.0;
+      }
+    }
+
+    if(currentTrainNeedsUpdate)
+    {
+      emit currentTrainSpeedChanged(m_oldCurrentTrainId != Simulator::invalidTrainId, m_currentTrainInfo);
+    }
+  }
+
   update();
 }
 

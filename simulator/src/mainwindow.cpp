@@ -253,6 +253,9 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
     spacer2->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     statusBar->addPermanentWidget(spacer2, 100);
 
+    m_currentTrainInfo = new QLabel;
+    statusBar->addPermanentWidget(m_currentTrainInfo);
+
     setStatusBar(statusBar);
 
     viewMenu->addSeparator();
@@ -273,6 +276,37 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
               statusBar->setVisible(value);
             });
   }
+
+  connect(m_view, &SimulatorView::currentTrainSpeedChanged,
+    [this](bool hasActiveTrain, const SimulatorView::CurrentTrainInfo &info)
+    {
+      if(hasActiveTrain)
+      {
+        m_currentTrainInfo->setText(tr("S: %1, T: %2, M: %3, D: %4 m, SS: %5")
+          .arg(info.speed / Simulator::SpeedKmHtoTick, 3, 'g', 1)
+          .arg(info.targetSpeed / Simulator::SpeedKmHtoTick, 3, 'g', 1)
+          .arg(info.maxSpeed / Simulator::SpeedKmHtoTick, 3, 'g', 1)
+          .arg(info.distanceToSignal, 3, 'g', 1)
+          .arg(info.signalSpeed / Simulator::SpeedKmHtoTick, 3, 'g', 1));
+
+        m_currentTrainInfo->setToolTip(tr("Speed: %1 km/h\n"
+                                          "Target: %2 km/h\n"
+                                          "Max: %3 km/h\n"
+                                          "Distance to signal: %4 m\n"
+                                          "Signal Speed: %5 km/h")
+          .arg(info.speed / Simulator::SpeedKmHtoTick, 3, 'g', 1)
+          .arg(info.targetSpeed / Simulator::SpeedKmHtoTick, 3, 'g', 1)
+          .arg(info.maxSpeed / Simulator::SpeedKmHtoTick, 3, 'g', 1)
+          .arg(info.distanceToSignal, 3, 'g', 1)
+          .arg(info.signalSpeed / Simulator::SpeedKmHtoTick, 3, 'g', 1));
+      }
+      else
+      {
+        m_currentTrainInfo->setText(tr("No train."));
+        m_currentTrainInfo->setToolTip(tr("No current active train!"));
+      }
+    });
+
 
   connect(m_view, &SimulatorView::tickActiveChanged,
     [this](float value)

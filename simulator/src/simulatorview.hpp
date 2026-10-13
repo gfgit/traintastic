@@ -46,6 +46,15 @@ public:
   explicit SimulatorView(QWidget* parent = nullptr);
   ~SimulatorView() override;
 
+  struct CurrentTrainInfo
+  {
+    float speed = 0.0;
+    float targetSpeed = 0.0;
+    float maxSpeed = 0.0;
+    float distanceToSignal = 0.0;
+    float signalSpeed = 0.0;
+  };
+
   Simulator* simulator() const;
   void setSimulator(std::shared_ptr<Simulator> value,
                     bool localOnly, bool discoverable);
@@ -126,6 +135,7 @@ signals:
   void powerOnChanged(bool value);
   void signalScaleChanged(float value);
   void trainSpeedFactorChanged(float value);
+  void currentTrainSpeedChanged(bool hasActiveTrain, const CurrentTrainInfo &info);
 
 protected:
   void paintEvent(QPaintEvent *e) override;
@@ -194,11 +204,14 @@ private:
   QPoint m_leftClickMousePos;
   QPoint m_middleMousePos;
 
+  quint32 m_oldCurrentTrainId = Simulator::invalidTrainId;
   quint32 m_currentTrainId = Simulator::invalidTrainId;
   quint32 m_futureCurrentTrainId = Simulator::invalidTrainId;
   quint32 m_trainToBeRemovedId = Simulator::invalidTrainId;
   quint32 m_trainUnderMouseId = Simulator::invalidTrainId;
   size_t m_trainUnderMouseVehicleIdx = Simulator::invalidIndex;
+
+  CurrentTrainInfo m_currentTrainInfo;
 
   // Turnout blink
   QBasicTimer turnoutBlinkTimer;
