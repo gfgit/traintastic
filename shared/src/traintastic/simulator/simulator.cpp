@@ -3205,11 +3205,11 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
         if(train.state.speedReleaseCount > 0)
         {
           train.state.speedReleaseCount--;
-        }
 
-        // When entire train has passed speed release point, increase speed
-        // TODO: consider line speed
-        setTrainSpeed(train, train.speedMax);
+          // When entire train has passed speed release point, increase speed
+          // TODO: consider line speed
+          setTrainSpeed(train, train.speedMax);
+        }
       }
     }
 

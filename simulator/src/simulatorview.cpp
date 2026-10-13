@@ -1930,18 +1930,21 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
       }
       case Object::Type::StationStopPoint:
       {
-        if(!m_stateData.powerOn)
-        {
-          // Hide during simulation
-          QRectF r;
-          r.setSize(QSizeF(4, 2));
-          r.moveCenter(QPointF(0, obj.lateralDiff));
-          painter->fillRect(r, Qt::darkGreen);
-        }
+        if(m_stateData.powerOn)
+          break;
+
+        // Hide during simulation
+        QRectF r;
+        r.setSize(QSizeF(4, 2));
+        r.moveCenter(QPointF(0, obj.lateralDiff));
+        painter->fillRect(r, Qt::darkGreen);
         break;
       }
       case Object::Type::SpeedLimitRelease:
       {
+        if(m_stateData.powerOn)
+          break;
+
         // Draw a triangle in cyan
         QPointF triangle[3] = {
             {-trainWidth, obj.lateralDiff - trainWidth},
