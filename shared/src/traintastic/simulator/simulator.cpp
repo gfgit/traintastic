@@ -546,6 +546,9 @@ void Simulator::stop()
   m_garbageCollectTimer.cancel();
   m_turnoutMoveTimer.cancel();
 
+  m_coreContext.stop();
+  m_networkContext.stop();
+
   if(m_coreThread.joinable())
   {
     m_coreThread.join();
