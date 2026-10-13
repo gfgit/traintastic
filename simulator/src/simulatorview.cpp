@@ -1851,6 +1851,11 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
         {
           std::swap(triangle[0].rx(), triangle[1].rx());
           triangle[2].rx() = triangle[0].x();
+
+          // FIXME: why needed???
+          triangle[1].rx() += trainWidth * 1;
+          triangle[0].rx() -= trainWidth * 3;
+          triangle[2].rx() -= trainWidth * 3;
         }
 
         painter->setBrush(Qt::green);
@@ -1860,7 +1865,7 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
       }
       case Object::Type::RemoveTrain:
       {
-        // Draw a triangle
+        // Draw a triangle in red
         QPointF triangle[3] = {
           {-trainWidth, obj.lateralDiff - trainWidth},
           {trainWidth, obj.lateralDiff},
@@ -1871,6 +1876,11 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
         {
           std::swap(triangle[0].rx(), triangle[1].rx());
           triangle[2].rx() = triangle[0].x();
+
+          // FIXME: why needed???
+          triangle[1].rx() += trainWidth * 1;
+          triangle[0].rx() -= trainWidth * 3;
+          triangle[2].rx() -= trainWidth * 3;
         }
 
         painter->setBrush(Qt::red);
@@ -1891,6 +1901,11 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
         {
           std::swap(triangle[0].rx(), triangle[1].rx());
           triangle[2].rx() = triangle[0].x();
+
+          // FIXME: why needed???
+          triangle[1].rx() += trainWidth * 2;
+          triangle[0].rx() -= trainWidth * 4;
+          triangle[2].rx() -= trainWidth * 4;
         }
 
         const Simulator::SpawnState &spawnState = m_stateData.spawns.at(obj.sensorIndex);
