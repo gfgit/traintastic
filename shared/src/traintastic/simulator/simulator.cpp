@@ -633,6 +633,7 @@ void Simulator::setTrainDirection(Train &train, bool reverse)
     train.state.nextSignal.dirty = true;
     train.state.prevSignal.dirty = true;
     train.state.skipCollisionDetection = false; // Check again in opposite direction
+    train.state.speedReleaseCount = 0;
   }
 }
 
@@ -655,6 +656,10 @@ void Simulator::setTrainSpeed(Train &train, float speed, bool immediate)
   {
     const float oldTargetSpeed = train.state.targetSpeed;
     train.state.targetSpeed = speed;
+
+    std::cout << "TRAIN SET TARGET: " << train.state.targetSpeed / SpeedKmHtoTick << " km/h    FROM: "
+              << oldTargetSpeed / SpeedKmHtoTick << " km/h" << std::endl;
+
     if(train.state.targetSpeed > 0.0 && train.state.waitToStart_ms == 0 &&
         (train.state.speed == 0.0 || oldTargetSpeed == 0.0))
     {
@@ -689,6 +694,7 @@ void Simulator::setTrainMode(Train &train, TrainState::Mode mode)
     train.state.nextSignal.dirty = true;
     train.state.prevSignal.dirty = true;
     train.state.speedOrDirectionChanged = true;
+    train.state.speedReleaseCount = 0;
 
     if(train.state.mode == TrainState::Mode::Manual)
     {
@@ -3137,6 +3143,10 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
 
       // Reset station stop state for each passed main signal
       train.state.isOnStationStop = false;
+
+      // Reset speed release limits after we passed a signal
+      train.state.speedReleaseCount = 0;
+
       clearTrainSignalCache(m_stateData, train, false);
 
       MainSignal *signal = &it->second;
@@ -3182,9 +3192,26 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
       // At each train wagon passing recalculate previous signal
       train.state.prevSignal.dirty = true;
     }
+    else if(train.state.mode == TrainState::Mode::Automatic && obj.type == Object::Type::SpeedLimitRelease)
+    {
+      if(isFirst)
+      {
+        // When train head hits a speed limit increase counter
+        if(train.state.speedReleaseCount < std::numeric_limits<uint8_t>::max())
+          train.state.speedReleaseCount++;
+      }
+      else if(isLast)
+      {
+        if(train.state.speedReleaseCount > 0)
+        {
+          train.state.speedReleaseCount--;
+        }
 
-    // TODO: release speed object
-    (void)isLast;
+        // When entire train has passed speed release point, increase speed
+        // TODO: consider line speed
+        setTrainSpeed(train, train.speedMax);
+      }
+    }
 
     return true;
   };
@@ -4160,6 +4187,14 @@ void Simulator::loadTrackObjects(const nlohmann::json &track, StaticData &data, 
         {
           trackObj.type = TrackSegment::Object::Type::StationStopPoint;
           trackObj.allowedDirection = TrackSegment::Object::AllowedDirections::Both;
+          trackObj.lateralDiff = 0; // Default on center
+        }
+        else if(type == "speed_limit_release")
+        {
+          trackObj.type = TrackSegment::Object::Type::SpeedLimitRelease;
+          trackObj.allowedDirection = trackObj.dirForward ?
+                                          TrackSegment::Object::AllowedDirections::Forward :
+                                          TrackSegment::Object::AllowedDirections::Backwards;
           trackObj.lateralDiff = 0; // Default on center
         }
         else

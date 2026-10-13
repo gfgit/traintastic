@@ -144,7 +144,8 @@ public:
         RemoveTrain = 3,
         SpawnTrain = 4,
         AuxSignal = 5,
-        StationStopPoint = 6
+        StationStopPoint = 6,
+        SpeedLimitRelease = 7
       };
 
       Point pos;
@@ -450,6 +451,8 @@ public:
     float speed = 0.0f;
     float targetSpeed = 0.0f;
     float waitToStart_ms = 0;
+    uint8_t speedReleaseCount = 0;
+
     bool reverse = false;
     bool speedOrDirectionChanged = false;
     bool skipCollisionDetection = false;

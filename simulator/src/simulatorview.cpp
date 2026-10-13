@@ -1940,6 +1940,31 @@ void SimulatorView::drawTrackObjects(QPainter *painter)
         }
         break;
       }
+      case Object::Type::SpeedLimitRelease:
+      {
+        // Draw a triangle in cyan
+        QPointF triangle[3] = {
+            {-trainWidth, obj.lateralDiff - trainWidth},
+            {trainWidth, obj.lateralDiff},
+            {-trainWidth, obj.lateralDiff + trainWidth}
+        };
+
+        if(obj.allowedDirection == Object::AllowedDirections::Backwards)
+        {
+          std::swap(triangle[0].rx(), triangle[1].rx());
+          triangle[2].rx() = triangle[0].x();
+
+          // FIXME: why needed???
+          triangle[1].rx() += trainWidth * 1;
+          triangle[0].rx() -= trainWidth * 3;
+          triangle[2].rx() -= trainWidth * 3;
+        }
+
+        painter->setBrush(Qt::darkCyan);
+        painter->setPen(trackPen);
+        painter->drawConvexPolygon(triangle, 3);
+        break;
+      }
       default:
         break;
       }
