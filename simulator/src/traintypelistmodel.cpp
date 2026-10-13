@@ -223,7 +223,7 @@ void TrainTypeListModel::setupTrainSpeedPowered(Simulator *simulator, Simulator:
       isPowered = true; // Custom vehicles are always powered for tests
 
     train->isPowered = isPowered;
-    train->speedMax = maxSpeed;
+    train->speedMax = maxSpeed * Simulator::SpeedKmHtoTick;
   }
 }
 

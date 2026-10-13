@@ -832,10 +832,12 @@ private:
   constexpr static auto turnoutMovementRate = std::chrono::milliseconds(500);
   constexpr static size_t DefaultTurnoutMovement_ms = 3000;
 
+public:
   constexpr static float defaultSpeedKmH = 200;
   constexpr static float SpeedKmHtoTick = tickRate.count() / 3600.0;
   constexpr static float defaultSpeedTickRate = defaultSpeedKmH * SpeedKmHtoTick;
 
+private:
   boost::asio::io_context m_coreContext;
   boost::asio::io_context m_networkContext;
 
