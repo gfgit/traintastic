@@ -282,23 +282,23 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
     {
       if(hasActiveTrain)
       {
-        m_currentTrainInfo->setText(tr("S: %1, T: %2, M: %3, D: %4 m, SS: %5")
-          .arg(info.speed / Simulator::SpeedKmHtoTick, 3, 'g', 1)
-          .arg(info.targetSpeed / Simulator::SpeedKmHtoTick, 3, 'g', 1)
-          .arg(info.maxSpeed / Simulator::SpeedKmHtoTick, 3, 'g', 1)
-          .arg(info.distanceToSignal, 3, 'g', 1)
-          .arg(info.signalSpeed / Simulator::SpeedKmHtoTick, 3, 'g', 1));
+        m_currentTrainInfo->setText(tr(" S: %1, T: %2, M: %3, D: %4 m, SS: %5 ") // space as margin
+          .arg(info.speed / Simulator::SpeedKmHtoTick, 4, 'f', 1)
+          .arg(info.targetSpeed / Simulator::SpeedKmHtoTick, 4, 'f', 1)
+          .arg(info.maxSpeed / Simulator::SpeedKmHtoTick, 4, 'f', 1)
+          .arg(info.distanceToSignal, 4, 'f', 1)
+          .arg(info.signalSpeed / Simulator::SpeedKmHtoTick, 4, 'f', 1));
 
         m_currentTrainInfo->setToolTip(tr("Speed: %1 km/h\n"
                                           "Target: %2 km/h\n"
                                           "Max: %3 km/h\n"
                                           "Distance to signal: %4 m\n"
                                           "Signal Speed: %5 km/h")
-          .arg(info.speed / Simulator::SpeedKmHtoTick, 3, 'g', 1)
-          .arg(info.targetSpeed / Simulator::SpeedKmHtoTick, 3, 'g', 1)
-          .arg(info.maxSpeed / Simulator::SpeedKmHtoTick, 3, 'g', 1)
-          .arg(info.distanceToSignal, 3, 'g', 1)
-          .arg(info.signalSpeed / Simulator::SpeedKmHtoTick, 3, 'g', 1));
+          .arg(info.speed / Simulator::SpeedKmHtoTick, 4, 'f', 1)
+          .arg(info.targetSpeed / Simulator::SpeedKmHtoTick, 4, 'f', 1)
+          .arg(info.maxSpeed / Simulator::SpeedKmHtoTick, 4, 'f', 1)
+          .arg(info.distanceToSignal, 4, 'f', 1)
+          .arg(info.signalSpeed / Simulator::SpeedKmHtoTick, 4, 'f', 1));
       }
       else
       {
