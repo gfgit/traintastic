@@ -51,8 +51,8 @@ public:
     float speed = 0.0;
     float targetSpeed = 0.0;
     float maxSpeed = 0.0;
-    float distanceToSignal = 0.0;
-    float signalSpeed = 0.0;
+    float distanceToSignal = -1.0;
+    float signalSpeed = -1.0;
   };
 
   Simulator* simulator() const;
@@ -212,6 +212,8 @@ private:
   size_t m_trainUnderMouseVehicleIdx = Simulator::invalidIndex;
 
   CurrentTrainInfo m_currentTrainInfo;
+  bool m_lastTickHasUpdated = false;
+  bool m_lastTickNeedsUpdate = false;
 
   // Turnout blink
   QBasicTimer turnoutBlinkTimer;

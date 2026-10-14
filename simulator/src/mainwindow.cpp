@@ -277,36 +277,39 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
             });
   }
 
-  connect(m_view, &SimulatorView::currentTrainSpeedChanged,
-    [this](bool hasActiveTrain, const SimulatorView::CurrentTrainInfo &info)
+  auto showTrainInfo = [this](bool hasActiveTrain, const SimulatorView::CurrentTrainInfo &info)
+  {
+    if(hasActiveTrain)
     {
-      if(hasActiveTrain)
-      {
-        m_currentTrainInfo->setText(tr(" S: %1, T: %2, M: %3, D: %4 m, SS: %5 ") // space as margin
-          .arg(info.speed / Simulator::SpeedKmHtoTick, 4, 'f', 1)
-          .arg(info.targetSpeed / Simulator::SpeedKmHtoTick, 4, 'f', 1)
-          .arg(info.maxSpeed / Simulator::SpeedKmHtoTick, 4, 'f', 1)
-          .arg(info.distanceToSignal, 4, 'f', 1)
-          .arg(info.signalSpeed / Simulator::SpeedKmHtoTick, 4, 'f', 1));
+      QString distanceToSignal = info.distanceToSignal < 0 ? QLatin1String("----") : QStringLiteral("%1 m").arg(info.distanceToSignal, 4, 'f', 1);
+      QString signalSpeed = info.signalSpeed < 0 ? QLatin1String("----") : QStringLiteral("%1 km/h").arg(info.signalSpeed, 4, 'f', 1);
 
-        m_currentTrainInfo->setToolTip(tr("Speed: %1 km/h\n"
-                                          "Target: %2 km/h\n"
-                                          "Max: %3 km/h\n"
-                                          "Distance to signal: %4 m\n"
-                                          "Signal Speed: %5 km/h")
-          .arg(info.speed / Simulator::SpeedKmHtoTick, 4, 'f', 1)
-          .arg(info.targetSpeed / Simulator::SpeedKmHtoTick, 4, 'f', 1)
-          .arg(info.maxSpeed / Simulator::SpeedKmHtoTick, 4, 'f', 1)
-          .arg(info.distanceToSignal, 4, 'f', 1)
-          .arg(info.signalSpeed / Simulator::SpeedKmHtoTick, 4, 'f', 1));
-      }
-      else
-      {
-        m_currentTrainInfo->setText(tr("No train."));
-        m_currentTrainInfo->setToolTip(tr("No current active train!"));
-      }
-    });
+      m_currentTrainInfo->setText(tr(" S: %1 km/h, T: %2 km/h, M: %3 km/h, D: %4, SS: %5 ") // space as margin
+        .arg(info.speed / Simulator::SpeedKmHtoTick, 4, 'f', 1)
+        .arg(info.targetSpeed / Simulator::SpeedKmHtoTick, 4, 'f', 1)
+        .arg(info.maxSpeed / Simulator::SpeedKmHtoTick, 4, 'f', 1)
+        .arg(distanceToSignal, signalSpeed));
 
+      m_currentTrainInfo->setToolTip(tr("Speed: %1 km/h\n"
+                                        "Target: %2 km/h\n"
+                                        "Max: %3 km/h\n"
+                                        "Distance to signal: %4 m\n"
+                                        "Signal Speed: %5 km/h")
+        .arg(info.speed / Simulator::SpeedKmHtoTick, 4, 'f', 1)
+        .arg(info.targetSpeed / Simulator::SpeedKmHtoTick, 4, 'f', 1)
+        .arg(info.maxSpeed / Simulator::SpeedKmHtoTick, 4, 'f', 1)
+        .arg(distanceToSignal, signalSpeed));
+    }
+    else
+    {
+      m_currentTrainInfo->setText(tr("No train."));
+      m_currentTrainInfo->setToolTip(tr("No current active train!"));
+    }
+  };
+
+  showTrainInfo(false, {});
+
+  connect(m_view, &SimulatorView::currentTrainSpeedChanged, this, showTrainInfo);
 
   connect(m_view, &SimulatorView::tickActiveChanged,
     [this](float value)

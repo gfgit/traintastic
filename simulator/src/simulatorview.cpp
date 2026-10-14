@@ -3184,14 +3184,23 @@ void SimulatorView::tick(const Simulator::StateData &newStateData)
 
   bool currentTrainNeedsUpdate = false;
 
-  if(!m_stateData.trains.contains(m_currentTrainId))
+  if(m_oldCurrentTrainId != m_currentTrainId)
+  {
+    if(m_stateData.trains.contains(m_currentTrainId))
+    {
+      m_oldCurrentTrainId = m_currentTrainId;
+      currentTrainNeedsUpdate = true;
+    }
+    else if(m_oldCurrentTrainId != Simulator::invalidTrainId)
+    {
+      m_oldCurrentTrainId = Simulator::invalidTrainId;
+      currentTrainNeedsUpdate = true;
+    }
+  }
+
+  if(m_oldCurrentTrainId != Simulator::invalidTrainId && !m_stateData.trains.contains(m_oldCurrentTrainId))
   {
     m_oldCurrentTrainId = Simulator::invalidTrainId;
-    currentTrainNeedsUpdate = true;
-  }
-  else if(m_oldCurrentTrainId != m_currentTrainId)
-  {
-    m_oldCurrentTrainId = m_currentTrainId;
     currentTrainNeedsUpdate = true;
   }
 
@@ -3240,11 +3249,26 @@ void SimulatorView::tick(const Simulator::StateData &newStateData)
         m_currentTrainInfo.signalSpeed = -1.0;
       }
     }
+  }
 
-    if(currentTrainNeedsUpdate)
+  if(currentTrainNeedsUpdate || m_lastTickNeedsUpdate)
+  {
+    // Reduce emit rate to every other tick
+    if(m_lastTickHasUpdated)
     {
+      m_lastTickHasUpdated = false;
+      m_lastTickNeedsUpdate = true;
+    }
+    else
+    {
+      m_lastTickHasUpdated = true;
+      m_lastTickNeedsUpdate = false;
       emit currentTrainSpeedChanged(m_oldCurrentTrainId != Simulator::invalidTrainId, m_currentTrainInfo);
     }
+  }
+  else
+  {
+    m_lastTickHasUpdated = false;
   }
 
   update();
