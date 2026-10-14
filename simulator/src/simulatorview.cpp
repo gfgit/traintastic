@@ -3237,7 +3237,10 @@ void SimulatorView::tick(const Simulator::StateData &newStateData)
       if(m_currentTrainInfo.signalSpeed != train->state.nextSignal.signal->maxSpeed)
       {
         currentTrainNeedsUpdate = true;
-        m_currentTrainInfo.signalSpeed = train->state.nextSignal.signal->maxSpeed;
+        
+        // Access our copy of signal TODO: use numeric IDs
+        const Simulator::MainSignal &s = m_stateData.mainSignals.at(train->state.nextSignal.signal->name);
+        m_currentTrainInfo.signalSpeed = s.maxSpeed;
       }
     }
     else

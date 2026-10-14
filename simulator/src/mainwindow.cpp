@@ -282,7 +282,7 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
     if(hasActiveTrain)
     {
       QString distanceToSignal = info.distanceToSignal < 0 ? QLatin1String("----") : QStringLiteral("%1 m").arg(info.distanceToSignal, 4, 'f', 1);
-      QString signalSpeed = info.signalSpeed < 0 ? QLatin1String("----") : QStringLiteral("%1 km/h").arg(info.signalSpeed, 4, 'f', 1);
+      QString signalSpeed = info.signalSpeed < 0 ? QLatin1String("----") : QStringLiteral("%1 km/h").arg(info.signalSpeed / Simulator::SpeedKmHtoTick, 4, 'f', 1);
 
       m_currentTrainInfo->setText(tr(" S: %1 km/h, T: %2 km/h, M: %3 km/h, D: %4, SS: %5 ") // space as margin
         .arg(info.speed / Simulator::SpeedKmHtoTick, 4, 'f', 1)
