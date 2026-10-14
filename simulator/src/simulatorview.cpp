@@ -3010,11 +3010,13 @@ void SimulatorView::showItemTooltip(const Simulator::Point &point, QHelpEvent *e
       text.append(tr("strai_l: %1<br>").arg(segment.straight.length));
     }
 
+    const auto& turnout = data_.turnouts.at(segment.turnout.index);
+
     text.append("<br>");
     text.append(tr("turnout addr: <b>%1</b><br>"
                    "turnout chan: <b><i>%2</i></b>")
-                .arg(segment.turnout.addresses[0])
-                .arg(segment.turnout.channel));
+                .arg(turnout.addresses[0])
+                .arg(turnout.channel));
     break;
   }
   case Simulator::TrackSegment::Type::SingleSlipTurnout:
@@ -3237,7 +3239,7 @@ void SimulatorView::tick(const Simulator::StateData &newStateData)
       if(m_currentTrainInfo.signalSpeed != train->state.nextSignal.signal->maxSpeed)
       {
         currentTrainNeedsUpdate = true;
-        
+
         // Access our copy of signal TODO: use numeric IDs
         const Simulator::MainSignal &s = m_stateData.mainSignals.at(train->state.nextSignal.signal->name);
         m_currentTrainInfo.signalSpeed = s.maxSpeed;

@@ -738,14 +738,14 @@ void Simulator::stopTrainAndSetManual(Train &train)
   setTrainSpeed(train, 0.0f, true);
 }
 
-void Simulator::doSetTurnoutState(const TurnoutState::State newState, TurnoutState &turnout, size_t turnoutIdx, uint16_t channel, uint16_t address)
+void Simulator::doSetTurnoutState(const TurnoutState::State newState, TurnoutState &turnoutState, size_t turnoutIdx)
 {
-  if(newState == turnout.state)
+  if(newState == turnoutState.state)
     return;
   // Turnout changed state!
-  turnout.state = newState;
+  turnoutState.state = newState;
 
-  for(quint32 trainId : turnout.watchingTrainIDs)
+  for(quint32 trainId : turnoutState.watchingTrainIDs)
   {
     Train &train = m_stateData.trains.at(trainId);
     train.state.nextSignal.dirty = true;
@@ -753,10 +753,8 @@ void Simulator::doSetTurnoutState(const TurnoutState::State newState, TurnoutSta
   }
 
   boost::asio::post(
-      m_networkContext, [this, state=turnout.state,
-       turnoutIdx,
-       channel,
-       address]()
+      m_networkContext, [this, state=turnoutState.state,
+       turnoutIdx]()
       {
         // Cherry pick state
         m_networkStateData.turnouts[turnoutIdx].state = state;
@@ -767,7 +765,9 @@ void Simulator::doSetTurnoutState(const TurnoutState::State newState, TurnoutSta
         else if(state == TurnoutState::State::Closed)
           val = 1;
 
-        auto msg = SimulatorProtocol::AccessorySetState(channel, address, val);
+        const auto &turnout = staticData.turnouts.at(turnoutIdx);
+
+        auto msg = SimulatorProtocol::AccessorySetState(turnout.channel, turnout.addresses[0], val);
         send(msg);
         sendReplicas(msg);
       });
@@ -805,16 +805,15 @@ void Simulator::requestTurnoutState(size_t segmentIndex, TurnoutState::State sta
   if(segmentIndex >= staticData.trackSegments.size() || staticData.trackSegments[segmentIndex].turnout.index == invalidIndex)
     return;
 
-  std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
   const auto& segment = staticData.trackSegments[segmentIndex];
+
+  std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
   if(getSimModeUnlocked() == SimMode::Replica)
   {
     // Send request to master
     boost::asio::post(
-        m_networkContext, [this, state,
-         channel=segment.turnout.channel,
-         address=segment.turnout.addresses[0]]()
+        m_networkContext, [this, state, turnoutIdx=segment.turnout.index]()
         {
           uint8_t val = 0;
           if(state == TurnoutState::State::Thrown)
@@ -822,13 +821,15 @@ void Simulator::requestTurnoutState(size_t segmentIndex, TurnoutState::State sta
           else if(state == TurnoutState::State::Closed)
             val = 1;
 
-          auto msg = SimulatorProtocol::AccessorySetState(channel, address, val);
+          const auto& turnout = staticData.turnouts[turnoutIdx];
+
+          auto msg = SimulatorProtocol::AccessorySetState(turnout.channel, turnout.addresses[0], val);
           send(msg);
         });
     return;
   }
 
-  auto& turnout = m_stateData.turnouts[segment.turnout.index];
+  auto& turnoutState = m_stateData.turnouts[segment.turnout.index];
 
   uint8_t newRequestedPosition = TurnoutState::MiddlePosition; // Middle, unknown
   if(state == TurnoutState::State::Closed)
@@ -836,22 +837,22 @@ void Simulator::requestTurnoutState(size_t segmentIndex, TurnoutState::State sta
   else if(state == TurnoutState::State::Thrown)
     newRequestedPosition = TurnoutState::ThrownPosition;
 
-  if(newRequestedPosition == turnout.requestedPosition)
+  if(newRequestedPosition == turnoutState.requestedPosition)
     return; // Already in requested state
 
   if(segment.type == Type::Turnout || segment.type == Type::TurnoutCurved)
   {
-    const bool wasCompleted = (turnout.currentPosition == turnout.requestedPosition);
-    turnout.requestedPosition = newRequestedPosition;
+    const bool wasCompleted = (turnoutState.currentPosition == turnoutState.requestedPosition);
+    turnoutState.requestedPosition = newRequestedPosition;
 
     if(immediate)
     {
-      turnout.currentPosition = turnout.requestedPosition;
+      turnoutState.currentPosition = turnoutState.requestedPosition;
 
       if(!wasCompleted)
         setTurnoutIsMoving(false);
 
-      doSetTurnoutState(state, turnout, segment.turnout.index, segment.turnout.channel, segment.turnout.addresses[0]);
+      doSetTurnoutState(state, turnoutState, segment.turnout.index);
     }
     else
     {
@@ -1045,9 +1046,17 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
     for(size_t i = 0; i < count; ++i)
     {
       const auto& segment = staticData.trackSegments[i];
+      if(segment.turnout.index == invalidIndex)
+        continue;
+
+      const auto& turnout = staticData.turnouts[segment.turnout.index];
+      if(turnout.channel != m.channel)
+        continue;
+
       if((segment.type == Simulator::TrackSegment::Type::Turnout || segment.type == Simulator::TrackSegment::Type::TurnoutCurved) &&
-          m.address == segment.turnout.addresses[0] && m.channel == segment.turnout.channel)
+          m.address == turnout.addresses[0])
       {
+
         Simulator::TurnoutState::State newState = Simulator::TurnoutState::State::Unknown;
         if(m.getState() == 1)
         {
@@ -1067,8 +1076,8 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
               {
                 // Obey to master and set turnout position
                 std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-                auto& turnout = m_stateData.turnouts[turnoutIdx];
-                turnout.state = newState;
+                auto& turnoutState = m_stateData.turnouts[turnoutIdx];
+                turnoutState.state = newState;
               }
               else
               {
@@ -1077,7 +1086,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
             });
         break;
       }
-      else if(segment.type == Simulator::TrackSegment::Type::Turnout3Way && (m.address == segment.turnout.addresses[0] || m.address == segment.turnout.addresses[1]))
+      else if(segment.type == Simulator::TrackSegment::Type::Turnout3Way && (m.address == turnout.addresses[0] || m.address == turnout.addresses[1]))
       {
         // Left has preference over right, if other behavior is required add it to the json config as option.
         //
@@ -1091,12 +1100,12 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
 
         std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
         auto& turnoutState = m_stateData.turnouts[segment.turnout.index];
-        if(m.address == segment.turnout.addresses[0])
+        if(m.address == turnout.addresses[0])
         {
           turnoutState.coils &= 0x0C;
           turnoutState.coils |= (m.state & 0x03);
         }
-        else if(m.address == segment.turnout.addresses[1])
+        else if(m.address == turnout.addresses[1])
         {
           turnoutState.coils &= 0x03;
           turnoutState.coils |= (m.state & 0x03) << 2;
@@ -2633,23 +2642,22 @@ void Simulator::syncReplicaState()
     connection->send(SimulatorProtocol::SensorBatchState(0, connection->m_nextSyncBatchIdx, stateBuf));
     connection->m_nextSyncBatchIdx++;
 
-    if(mLastTurnoutSyncIdx >= staticData.turnoutSegmentIndexes.size())
+    if(mLastTurnoutSyncIdx >= staticData.turnouts.size())
       mLastTurnoutSyncIdx = 0;
 
-    const size_t maxIdxToSync = std::min(mLastTurnoutSyncIdx + 11, staticData.turnoutSegmentIndexes.size());
+    const size_t maxIdxToSync = std::min(mLastTurnoutSyncIdx + 11, staticData.turnouts.size());
     for(; mLastTurnoutSyncIdx < maxIdxToSync; mLastTurnoutSyncIdx++)
     {
-      const size_t turnoutSegmentIdx = staticData.turnoutSegmentIndexes.at(mLastTurnoutSyncIdx);
-      const auto &segment = staticData.trackSegments.at(turnoutSegmentIdx);
-      const auto &turnout = m_networkStateData.turnouts.at(mLastTurnoutSyncIdx);
+      const auto &turnout = staticData.turnouts.at(mLastTurnoutSyncIdx);
+      const auto &turnoutState = m_networkStateData.turnouts.at(mLastTurnoutSyncIdx);
 
       uint8_t val = 0;
-      if(turnout.state == TurnoutState::State::Thrown)
+      if(turnoutState.state == TurnoutState::State::Thrown)
         val = 2;
-      else if(turnout.state == TurnoutState::State::Closed)
+      else if(turnoutState.state == TurnoutState::State::Closed)
         val = 1;
 
-      auto msg = SimulatorProtocol::AccessorySetState(segment.turnout.channel, segment.turnout.addresses[0], val);
+      auto msg = SimulatorProtocol::AccessorySetState(turnout.channel, turnout.addresses[0], val);
       send(msg); // NOTE: also update clients
       sendReplicas(msg);
     }
@@ -2729,48 +2737,48 @@ void Simulator::updateTurnoutMovement()
 
   for(size_t turnoutIdx = 0; turnoutIdx < m_stateData.turnouts.size(); turnoutIdx++)
   {
-    TurnoutState &turnout = m_stateData.turnouts.at(turnoutIdx);
-    if(turnout.currentPosition == turnout.requestedPosition)
+    TurnoutState &turnoutState = m_stateData.turnouts.at(turnoutIdx);
+    if(turnoutState.currentPosition == turnoutState.requestedPosition)
       continue;
 
-    const TrackSegment &segment = staticData.trackSegments.at(staticData.turnoutSegmentIndexes.at(turnoutIdx));
+    const Turnout &turnout = staticData.turnouts.at(turnoutIdx);
 
-    if(turnout.currentPosition < turnout.requestedPosition)
+    if(turnoutState.currentPosition < turnoutState.requestedPosition)
     {
-      if((TurnoutState::ThrownPosition - segment.turnout.step) < turnout.currentPosition)
-        turnout.currentPosition = TurnoutState::ThrownPosition;
+      if((TurnoutState::ThrownPosition - turnout.step) < turnoutState.currentPosition)
+        turnoutState.currentPosition = TurnoutState::ThrownPosition;
       else
-        turnout.currentPosition += segment.turnout.step;
+        turnoutState.currentPosition += turnout.step;
 
-      if(turnout.currentPosition > turnout.requestedPosition)
-        turnout.currentPosition = turnout.requestedPosition;
+      if(turnoutState.currentPosition > turnoutState.requestedPosition)
+        turnoutState.currentPosition = turnoutState.requestedPosition;
     }
     else
     {
-      if(segment.turnout.step > turnout.currentPosition)
-        turnout.currentPosition = TurnoutState::ClosedPosition;
+      if(turnout.step > turnoutState.currentPosition)
+        turnoutState.currentPosition = TurnoutState::ClosedPosition;
       else
-        turnout.currentPosition -= segment.turnout.step;
+        turnoutState.currentPosition -= turnout.step;
 
-      if(turnout.currentPosition < turnout.requestedPosition)
-        turnout.currentPosition = turnout.requestedPosition;
+      if(turnoutState.currentPosition < turnoutState.requestedPosition)
+        turnoutState.currentPosition = turnoutState.requestedPosition;
     }
 
-    turnout.currentPosition = std::clamp(turnout.currentPosition, TurnoutState::ClosedPosition, TurnoutState::ThrownPosition);
+    turnoutState.currentPosition = std::clamp(turnoutState.currentPosition, TurnoutState::ClosedPosition, TurnoutState::ThrownPosition);
 
-    if(turnout.currentPosition == turnout.requestedPosition)
+    if(turnoutState.currentPosition == turnoutState.requestedPosition)
     {
       // We reached target position
       setTurnoutIsMoving(false);
     }
 
     TurnoutState::State newState = TurnoutState::State::Unknown;
-    if(turnout.currentPosition == TurnoutState::ClosedPosition)
+    if(turnoutState.currentPosition == TurnoutState::ClosedPosition)
       newState = TurnoutState::State::Closed;
-    else if(turnout.currentPosition == TurnoutState::ThrownPosition)
+    else if(turnoutState.currentPosition == TurnoutState::ThrownPosition)
       newState = TurnoutState::State::Thrown;
 
-    doSetTurnoutState(newState, turnout, turnoutIdx, segment.turnout.channel, segment.turnout.addresses[0]);
+    doSetTurnoutState(newState, turnoutState, turnoutIdx);
   }
 
   if(mTurnoutsCurrentlyMoving > 0)
@@ -4341,26 +4349,28 @@ void Simulator::loadTrackplan(const nlohmann::json& world, StaticData &data, Sta
           segment.type == TrackSegment::Type::SingleSlipTurnout ||
           segment.type == TrackSegment::Type::DoubleSlipTurnout)
       {
-        segment.turnout.channel = obj.value("channel", defaultChannel);
+        Turnout turnout;
+        turnout.channel = obj.value("channel", defaultChannel);
 
         if(segment.type == TrackSegment::Type::Turnout3Way ||
             segment.type == TrackSegment::Type::SingleSlipTurnout ||
             segment.type == TrackSegment::Type::DoubleSlipTurnout)
         {
           const auto address = obj.value("address", invalidAddress);
-          segment.turnout.addresses[0] = obj.value("address_left", address);
-          segment.turnout.addresses[1] = obj.value("address_right", (address != invalidAddress) ? static_cast<uint16_t>(address + 1) : invalidAddress);
+          turnout.addresses[0] = obj.value("address_left", address);
+          turnout.addresses[1] = obj.value("address_right", (address != invalidAddress) ? static_cast<uint16_t>(address + 1) : invalidAddress);
         }
         else
         {
-          segment.turnout.addresses[0] = obj.value("address", invalidAddress);
+          turnout.addresses[0] = obj.value("address", invalidAddress);
         }
 
         const size_t movementTimeMillis = obj.value("move_ms", DefaultTurnoutMovement_ms);
-        segment.turnout.step = std::floor(0.5 * 1000.0 * 255.0 / float(movementTimeMillis));
+        turnout.step = std::floor(0.5 * 1000.0 * 255.0 / float(movementTimeMillis));
 
-        segment.turnout.index = stateData.turnouts.size();
-        data.turnoutSegmentIndexes.push_back(data.trackSegments.size()); // Current segment index
+        segment.turnout.index = stateData.turnouts.size(); // Current turnout index
+        data.turnouts.push_back(turnout);
+
         auto& turnoutState = stateData.turnouts.emplace_back(TurnoutState{});
         if(segment.type == TrackSegment::Type::Turnout3Way ||
             segment.type == TrackSegment::Type::SingleSlipTurnout ||

@@ -115,16 +115,11 @@ public:
     struct Sensor
     {
       size_t index = invalidIndex;
-      uint16_t channel = 0;
-      uint16_t address = invalidAddress;
     } sensor;
 
     struct Turnout
     {
       size_t index = invalidIndex;
-      uint16_t channel = 0;
-      std::array<uint16_t, 2> addresses{{invalidAddress, invalidAddress}};
-      uint8_t step = 30; // step = 0.5 * (255 / time seconds)
     } turnout;
 
     struct Object
@@ -185,6 +180,13 @@ public:
     } type = Type::TrackCircuit;
   };
 
+  struct Turnout
+  {
+    uint16_t channel = 0;
+    std::array<uint16_t, 2> addresses{{invalidAddress, invalidAddress}};
+    uint8_t step = 30; // step = 0.5 * (255 / time seconds)
+  };
+
   struct Spawn
   {
     std::vector<size_t> allowList, blackList;
@@ -241,7 +243,7 @@ public:
       }
     } view;
     std::vector<TrackSegment> trackSegments;
-    std::vector<size_t> turnoutSegmentIndexes;
+    std::vector<Turnout> turnouts;
     std::vector<Sensor> sensors;
     std::vector<Misc> misc;
 
@@ -946,7 +948,7 @@ private:
   void setTrainMode(Train &train, TrainState::Mode mode);
   void stopTrainAndSetManual(Train &train);
 
-  void doSetTurnoutState(const TurnoutState::State newState, TurnoutState &turnout, size_t turnoutIdx, uint16_t channel, uint16_t address);
+  void doSetTurnoutState(const TurnoutState::State newState, TurnoutState &turnoutState, size_t turnoutIdx);
 
   void sendReplicas(const SimulatorProtocol::Message& message);
   void sendReplicas(QByteArray &buf);
