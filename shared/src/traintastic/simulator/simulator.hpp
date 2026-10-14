@@ -124,7 +124,7 @@ public:
       size_t index = invalidIndex;
       uint16_t channel = 0;
       std::array<uint16_t, 2> addresses{{invalidAddress, invalidAddress}};
-      float step = 0.15; // step = 0.5 * (1 / time seconds)
+      uint8_t step = 30; // step = 0.5 * (255 / time seconds)
     } turnout;
 
     struct Object
@@ -298,8 +298,12 @@ public:
       ClosedRight = 6
     };
 
-    float currentPosition = 0;
-    float requestedPosition = 0;
+    static constexpr uint8_t ClosedPosition = 0;
+    static constexpr uint8_t ThrownPosition = 255;
+    static constexpr uint8_t MiddlePosition = 128;
+
+    uint8_t currentPosition = ClosedPosition;
+    uint8_t requestedPosition = ClosedPosition;
     State state = State::Closed;
     uint8_t coils = 0;
 
