@@ -1246,6 +1246,8 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
             }
 
             mainSignal.maxSpeed = m.getSignalSpeed();
+            mainSignal.maxCurrentSpeed = m.getSignalSpeed();
+            mainSignal.maxNextSpeed = m.getNextSignalSpeed();
 
             if(mainSignal.fixedLimit == Simulator::MainSignal::FixedLimit::Limit60)
             {

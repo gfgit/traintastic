@@ -338,6 +338,10 @@ public:
 
     double maxSpeed = 0;
 
+    using SpecialSpeeds = SimulatorProtocol::SignalSetState::SpecialSpeeds;
+    uint16_t maxCurrentSpeed = 0;
+    uint16_t maxNextSpeed = 0; // Next signal
+
     uint8_t advanceSignalStateAndArrow = 0;
 
     char directionIndicatorText = ' ';
@@ -391,6 +395,54 @@ public:
 
       State state = State::Off;
     };
+
+    inline uint16_t getCurrentSpeed(uint16_t prevSignalSpeed = SpecialSpeeds::INVALID) const
+    {
+      if(maxCurrentSpeed == SpecialSpeeds::INVALID)
+        return 0;
+
+      if(maxCurrentSpeed == SpecialSpeeds::VARIABLE_30_60_100)
+      {
+        switch (prevSignalSpeed)
+        {
+        case 100:
+        case 60:
+        case 30:
+          return prevSignalSpeed;
+        default:
+          break;
+        }
+
+        return 30;
+      }
+
+      if(maxCurrentSpeed == SpecialSpeeds::OVERRIDE_BRAKE)
+        return 100; // TODO: reduced brake distance
+
+      if(maxCurrentSpeed == SpecialSpeeds::NO_LIMIT)
+      {
+        if(prevSignalSpeed == SpecialSpeeds::OVERRIDE_BRAKE && maxNextSpeed != SpecialSpeeds::NO_LIMIT)
+          return 100; // TODO: reduced brake distance
+
+        return 200; // TODO: full speed
+      }
+
+      return maxCurrentSpeed;
+    }
+
+    inline uint16_t getNextSpeed() const
+    {
+      if(maxNextSpeed == SpecialSpeeds::INVALID || maxNextSpeed == SpecialSpeeds::VARIABLE_30_60_100)
+        return 0; // Both invalid
+
+      if(maxNextSpeed == SpecialSpeeds::OVERRIDE_BRAKE)
+        return 100; // TODO: reduced brake distance
+
+      if(maxNextSpeed == SpecialSpeeds::NO_LIMIT)
+        return 200; // TODO: full speed
+
+      return maxNextSpeed;
+    }
 
     std::vector<Light> lights;
   };
@@ -816,7 +868,7 @@ public:
     for(auto &it : m_stateData.mainSignals)
     {
       MainSignal *s = &it.second;
-      s->maxSpeed = val ? 150 : 0;
+      s->maxCurrentSpeed = val ? MainSignal::SpecialSpeeds::NO_LIMIT : MainSignal::SpecialSpeeds::INVALID;
     }
   }
 
