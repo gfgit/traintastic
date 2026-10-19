@@ -242,6 +242,11 @@ void TrainTypeListModel::onAddTrainReply(quint32 trainId, quint32 token, bool is
   mTrainsModel->onAddTrainReply(trainId, token, isError);
 }
 
+void TrainTypeListModel::onSetMasterFollowTrain(quint32 trainId)
+{
+  mTrainsModel->onSetMasterFollowTrain(trainId);
+}
+
 void TrainTypeListModel::getBroadcastAddresses(std::vector<boost::asio::ip::address> &broadcastAddresses) const
 {
   const QList<QNetworkInterface> ifaces = QNetworkInterface::allInterfaces();

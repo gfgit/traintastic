@@ -86,6 +86,7 @@ enum class OpCode : uint8_t
   TrainRequestRemove = 25,
   TrainRemoved = 26,
   TrainRequestAddReply = 27,
+  SetMasterFollowTrain = 28
 };
 
 enum class TrainMode : uint8_t
@@ -262,7 +263,9 @@ struct SignalSetState : Message
   enum State
   {
     Off = 0,
-    On
+    On,
+    Blink,
+    BlinkReverse,
   };
 
   enum RappelState
@@ -272,7 +275,15 @@ struct SignalSetState : Message
     TwoLines_100
   };
 
-  static constexpr uint8_t StateMask = uint8_t(State::On);
+  enum SpecialSpeeds : uint16_t
+  {
+    INVALID  = 10000,
+    NO_LIMIT  = 10001,
+    VARIABLE_30_60_100 = 10002,
+    OVERRIDE_BRAKE = 10003 // TODO: make ORed flag
+  };
+
+  static constexpr uint8_t StateMask = uint8_t(State::BlinkReverse);
   static constexpr uint8_t ArrowLight = 0x04;
 
   struct LightState
@@ -282,7 +293,8 @@ struct SignalSetState : Message
   };
 
   LightState lights[3];
-  float speed = 0.0;
+  uint16_t speed = SpecialSpeeds::INVALID;
+  uint16_t nextSignalSpeed = SpecialSpeeds::INVALID;
   uint8_t advanceSignalStateAndArrow = 0;
   uint8_t rappelState = RappelState::Rappel_Off;
   char directionIndication = ' ';
@@ -310,6 +322,26 @@ struct SignalSetState : Message
     lights[0] = {Color::Red, State::Off};
     lights[1] = {Color::Red, State::Off};
     lights[2] = {Color::Red, State::Off};
+  }
+
+  uint16_t getSignalSpeed() const
+  {
+    return le16toh(speed);
+  }
+
+  void setSignalSpeed(uint16_t newSpeed)
+  {
+    speed = htole16(newSpeed);
+  }
+
+  uint16_t getNextSignalSpeed() const
+  {
+    return le16toh(nextSignalSpeed);
+  }
+
+  void setNextSignalSpeed(uint16_t newSpeed)
+  {
+    speed = htole16(newSpeed);
   }
 } ATTRIBUTE_PACKED;
 static_assert(sizeof(SignalSetState) == 20);
@@ -563,6 +595,21 @@ struct TrainRequestAddReply : Message
   bool isError;
 } ATTRIBUTE_PACKED;
 static_assert(sizeof(TrainRequestAddReply) == 12);
+
+struct SetMasterFollowTrain : Message
+{
+  SetMasterFollowTrain(quint32 trainId_ = invalidTrainId)
+    : Message(OpCode::SetMasterFollowTrain,
+              sizeof(SetMasterFollowTrain))
+    , trainId(htole32(trainId_))
+  {
+  }
+
+  inline quint32 getTrainId() const { return le32toh(trainId); }
+
+  quint32 trainId;
+} ATTRIBUTE_PACKED;
+static_assert(sizeof(SetMasterFollowTrain) == 7);
 
 PRAGMA_PACK_POP
 

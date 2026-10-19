@@ -569,6 +569,8 @@ SimulatorView::SimulatorView(QWidget* parent)
   mTrainsModel = new TrainsModel(this);
   connect(mTrainsModel, &TrainsModel::setCurrentTrain,
           this, &SimulatorView::doSetCurrentTrainIndex);
+  connect(mTrainsModel, &TrainsModel::setFollowTrain,
+          this, &SimulatorView::doSetCurrentTrainIndex);
   connect(mTrainsModel, &TrainsModel::trainReplicaAddError,
           this, [this]()
           {
@@ -2675,6 +2677,17 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
     splitRearAct->setEnabled(canSplitRear);
   }
 
+  QAction *setMasterFollowTrain = nullptr;
+  QAction *setMasterResetFollow = nullptr;
+
+  if(m_simulator->getSimMode() == Simulator::SimMode::Replica)
+  {
+    m->addSeparator();
+    if(foundTrain)
+      setMasterFollowTrain = m->addAction("Master follow this train");
+    setMasterResetFollow = m->addAction("Reset Master follow");
+  }
+
   const QAction *result = m->exec(e->globalPos());
   if(result == copySegData)
   {
@@ -2765,6 +2778,14 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
       }
     }
   }
+  else if(setMasterFollowTrain && result == setMasterFollowTrain)
+  {
+    m_simulator->sendMasterFollowTrain(m_trainUnderMouseId);
+  }
+  else if(setMasterResetFollow && result == setMasterResetFollow)
+  {
+    m_simulator->sendMasterFollowTrain(Simulator::invalidTrainId);
+  }
 
   if(foundTrain)
   {
@@ -2784,7 +2805,11 @@ bool SimulatorView::followTrainRotation() const
 
 void SimulatorView::setFollowTrainRotation(bool newFollowTrainRotation)
 {
+  if(m_followTrainRotation == newFollowTrainRotation)
+    return;
+
   m_followTrainRotation = newFollowTrainRotation;
+  emit uiOptionsChanged();
 }
 
 bool SimulatorView::followActiveTrain() const
@@ -2794,7 +2819,11 @@ bool SimulatorView::followActiveTrain() const
 
 void SimulatorView::setFollowActiveTrain(bool newFollowActiveTrain)
 {
+  if(m_followActiveTrain == newFollowActiveTrain)
+    return;
+
   m_followActiveTrain = newFollowActiveTrain;
+  emit uiOptionsChanged();
 }
 
 float SimulatorView::signalsScaleFactor() const
@@ -3331,5 +3360,21 @@ void SimulatorView::doSetCurrentTrainIndex(quint32 newTrainId)
   {
     // We need to wait state sync from Simulator thread
     m_futureCurrentTrainId = newTrainId;
+  }
+}
+
+void SimulatorView::doSetFollowTrain(quint32 newTrainId)
+{
+  if(newTrainId == Simulator::invalidTrainId)
+  {
+    setFollowActiveTrain(false);
+    zoomToDefaultCenter();
+    return;
+  }
+
+  if(m_stateData.trains.contains(newTrainId))
+  {
+    m_currentTrainId = newTrainId;
+    setFollowActiveTrain(true);
   }
 }

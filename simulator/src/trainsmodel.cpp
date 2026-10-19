@@ -187,8 +187,29 @@ void TrainsModel::onAddTrainReply(quint32 trainId, quint32 token, bool isError)
     emit setCurrentTrain(trainId);
     return;
   }
+}
 
+void TrainsModel::onSetMasterFollowTrain(quint32 trainId)
+{
+  if(trainId == Simulator::invalidTrainId)
+  {
+    // Disable follow
+    emit setFollowTrain(Simulator::invalidTrainId);
+    return;
+  }
 
+  {
+    std::lock_guard<std::recursive_mutex> lock(mSimulator->stateMutex());
+    if(!mSimulator->stateData().trains.contains(trainId))
+    {
+      trainId = Simulator::invalidTrainId;
+    }
+  }
+
+  if(trainId == Simulator::invalidTrainId)
+    return;
+
+  emit setFollowTrain(trainId);
 }
 
 void TrainsModel::timerEvent(QTimerEvent *ev)

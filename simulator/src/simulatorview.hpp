@@ -136,6 +136,7 @@ signals:
   void signalScaleChanged(float value);
   void trainSpeedFactorChanged(float value);
   void currentTrainSpeedChanged(bool hasActiveTrain, const CurrentTrainInfo &info);
+  void uiOptionsChanged();
 
 protected:
   void paintEvent(QPaintEvent *e) override;
@@ -248,6 +249,7 @@ private slots:
   void trainAddedRemoved(bool add, quint32 trainId, quint32 suggestedTrainId);
   void userAskRemoveTrain(quint32 trainId);
   void doSetCurrentTrainIndex(quint32 newTrainId);
+  void doSetFollowTrain(quint32 newTrainId);
 };
 
 #endif

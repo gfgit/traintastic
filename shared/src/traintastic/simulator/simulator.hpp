@@ -809,6 +809,8 @@ public:
   bool splitTrain(Train &trainToSplit, const size_t vehicleIdx, const bool fwd, quint32 &trainIdOut);
   bool coupleTrain(Train &train, bool fwd, quint32 &removedTrainIdOut);
 
+  void sendMasterFollowTrain(quint32 trainId);
+
   void liftRestrictions(bool val)
   {
     for(auto &it : m_stateData.mainSignals)
@@ -976,6 +978,8 @@ public:
   virtual void fillVehicleProperties(Simulator::Vehicle *vehicle) = 0;
 
   virtual void onAddTrainReply(quint32 trainId, quint32 token, bool isError) = 0;
+
+  virtual void onSetMasterFollowTrain(quint32 trainId) = 0;
 
   virtual void getBroadcastAddresses(std::vector<boost::asio::ip::address> &broadcastAddresses) const = 0;
 };

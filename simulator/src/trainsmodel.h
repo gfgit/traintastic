@@ -48,11 +48,14 @@ public:
 
     void onAddTrainReply(quint32 trainId, quint32 token, bool isError);
 
+    void onSetMasterFollowTrain(quint32 trainId);
+
   protected:
     void timerEvent(QTimerEvent *ev) override;
 
 signals:
     void setCurrentTrain(quint32 trainId);
+    void setFollowTrain(quint32 trainId);
     void trainReplicaAddError(); // TODO: error string
 
 private:

@@ -57,6 +57,8 @@ public:
 
   void onAddTrainReply(quint32 trainId, quint32 token, bool isError) override;
 
+  void onSetMasterFollowTrain(quint32 trainId) override;
+
   void getBroadcastAddresses(std::vector<boost::asio::ip::address> &broadcastAddresses) const override;
 
 private:

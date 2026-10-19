@@ -1245,7 +1245,7 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
               }
             }
 
-            mainSignal.maxSpeed = m.speed;
+            mainSignal.maxSpeed = m.getSignalSpeed();
 
             if(mainSignal.fixedLimit == Simulator::MainSignal::FixedLimit::Limit60)
             {
@@ -1704,6 +1704,21 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
         {
           if(trainTypeInterface)
             trainTypeInterface->onAddTrainReply(m.getTrainId(), m.getToken(), m.isError);
+        });
+    break;
+  }
+  case OpCode::SetMasterFollowTrain:
+  {
+    if(!isMaster)
+      break;
+
+    const auto& m = static_cast<const SetMasterFollowTrain&>(message);
+
+    boost::asio::post(
+        m_coreContext, [this, trainId=m.getTrainId()]()
+        {
+          if(trainTypeInterface)
+            trainTypeInterface->onSetMasterFollowTrain(trainId);
         });
     break;
   }
@@ -6279,6 +6294,19 @@ bool Simulator::coupleTrain(Train &train, bool fwd, quint32& removedTrainIdOut)
   }
 
   return true;
+}
+
+void Simulator::sendMasterFollowTrain(quint32 trainId)
+{
+  if(getSimMode() != SimMode::Replica)
+    return;
+
+  boost::asio::post(
+    m_networkContext, [this, trainId]()
+    {
+      auto msg = SimulatorProtocol::SetMasterFollowTrain(trainId);
+      send(msg);
+    });
 }
 
 TrainTypeInterface::~TrainTypeInterface()
