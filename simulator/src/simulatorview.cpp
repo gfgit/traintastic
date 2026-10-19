@@ -570,7 +570,7 @@ SimulatorView::SimulatorView(QWidget* parent)
   connect(mTrainsModel, &TrainsModel::setCurrentTrain,
           this, &SimulatorView::doSetCurrentTrainIndex);
   connect(mTrainsModel, &TrainsModel::setFollowTrain,
-          this, &SimulatorView::doSetCurrentTrainIndex);
+          this, &SimulatorView::doSetFollowTrain);
   connect(mTrainsModel, &TrainsModel::trainReplicaAddError,
           this, [this]()
           {
