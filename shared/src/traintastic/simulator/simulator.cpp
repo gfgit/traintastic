@@ -647,6 +647,9 @@ void Simulator::setTrainSpeed(Train &train, float speed, bool immediate)
   speed = std::clamp(speed, 0.0f, train.speedMax);
   if(immediate && train.state.speed != speed)
   {
+    std::cout << "TRAIN SET IMM: " << speed / SpeedKmHtoTick << " km/h    FROM: "
+              << train.state.speed / SpeedKmHtoTick << " km/h" << std::endl;
+
     train.state.speed = speed;
     train.state.targetSpeed = speed; // Also adjust target if immediate
     train.state.waitToStart_ms = 0.0;
@@ -1898,17 +1901,17 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message, s
   case OpCode::TrainStateRefresh:
   {
     std::vector<Simulator::Train::VehicleItemFull> vehicles;
-    std::string trainName;
+    std::string dummyTrainName; // Dummy when deserialize full = false
     quint32 trainId = 0;
     Simulator::TrainState trainState;
-    float speedMax = 0.0f;
+    float dummySpeedMax = 0.0f; // Dummy when deserialize full = false
 
-    deserializeTrain(stream, vehicles, trainName,
-                     trainId, trainState, speedMax,
+    deserializeTrain(stream, vehicles, dummyTrainName,
+                     trainId, trainState, dummySpeedMax,
                      false);
 
     boost::asio::post(
-        m_coreContext, [this, vehicles, trainName, trainId, trainState, speedMax]()
+        m_coreContext, [this, vehicles, trainId, trainState]()
         {
           std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
@@ -1922,9 +1925,8 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message, s
           train->state.reverse = trainState.reverse;
           train->state.mode = trainState.mode;
           train->state.isOnStationStop = trainState.isOnStationStop;
-          train->speedMax = speedMax;
 
-          size_t maxIdx = std::min(train->vehicles.size(), vehicles.size());
+          const size_t maxIdx = std::min(train->vehicles.size(), vehicles.size());
           for(size_t i = 0; i < maxIdx; i++)
           {
             Train::VehicleItem &item = train->vehicles[i];
@@ -2972,6 +2974,10 @@ void Simulator::updateTrainPositions()
         {
           const float newSpeed = std::clamp(train.state.speed + TrainState::AccelerationRate_ms2 * AccelerationConversionFactor,
                                             0.0f, train.state.targetSpeed);
+
+          std::cout << "TRAIN ACCELERATE: " << newSpeed / SpeedKmHtoTick << " km/h    FROM: "
+                    << train.state.speed / SpeedKmHtoTick << " km/h" << std::endl;
+
           train.state.speed = newSpeed;
           train.state.speedOrDirectionChanged = true;
         }
@@ -2979,6 +2985,9 @@ void Simulator::updateTrainPositions()
         {
           const float newSpeed = std::clamp(train.state.speed - TrainState::DecelerationRate_ms2 * AccelerationConversionFactor,
                                             train.state.targetSpeed, train.speedMax);
+          std::cout << "TRAIN BRAKE: " << newSpeed / SpeedKmHtoTick << " km/h    FROM: "
+                    << train.state.speed / SpeedKmHtoTick << " km/h" << std::endl;
+
           train.state.speed = newSpeed;
           train.state.speedOrDirectionChanged = true;
         }
