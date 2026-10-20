@@ -396,12 +396,12 @@ public:
       State state = State::Off;
     };
 
-    inline uint16_t getCurrentSpeed(uint16_t prevSignalSpeed = SpecialSpeeds::INVALID) const
+    static uint16_t calculateCurrentSpeed(uint16_t currentSpeed, uint16_t nextSpeed, uint16_t prevSignalSpeed = SpecialSpeeds::INVALID)
     {
-      if(maxCurrentSpeed == SpecialSpeeds::INVALID)
+      if(currentSpeed == SpecialSpeeds::INVALID)
         return 0;
 
-      if(maxCurrentSpeed == SpecialSpeeds::VARIABLE_30_60_100)
+      if(currentSpeed == SpecialSpeeds::VARIABLE_30_60_100)
       {
         switch (prevSignalSpeed)
         {
@@ -416,32 +416,42 @@ public:
         return 30;
       }
 
-      if(maxCurrentSpeed == SpecialSpeeds::OVERRIDE_BRAKE)
+      if(currentSpeed == SpecialSpeeds::OVERRIDE_BRAKE)
         return 100; // TODO: reduced brake distance
 
-      if(maxCurrentSpeed == SpecialSpeeds::NO_LIMIT)
+      if(currentSpeed == SpecialSpeeds::NO_LIMIT)
       {
-        if(prevSignalSpeed == SpecialSpeeds::OVERRIDE_BRAKE && maxNextSpeed != SpecialSpeeds::NO_LIMIT)
+        if(prevSignalSpeed == SpecialSpeeds::OVERRIDE_BRAKE && nextSpeed != SpecialSpeeds::NO_LIMIT)
           return 100; // TODO: reduced brake distance
 
         return 200; // TODO: full speed
       }
 
-      return maxCurrentSpeed;
+      return currentSpeed;
+    }
+
+    static uint16_t calculateNextSpeed(uint16_t nextSpeed)
+    {
+      if(nextSpeed == SpecialSpeeds::INVALID || nextSpeed == SpecialSpeeds::VARIABLE_30_60_100)
+        return 0; // Both invalid
+
+      if(nextSpeed == SpecialSpeeds::OVERRIDE_BRAKE)
+        return 100; // TODO: reduced brake distance
+
+      if(nextSpeed == SpecialSpeeds::NO_LIMIT)
+        return 200; // TODO: full speed
+
+      return nextSpeed;
+    }
+
+    inline uint16_t getCurrentSpeed(uint16_t prevSignalSpeed = SpecialSpeeds::INVALID) const
+    {
+      return calculateCurrentSpeed(maxCurrentSpeed, maxNextSpeed, prevSignalSpeed);
     }
 
     inline uint16_t getNextSpeed() const
     {
-      if(maxNextSpeed == SpecialSpeeds::INVALID || maxNextSpeed == SpecialSpeeds::VARIABLE_30_60_100)
-        return 0; // Both invalid
-
-      if(maxNextSpeed == SpecialSpeeds::OVERRIDE_BRAKE)
-        return 100; // TODO: reduced brake distance
-
-      if(maxNextSpeed == SpecialSpeeds::NO_LIMIT)
-        return 200; // TODO: full speed
-
-      return maxNextSpeed;
+      return calculateNextSpeed(maxNextSpeed);
     }
 
     std::vector<Light> lights;
