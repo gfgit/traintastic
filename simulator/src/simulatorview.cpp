@@ -3196,8 +3196,12 @@ void SimulatorView::showItemTooltip(const Simulator::Point &point, QHelpEvent *e
 
     objText = objText.arg(objType).arg(obj.position, 3, 'f', 2).arg(obj.dirForward ? "fwd" : "bak").arg(objDescr);
 
-    text.append("<br><br>");
-    text.append(objText);
+    const QLatin1String htmlTable("<table><tr>"
+                                  "<td style=\"padding-right: 6px; border-right: 2px solid #000000;\">%1</td>"
+                                  "<td style=\"padding-left: 6px;\">%2</td>"
+                                  "</tr></table>");
+
+    text = htmlTable.arg(text, objText);
   }
 
   QToolTip::showText(ev->globalPos(), text, this);
