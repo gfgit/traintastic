@@ -2947,6 +2947,7 @@ void SimulatorView::showItemTooltip(const Simulator::Point &point, QHelpEvent *e
   }
 
   const auto &segment = data_.trackSegments.at(idx);
+
   switch (segment.type)
   {
   case Simulator::TrackSegment::Type::Straight:
@@ -3105,6 +3106,98 @@ void SimulatorView::showItemTooltip(const Simulator::Point &point, QHelpEvent *e
                 .arg(sensor.address)
                 .arg(sensor.channel)
                 .arg(encodingStr));
+  }
+
+  const float posInSeg = getSegmentPosAt(idx, point, m_simulator->staticData);
+
+  size_t trackObjectIdx = Simulator::invalidIndex;
+  float trackObjectDistance = 0.0f;
+
+  static constexpr float MAX_OBJECT_DISTANCE = 4.0f;
+  const float lowerBound = posInSeg - MAX_OBJECT_DISTANCE;
+  const float upperBound = posInSeg + MAX_OBJECT_DISTANCE;
+
+  // Get nearest track object
+  for(size_t i = 0; i < segment.objects.size(); i++)
+  {
+    const Simulator::TrackSegment::Object &obj = segment.objects.at(i);
+    if(obj.position < lowerBound)
+      continue;
+    if(obj.position > upperBound)
+      break; // List is sorted
+
+    const float objDistance = std::abs(obj.position - posInSeg);
+    if(trackObjectIdx == Simulator::invalidIndex || objDistance < trackObjectDistance)
+    {
+      trackObjectIdx = i;
+      trackObjectDistance = objDistance;
+    }
+  }
+
+  if(trackObjectIdx != Simulator::invalidIndex)
+  {
+    using Type = Simulator::TrackSegment::Object::Type;
+
+    const Simulator::TrackSegment::Object &obj = segment.objects.at(trackObjectIdx);
+
+    // Show object tooltip
+    QString objType, objDescr;
+
+    switch (obj.type)
+    {
+    case Type::PositionSensor:
+    {
+      objType = tr("position sensor");
+      break;
+    }
+    case Type::MainSignal:
+    {
+      objType = tr("main signal");
+      break;
+    }
+    case Type::ReverseDirection:
+    {
+      objType = tr("reverse train");
+      break;
+    }
+    case Type::RemoveTrain:
+    {
+      objType = tr("remove train");
+      break;
+    }
+    case Type::SpawnTrain:
+    {
+      objType = tr("spawn");
+      break;
+    }
+    case Type::AuxSignal:
+    {
+      objType = tr("aux signal");
+      break;
+    }
+    case Type::StationStopPoint:
+    {
+      objType = tr("station stop");
+      break;
+    }
+    case Type::SpeedLimitRelease:
+    {
+      objType = tr("speed limit release");
+      break;
+    }
+    default:
+      break;
+    }
+
+    QString objText = tr("Object: <b>%1</b><br>"
+                         "Pos: %2<br>"
+                         "Dir: %3<br>"
+                         "%4");
+
+    objText = objText.arg(objType).arg(obj.position, 3, 'f', 2).arg(obj.dirForward ? "fwd" : "bak").arg(objDescr);
+
+    text.append("<br><br>");
+    text.append(objText);
   }
 
   QToolTip::showText(ev->globalPos(), text, this);
