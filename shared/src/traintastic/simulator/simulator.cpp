@@ -1245,23 +1245,31 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
               }
             }
 
+            using FixedLimit = Simulator::MainSignal::FixedLimit;
+            using RappelState = Simulator::MainSignal::RappelState;
+
             mainSignal.maxSpeed = m.getSignalSpeed();
             mainSignal.maxCurrentSpeed = m.getSignalSpeed();
             mainSignal.maxNextSpeed = m.getNextSignalSpeed();
 
-            if(mainSignal.fixedLimit == Simulator::MainSignal::FixedLimit::Limit60)
-            {
-              mainSignal.maxSpeed = std::min(mainSignal.maxSpeed, 60.0);
-            }
-            else if(mainSignal.fixedLimit == Simulator::MainSignal::FixedLimit::Limit30)
-            {
-              mainSignal.maxSpeed = std::min(mainSignal.maxSpeed, 30.0);
-            }
-
             mainSignal.setArrowLightOn(m.isArrowLightOn());
             mainSignal.directionIndicatorText = m.directionIndication;
-            mainSignal.rappelState = Simulator::MainSignal::RappelState(m.rappelState);
+            mainSignal.rappelState = RappelState(m.rappelState);
             mainSignal.setAdvanceSignalState(MainSignal::State(m.getAdvanceSignalState()));
+
+            if(mainSignal.hasRappel || mainSignal.fixedLimit != FixedLimit::NoLimit)
+            {
+              uint16_t rappelSpeed = 30;
+              if(mainSignal.fixedLimit == FixedLimit::Limit60 || mainSignal.rappelState == RappelState::OneLine_60)
+                rappelSpeed = 60;
+              if(mainSignal.rappelState == RappelState::OneLine_60)
+                rappelSpeed = 60;
+              else if(mainSignal.rappelState == RappelState::TwoLines_100)
+                rappelSpeed = 100;
+
+              mainSignal.maxSpeed = std::min(mainSignal.maxSpeed, double(rappelSpeed));
+              mainSignal.maxCurrentSpeed = std::min(mainSignal.maxCurrentSpeed, rappelSpeed);
+            }
           });
       break;
     }

@@ -3148,11 +3148,51 @@ void SimulatorView::showItemTooltip(const Simulator::Point &point, QHelpEvent *e
     case Type::PositionSensor:
     {
       objType = tr("position sensor");
+
+      const Simulator::Sensor &sensor = m_simulator->staticData.sensors.at(obj.sensorIndex);
+      if(sensor.type == Simulator::Sensor::Type::AxleCounter)
+        objDescr.append(tr("SubType: <b>Axle Counter</b>"));
+
+      if(!objDescr.isEmpty())
+        objDescr.append(QLatin1String("<br>"));
+
+      objDescr.append(tr("Sensor addr: <b>%1</b><br>"
+                         "Sensor chan: <b>%2</b>").arg(sensor.address).arg(sensor.channel));
       break;
     }
     case Type::MainSignal:
     {
       objType = tr("main signal");
+      const Simulator::MainSignal &mainSignal = m_stateData.mainSignals.at(std::string(obj.signalName));
+
+      auto speedToText = [](uint16_t speed) -> QString
+      {
+        switch (speed)
+        {
+        case Simulator::MainSignal::SpecialSpeeds::INVALID:
+          return tr("INVALID");
+        case Simulator::MainSignal::SpecialSpeeds::NO_LIMIT:
+          return tr("NO_LIMIT");
+        case Simulator::MainSignal::SpecialSpeeds::VARIABLE_30_60_100:
+          return tr("30/60/100 km/h");
+        case Simulator::MainSignal::SpecialSpeeds::OVERRIDE_BRAKE:
+          return tr("Short brake");
+        default:
+          break;
+        }
+
+        return tr("%1 km/h").arg(speed);
+      };
+
+      objDescr = tr("Name: <b>%1</b><br>"
+                    "Addr: <b>%2</b><br>"
+                    "Chan: <b>%3</b><br>"
+                    "Speed: <b>%4</b><br>"
+                    "Next Speed: <b>%4</b><br>")
+                     .arg(mainSignal.name)
+                     .arg(mainSignal.address).arg(mainSignal.channel)
+                     .arg(speedToText(mainSignal.maxCurrentSpeed), speedToText(mainSignal.maxNextSpeed));
+
       break;
     }
     case Type::ReverseDirection:
@@ -3168,11 +3208,67 @@ void SimulatorView::showItemTooltip(const Simulator::Point &point, QHelpEvent *e
     case Type::SpawnTrain:
     {
       objType = tr("spawn");
+
+      const Simulator::Spawn &spawn = m_simulator->staticData.spawns.at(obj.sensorIndex);
+      objDescr= tr("Spawn addr: <b>%1</b><br>"
+                   "Default speed: <b>%2 km/h</b>").arg(spawn.address).arg(spawn.defaultSpeedKmH);
       break;
     }
     case Type::AuxSignal:
     {
       objType = tr("aux signal");
+      const Simulator::AuxSignal &auxSignal = m_stateData.auxSignals.at(std::string(obj.signalName));
+
+      QString subTypeName, subDescr;
+      switch(auxSignal.subType)
+      {
+      case Simulator::AuxSignal::SubType::LightDwarfSignal:
+      {
+        subTypeName = tr("Ligh dwarf signal");
+
+        QString stateStr = tr("Unknown");
+        if(auxSignal.isLightOn(1)) // L2
+        {
+          if(auxSignal.isLightOn(0) && !auxSignal.isLightOn(2))
+            stateStr = tr("Stop");
+          else if(!auxSignal.isLightOn(0) && auxSignal.isLightOn(2))
+            stateStr = tr("Proceed shunt");
+        }
+
+        subDescr = tr("State: <b>%1</b>").arg(stateStr);
+        break;
+      }
+      case Simulator::AuxSignal::SubType::RotatingDwarfSignal:
+      {
+        subTypeName = tr("Rotating dwarf signal");
+
+        QString stateStr = tr("Unknown");
+        if(auxSignal.mPosition == 0)
+          stateStr = tr("Stop");
+        else if(auxSignal.mPosition == 255)
+          stateStr = tr("Proceed shunt");
+
+        subDescr = tr("State: <b>%1</b><br>"
+                      "Light: <b>%2</b>").arg(stateStr).arg(auxSignal.isLightOn(0) ? tr("on") : tr("off"));
+        break;
+      }
+      case Simulator::AuxSignal::SubType::HighDepartureIndicator:
+      {
+        subTypeName = tr("High departure indicator");
+        subDescr = tr("State: <b>%1</b>").arg(auxSignal.isLightOn(0) ? tr("Depart") : tr("Off"));
+        break;
+      }
+      }
+
+      objDescr = tr("Name: <b>%1</b><br>"
+                    "Addr: <b>%2</b><br>"
+                    "Chan: <b>%3</b><br>"
+                    "SubType: <b>%4</b><br>"
+                    "%5")
+                     .arg(auxSignal.name)
+                     .arg(auxSignal.address).arg(auxSignal.channel)
+                     .arg(subTypeName, subDescr);
+
       break;
     }
     case Type::StationStopPoint:
