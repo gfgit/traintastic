@@ -3188,7 +3188,7 @@ void SimulatorView::showItemTooltip(const Simulator::Point &point, QHelpEvent *e
                     "Addr: <b>%2</b><br>"
                     "Chan: <b>%3</b><br>"
                     "Speed: <b>%4</b><br>"
-                    "Next Speed: <b>%4</b><br>")
+                    "Next Speed: <b>%5</b><br>")
                      .arg(mainSignal.name)
                      .arg(mainSignal.address).arg(mainSignal.channel)
                      .arg(speedToText(mainSignal.maxCurrentSpeed), speedToText(mainSignal.maxNextSpeed));

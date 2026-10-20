@@ -341,7 +341,7 @@ struct SignalSetState : Message
 
   void setNextSignalSpeed(uint16_t newSpeed)
   {
-    speed = htole16(newSpeed);
+    nextSignalSpeed = htole16(newSpeed);
   }
 } ATTRIBUTE_PACKED;
 static_assert(sizeof(SignalSetState) == 20);

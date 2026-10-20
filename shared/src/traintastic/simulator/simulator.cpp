@@ -1248,9 +1248,9 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
             using FixedLimit = Simulator::MainSignal::FixedLimit;
             using RappelState = Simulator::MainSignal::RappelState;
 
-            mainSignal.maxSpeed = m.getSignalSpeed();
             mainSignal.maxCurrentSpeed = m.getSignalSpeed();
             mainSignal.maxNextSpeed = m.getNextSignalSpeed();
+            mainSignal.maxSpeed = mainSignal.getCurrentSpeed(); // TODO: remove
 
             mainSignal.setArrowLightOn(m.isArrowLightOn());
             mainSignal.directionIndicatorText = m.directionIndication;
