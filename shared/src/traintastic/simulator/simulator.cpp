@@ -647,8 +647,8 @@ void Simulator::setTrainSpeed(Train &train, float speed, bool immediate)
   speed = std::clamp(speed, 0.0f, train.speedMax);
   if(immediate && train.state.speed != speed)
   {
-    std::cout << "TRAIN SET IMM: " << speed / SpeedKmHtoTick << " km/h    FROM: "
-              << train.state.speed / SpeedKmHtoTick << " km/h" << std::endl;
+    // std::cout << "TRAIN SET IMM: " << speed / SpeedKmHtoTick << " km/h    FROM: "
+    //           << train.state.speed / SpeedKmHtoTick << " km/h" << std::endl;
 
     train.state.speed = speed;
     train.state.targetSpeed = speed; // Also adjust target if immediate
@@ -660,8 +660,8 @@ void Simulator::setTrainSpeed(Train &train, float speed, bool immediate)
     const float oldTargetSpeed = train.state.targetSpeed;
     train.state.targetSpeed = speed;
 
-    std::cout << "TRAIN SET TARGET: " << train.state.targetSpeed / SpeedKmHtoTick << " km/h    FROM: "
-              << oldTargetSpeed / SpeedKmHtoTick << " km/h" << std::endl;
+    // std::cout << "TRAIN SET TARGET: " << train.state.targetSpeed / SpeedKmHtoTick << " km/h    FROM: "
+    //           << oldTargetSpeed / SpeedKmHtoTick << " km/h" << std::endl;
 
     if(train.state.targetSpeed > 0.0 && train.state.waitToStart_ms == 0 &&
         (train.state.speed == 0.0 || oldTargetSpeed == 0.0))
@@ -3000,8 +3000,8 @@ void Simulator::updateTrainPositions()
           const float newSpeed = std::clamp(train.state.speed + TrainState::AccelerationRate_ms2 * AccelerationConversionFactor,
                                             0.0f, train.state.targetSpeed);
 
-          std::cout << "TRAIN ACCELERATE: " << newSpeed / SpeedKmHtoTick << " km/h    FROM: "
-                    << train.state.speed / SpeedKmHtoTick << " km/h" << std::endl;
+          // std::cout << "TRAIN ACCELERATE: " << newSpeed / SpeedKmHtoTick << " km/h    FROM: "
+          //           << train.state.speed / SpeedKmHtoTick << " km/h" << std::endl;
 
           train.state.speed = newSpeed;
           train.state.speedOrDirectionChanged = true;
@@ -3010,8 +3010,8 @@ void Simulator::updateTrainPositions()
         {
           const float newSpeed = std::clamp(train.state.speed - TrainState::DecelerationRate_ms2 * AccelerationConversionFactor,
                                             train.state.targetSpeed, train.speedMax);
-          std::cout << "TRAIN BRAKE: " << newSpeed / SpeedKmHtoTick << " km/h    FROM: "
-                    << train.state.speed / SpeedKmHtoTick << " km/h" << std::endl;
+          // std::cout << "TRAIN BRAKE: " << newSpeed / SpeedKmHtoTick << " km/h    FROM: "
+          //           << train.state.speed / SpeedKmHtoTick << " km/h" << std::endl;
 
           train.state.speed = newSpeed;
           train.state.speedOrDirectionChanged = true;
