@@ -5602,27 +5602,30 @@ bool Simulator::checkNextSignal(Train &train)
   }
 
   static const std::pair<float, float> SpeedCurve[] = {
-      {30, 0},
-      {32, 1},
-      {35, 3},
-      {50, 7},
-      {60, 15},
-      {70, 22},
-      {80, 30},
-      {110, 50},
-      {150, 70},
-      {280, 100},
-      {320, 130},
-      {380, 140},
-      {430, 150},
-      {450, 170},
-      {500, 190},
-      {550, 210},
-      {600, 230},
-      {650, 250}
+    {30.0, 0.0},
+    {30.2, 1.5},
+    {32,   4.42},
+    {35,   8.83},
+    {80,  29.91}, // 46
+    {120,  31.19}, // 50
+    {140, 44.10}, // 100
+    {150, 54.01},
+    {200, 62.36},
+    {300, 76.38},
+    {400, 88.19},
+    {500, 98.60},
+    {600, 108},
+    {700, 116.65},
+    {800, 124.71},
+    {900, 132.27},
+    {1000, 139.43},
+    {1200, 152.74}
   };
+
   static const size_t SpeedCurveSz = sizeof(SpeedCurve)/sizeof(SpeedCurve[0]);
   static const float BRAKE_DISTANCE = SpeedCurve[SpeedCurveSz - 1].first;
+  static const float STOP_DISTANCE = SpeedCurve[0].first;
+  static const float DISTANCE_30_KMH = SpeedCurve[5].first;
 
   uint16_t speedLimit = train.state.otherPreviousSignalSpeed;
   if(MainSignal::decodeRawSpeed(train.state.previousSignalSpeed) < MainSignal::decodeRawSpeed(speedLimit))
@@ -5653,7 +5656,7 @@ bool Simulator::checkNextSignal(Train &train)
   if(nextSignalSpeed == MainSignal::SpecialSpeeds::OVERRIDE_BRAKE && train.state.targetSpeed > 100)
   {
     // If we have short brake distance, start braking from previous signal until 100 km/h is reached
-    setTrainSpeed(train, 100, false);
+    setTrainSpeed(train, 100 * SpeedKmHtoTick, false);
   }
   else if(speedLimit == MainSignal::SpecialSpeeds::NO_LIMIT)
   {
@@ -5661,7 +5664,7 @@ bool Simulator::checkNextSignal(Train &train)
     if(!train.state.nextSignal.signal || train.state.nextSignal.distance > BRAKE_DISTANCE)
       setTrainSpeed(train, train.speedMax, false); // If next signal is far away, accelerate to max speed
     else
-      setTrainSpeed(train, nextSignalSpeed, false);
+      setTrainSpeed(train, nextSignalSpeedDecoded, false);
   }
 
   const float totalDistance = train.state.nextSignal.distance;
@@ -5701,16 +5704,16 @@ bool Simulator::checkNextSignal(Train &train)
     if(train.state.targetSpeed > targetSpeed)
       setTrainSpeed(train, targetSpeed, false);
 
-    if(train.state.speed == 0.0)
-      return false; // Stop
+    if(train.state.speed == 0.0 && totalDistance <= STOP_DISTANCE && train.state.nextSignal.signal->isStop())
+      return false; // Stop at STOP_DISTANCE from a red signal
   }
 
   const bool underSignalSpeed = train.state.speed < nextSignalSpeedDecoded && train.state.speed < speedLimitDecoded;
-  if(train.state.targetSpeed < 30 * SpeedKmHtoTick && (!train.state.nextSignal.signal || totalDistance > 30 || underSignalSpeed))
+  if(train.state.targetSpeed < (30 * SpeedKmHtoTick - ADJ_MARGIN) && (!train.state.nextSignal.signal || totalDistance > STOP_DISTANCE || underSignalSpeed))
   {
     // Get near at 30 km/h to next signal if stopped or currently at less than 30 km/h
     // If stopped at less than 30 meters from signal, remain stopped
-    if(!train.state.nextSignal.signal || totalDistance >= 80 || underSignalSpeed)
+    if(!train.state.nextSignal.signal || totalDistance >= DISTANCE_30_KMH || underSignalSpeed)
     {
       setTrainSpeed(train, 30 * SpeedKmHtoTick);
     }
@@ -5718,11 +5721,15 @@ bool Simulator::checkNextSignal(Train &train)
     {
       float targetSpeed = train.speedMax;
 
-      for(const auto& entry : SpeedCurve)
+      for(size_t i = 0; i < SpeedCurveSz; i++)
       {
+        const auto& entry = SpeedCurve[i];
         if(totalDistance < entry.first)
         {
-          targetSpeed = (nextSignalSpeedDecoded + entry.second) * SpeedKmHtoTick;
+          if(i > 1) // Avoid also first entry
+            targetSpeed = nextSignalSpeedDecoded + (SpeedCurve[i - 1].second * SpeedKmHtoTick);
+          else
+            targetSpeed = nextSignalSpeedDecoded + (entry.second * SpeedKmHtoTick);
           break;
         }
       }
