@@ -633,7 +633,12 @@ void Simulator::setTrainDirection(Train &train, bool reverse)
     train.state.nextSignal.dirty = true;
     train.state.prevSignal.dirty = true;
     train.state.skipCollisionDetection = false; // Check again in opposite direction
-    train.state.speedReleaseCount = 0;
+
+    train.state.betweenSignalsCount = 0;
+    train.state.passedSignalSpeed = 30; // Initial 30 speed limit
+    train.state.passedSignalNextSpeed = MainSignal::SpecialSpeeds::INVALID;
+    train.state.previousSignalSpeed = MainSignal::SpecialSpeeds::NO_LIMIT;
+    train.state.otherPreviousSignalSpeed = MainSignal::SpecialSpeeds::NO_LIMIT;
   }
 }
 
@@ -697,7 +702,12 @@ void Simulator::setTrainMode(Train &train, TrainState::Mode mode)
     train.state.nextSignal.dirty = true;
     train.state.prevSignal.dirty = true;
     train.state.speedOrDirectionChanged = true;
-    train.state.speedReleaseCount = 0;
+
+    train.state.betweenSignalsCount = 0;
+    train.state.passedSignalSpeed = 30; // Initial 30 speed limit
+    train.state.passedSignalNextSpeed = MainSignal::SpecialSpeeds::INVALID;
+    train.state.previousSignalSpeed = MainSignal::SpecialSpeeds::NO_LIMIT;
+    train.state.otherPreviousSignalSpeed = MainSignal::SpecialSpeeds::NO_LIMIT;
 
     if(train.state.mode == TrainState::Mode::Manual)
     {
@@ -1250,7 +1260,6 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
 
             mainSignal.maxCurrentSpeed = m.getSignalSpeed();
             mainSignal.maxNextSpeed = m.getNextSignalSpeed();
-            mainSignal.maxSpeed = mainSignal.getCurrentSpeed(); // TODO: remove
 
             mainSignal.setArrowLightOn(m.isArrowLightOn());
             mainSignal.directionIndicatorText = m.directionIndication;
@@ -1271,9 +1280,10 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
               else if(mainSignal.rappelState == RappelState::TwoLines_100)
                 rappelSpeed = 100;
 
-              mainSignal.maxSpeed = std::min(mainSignal.maxSpeed, double(rappelSpeed));
               mainSignal.maxCurrentSpeed = std::min(mainSignal.maxCurrentSpeed, rappelSpeed);
             }
+
+            mainSignal.maxSpeed = MainSignal::decodeRawSpeed(mainSignal.getCurrentSpeed()); // TODO: remove
           });
       break;
     }
@@ -2189,6 +2199,9 @@ void Simulator::onConnectionRemoved(const size_t connId, const std::vector<uint1
 
     s->ownerConnectionId = invalidIndex;
     s->maxSpeed = 0.0f;
+    s->maxCurrentSpeed = MainSignal::SpecialSpeeds::INVALID;
+    s->maxNextSpeed = MainSignal::SpecialSpeeds::INVALID;
+
     for(MainSignal::Light& l : s->lights)
     {
       l.color = MainSignal::Light::Color::Red;
@@ -2868,11 +2881,11 @@ void Simulator::updateTrainPositions()
     {
       bool stoppedAndCannotContinue = train.state.speed == 0.0;
       if(stoppedAndCannotContinue)
-        stoppedAndCannotContinue = (train.state.nextSignal.signal && train.state.nextSignal.signal->maxSpeed == 0.0);
+        stoppedAndCannotContinue = (train.state.nextSignal.signal && train.state.nextSignal.signal->isStop());
 
       // Train cannot proceed forward, lets see if we can reverse
       if(stoppedAndCannotContinue &&
-          train.state.prevSignal.signal && train.state.prevSignal.signal->maxSpeed > 0.0)
+          train.state.prevSignal.signal && !train.state.prevSignal.signal->isStop())
       {
         // Prev signal detected and set to proceed, reverse train
         setTrainDirection(train, !train.state.reverse);
@@ -3198,14 +3211,11 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
       // Reset station stop state for each passed main signal
       train.state.isOnStationStop = false;
 
-      // Reset speed release limits after we passed a signal
-      train.state.speedReleaseCount = 0;
-
       clearTrainSignalCache(m_stateData, train, false);
 
       MainSignal *signal = &it->second;
       const float tickSpeed = signal->maxSpeed * SpeedKmHtoTick;
-      if(signal->maxSpeed == 0.0f)
+      if(signal->isStop())
       {
         // Stop immediately
         // TODO: if SPAD set to manual mode
@@ -3217,10 +3227,38 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
       if(train.state.mode == TrainState::Mode::SemiAutomatic && train.state.speed == 0.0)
         return true;
 
+      // Shift train speeds
+      train.state.otherPreviousSignalSpeed = train.state.previousSignalSpeed;
+      train.state.previousSignalSpeed = train.state.passedSignalSpeed;
+
+      // Use previous signal next speed to calculate current signal speed
+      train.state.passedSignalSpeed = signal->getCurrentSpeed(train.state.passedSignalNextSpeed);
+      train.state.passedSignalNextSpeed = signal->maxNextSpeed;
+
+      if(train.state.betweenSignalsCount < std::numeric_limits<uint8_t>::max())
+      {
+        // Train HEAD passed a signal
+        train.state.betweenSignalsCount++;
+      }
+
       // Apply signal speed on next tick
       // TODO: train max speed
       setTrainSpeed(train, tickSpeed);
       train.state.nextSignal.dirty = true;
+    }
+    else if (isLast && obj.type == Object::Type::MainSignal && train.state.mode != TrainState::Mode::Manual)
+    {
+      if(train.state.betweenSignalsCount > 0)
+      {
+        // Train TAIL passed a signal
+        train.state.betweenSignalsCount--;
+      }
+
+      if(train.state.betweenSignalsCount == 0)
+        train.state.otherPreviousSignalSpeed = MainSignal::SpecialSpeeds::NO_LIMIT;
+
+      if(train.state.betweenSignalsCount <= 1)
+        train.state.otherPreviousSignalSpeed = MainSignal::SpecialSpeeds::NO_LIMIT;
     }
     else if (isFirst && obj.type == Object::Type::ReverseDirection && train.state.mode != TrainState::Mode::Manual)
     {
@@ -3246,25 +3284,22 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
       // At each train wagon passing recalculate previous signal
       train.state.prevSignal.dirty = true;
     }
-    else if(train.state.mode == TrainState::Mode::Automatic && obj.type == Object::Type::SpeedLimitRelease)
+    else if(isLast && train.state.mode == TrainState::Mode::Automatic && obj.type == Object::Type::SpeedLimitRelease)
     {
-      if(isFirst)
+      // When entire train has passed speed release point, increase speed
+      if(train.state.betweenSignalsCount == 0)
       {
-        // When train head hits a speed limit increase counter
-        if(train.state.speedReleaseCount < std::numeric_limits<uint8_t>::max())
-          train.state.speedReleaseCount++;
-      }
-      else if(isLast)
-      {
-        if(train.state.speedReleaseCount > 0)
-        {
-          train.state.speedReleaseCount--;
+        train.state.otherPreviousSignalSpeed = MainSignal::SpecialSpeeds::NO_LIMIT;
 
-          // When entire train has passed speed release point, increase speed
-          // TODO: consider line speed
-          setTrainSpeed(train, train.speedMax);
-        }
+        if(train.state.passedSignalSpeed != MainSignal::SpecialSpeeds::OVERRIDE_BRAKE)
+          train.state.passedSignalSpeed = MainSignal::SpecialSpeeds::NO_LIMIT; // Keep OVERRIDE_BRAKE
       }
+
+      if(train.state.betweenSignalsCount <= 1)
+        train.state.otherPreviousSignalSpeed = MainSignal::SpecialSpeeds::NO_LIMIT;
+
+      // TODO: consider line speed and calculate speed
+      setTrainSpeed(train, train.speedMax);
     }
 
     return true;
@@ -5560,15 +5595,6 @@ bool Simulator::checkNextSignal(Train &train)
   if(train.state.mode == TrainState::Mode::SemiAutomatic && train.state.speed == 0.0f)
     return true;
 
-  if(!train.state.nextSignal.signal)
-  {
-    if(train.state.mode == TrainState::Mode::Automatic && train.state.targetSpeed < 30 * SpeedKmHtoTick)
-    {
-      // Start at 30 km/h until next signal is found
-      setTrainSpeed(train, 30 * SpeedKmHtoTick);
-    }
-  }
-
   const Train::VehicleItem& firstItem = train.state.reverse ? train.vehicles.back() : train.vehicles.front();
   const Vehicle *firstVehicle = m_stateData.getVehicleById(firstItem.vehicleId);
   const VehicleState::Face& face = (firstItem.reversed == train.state.reverse) ? firstVehicle->state.front : firstVehicle->state.rear;
@@ -5586,7 +5612,6 @@ bool Simulator::checkNextSignal(Train &train)
         train.state.nextSignal.dirty = true;
       }
     }
-    return true;
   }
 
   static const std::pair<float, float> SpeedCurve[] = {
@@ -5610,6 +5635,47 @@ bool Simulator::checkNextSignal(Train &train)
       {650, 250}
   };
 
+  uint16_t speedLimit = train.state.otherPreviousSignalSpeed;
+  if(MainSignal::decodeRawSpeed(train.state.previousSignalSpeed) < MainSignal::decodeRawSpeed(speedLimit))
+    speedLimit = train.state.previousSignalSpeed;
+  if(MainSignal::decodeRawSpeed(train.state.passedSignalSpeed) < MainSignal::decodeRawSpeed(speedLimit))
+    speedLimit = train.state.passedSignalSpeed;
+
+  if(speedLimit == 0 ||
+      speedLimit == MainSignal::SpecialSpeeds::INVALID)
+    speedLimit = 30; // Maybe we SPAD? or maybe wrong values
+
+  uint16_t nextSignalSpeed = train.state.passedSignalNextSpeed;
+  if(train.state.nextSignal.signal)
+    nextSignalSpeed = train.state.nextSignal.signal->getCurrentSpeed(train.state.passedSignalNextSpeed);
+
+  const float speedLimitDecoded = MainSignal::decodeRawSpeed(speedLimit) * SpeedKmHtoTick;
+  const fload nextSignalSpeedDecoded = MainSignal::decodeRawSpeed(nextSignalSpeed) * SpeedKmHtoTick;
+
+  // Ensure we are not above current speed limit
+  if(train.state.speed > speedLimitDecoded)
+    setTrainSpeed(speedLimitDecoded, true);
+
+  // Ensure we do not accelerate above current speed limit
+  if(train.state.targetSpeed > speedLimitDecoded)
+    setTrainSpeed(speedLimitDecoded, false);
+
+  if(nextSignalSpeed == MainSignal::SpecialSpeeds::OVERRIDE_BRAKE && train.state.targetSpeed > 100)
+  {
+    // If we have short brake distance, start braking from previous signal until 100 km/h is reached
+    setTrainSpeed(train, 100, false);
+  }
+  else if(speedLimit == MainSignal::SpecialSpeeds::NO_LIMIT && train.state.targetSpeed < nextSignalSpeed)
+  {
+    // We have no imposed limit from previous signal, accelerate to next signal speed
+    setTrainSpeed(train, nextSignalSpeed, false);
+
+    if(!train.state.nextSignal.signal || train.state.nextSignal.distance > 650)
+      setTrainSpeed(train, train.speedMax, false); // If next signal is far away, accelerate to max speed
+  }
+
+
+
   const float totalDistance = train.state.nextSignal.distance;
 
   if(totalDistance <= 650 && train.state.speed >= train.state.nextSignal.signal->maxSpeed * SpeedKmHtoTick)
@@ -5631,7 +5697,10 @@ bool Simulator::checkNextSignal(Train &train)
     {
       // TODO: adjust deceleration so that it doest not SPAD
       // Then we can remove immediate = true
+      const float oldTarget = train.state.targetSpeed;
       setTrainSpeed(train, targetSpeed, true);
+      if(oldTarget < targetSpeed)
+        setTrainSpeed(train, oldTarget, false);
 
       if(train.state.speed == 0.0)
         return false; // Stop

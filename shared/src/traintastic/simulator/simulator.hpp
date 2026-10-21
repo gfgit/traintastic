@@ -339,8 +339,8 @@ public:
     double maxSpeed = 0;
 
     using SpecialSpeeds = SimulatorProtocol::SignalSetState::SpecialSpeeds;
-    uint16_t maxCurrentSpeed = 0;
-    uint16_t maxNextSpeed = 0; // Next signal
+    uint16_t maxCurrentSpeed = SpecialSpeeds::INVALID;
+    uint16_t maxNextSpeed = SpecialSpeeds::INVALID; // Next signal
 
     uint8_t advanceSignalStateAndArrow = 0;
 
@@ -416,32 +416,27 @@ public:
         return 30;
       }
 
-      if(currentSpeed == SpecialSpeeds::OVERRIDE_BRAKE)
-        return 100; // TODO: reduced brake distance
+      if(currentSpeed == SpecialSpeeds::NO_LIMIT &&
+          prevSignalSpeed == SpecialSpeeds::OVERRIDE_BRAKE &&
+          nextSpeed != SpecialSpeeds::NO_LIMIT)
+        return SpecialSpeeds::OVERRIDE_BRAKE;
 
-      if(currentSpeed == SpecialSpeeds::NO_LIMIT)
-      {
-        if(prevSignalSpeed == SpecialSpeeds::OVERRIDE_BRAKE && nextSpeed != SpecialSpeeds::NO_LIMIT)
-          return 100; // TODO: reduced brake distance
-
-        return 200; // TODO: full speed
-      }
-
+      // Keep NO_LIMIT and OVERRIDE_BRAKE
       return currentSpeed;
     }
 
-    static uint16_t calculateNextSpeed(uint16_t nextSpeed)
+    static uint16_t decodeRawSpeed(uint16_t rawSpeed)
     {
-      if(nextSpeed == SpecialSpeeds::INVALID || nextSpeed == SpecialSpeeds::VARIABLE_30_60_100)
+      if(rawSpeed == SpecialSpeeds::INVALID || rawSpeed == SpecialSpeeds::VARIABLE_30_60_100)
         return 0; // Both invalid
 
-      if(nextSpeed == SpecialSpeeds::OVERRIDE_BRAKE)
+      if(rawSpeed == SpecialSpeeds::OVERRIDE_BRAKE)
         return 100; // TODO: reduced brake distance
 
-      if(nextSpeed == SpecialSpeeds::NO_LIMIT)
+      if(rawSpeed == SpecialSpeeds::NO_LIMIT)
         return 200; // TODO: full speed
 
-      return nextSpeed;
+      return rawSpeed;
     }
 
     inline uint16_t getCurrentSpeed(uint16_t prevSignalSpeed = SpecialSpeeds::INVALID) const
@@ -449,10 +444,7 @@ public:
       return calculateCurrentSpeed(maxCurrentSpeed, maxNextSpeed, prevSignalSpeed);
     }
 
-    inline uint16_t getNextSpeed() const
-    {
-      return calculateNextSpeed(maxNextSpeed);
-    }
+    inline bool isStop() const { return maxCurrentSpeed == 0 || maxCurrentSpeed == SpecialSpeeds::INVALID; }
 
     std::vector<Light> lights;
   };
@@ -519,7 +511,13 @@ public:
     float speed = 0.0f;
     float targetSpeed = 0.0f;
     float waitToStart_ms = 0;
-    uint8_t speedReleaseCount = 0;
+
+    uint16_t passedSignalSpeed = MainSignal::SpecialSpeeds::NO_LIMIT;
+    uint16_t passedSignalNextSpeed = MainSignal::SpecialSpeeds::NO_LIMIT;
+    uint16_t previousSignalSpeed = MainSignal::SpecialSpeeds::NO_LIMIT;
+    uint16_t otherPreviousSignalSpeed = MainSignal::SpecialSpeeds::NO_LIMIT;
+
+    uint8_t betweenSignalsCount = 0;
 
     bool reverse = false;
     bool speedOrDirectionChanged = false;
