@@ -1245,8 +1245,8 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
               }
             }
 
-            using FixedLimit = Simulator::MainSignal::FixedLimit;
-            using RappelState = Simulator::MainSignal::RappelState;
+            using FixedLimit = MainSignal::FixedLimit;
+            using RappelState = MainSignal::RappelState;
 
             mainSignal.maxCurrentSpeed = m.getSignalSpeed();
             mainSignal.maxNextSpeed = m.getNextSignalSpeed();
@@ -1257,7 +1257,11 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
             mainSignal.rappelState = RappelState(m.rappelState);
             mainSignal.setAdvanceSignalState(MainSignal::State(m.getAdvanceSignalState()));
 
-            if(mainSignal.hasRappel || mainSignal.fixedLimit != FixedLimit::NoLimit)
+            const bool rappelLimit = mainSignal.hasRappel &&
+                                     (mainSignal.rappelState != RappelState::Off ||
+                                      mainSignal.maxCurrentSpeed == MainSignal::SpecialSpeeds::VARIABLE_30_60_100);
+
+            if(mainSignal.fixedLimit != FixedLimit::NoLimit || rappelLimit)
             {
               uint16_t rappelSpeed = 30;
               if(mainSignal.fixedLimit == FixedLimit::Limit60 || mainSignal.rappelState == RappelState::OneLine_60)
