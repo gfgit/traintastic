@@ -456,55 +456,69 @@ uint16_t Simulator::serverPort() const
 
 void Simulator::start(bool discoverable)
 {
+  // Start threads
   m_coreThread = std::thread(
-      [this]()
-      {
-        tick();
-        garbageCollectSegmentState();
-
-        m_coreContext.run();
-      });
+        [this]()
+        {
+          m_coreContext.run();
+        });
 
   m_networkThread = std::thread(
-      [this, discoverable]()
-      {
-        if(m_serverEnabled)
+        [this]()
         {
-          boost::system::error_code ec;
-          const boost::asio::ip::tcp::endpoint endpoint(m_serverLocalHostOnly ? boost::asio::ip::address_v4::loopback() : boost::asio::ip::address_v4::any(), m_serverPort);
+          m_networkContext.run();
+        });
 
-          m_acceptor.open(endpoint.protocol(), ec);
+  // Start main tasks after threads are fully created
+  // NOTE: this way we can access m_networkThread.get_id()
+  boost::asio::post(
+        m_coreContext, [this]()
+        {
+          tick();
+          garbageCollectSegmentState();
+        });
 
-          m_acceptor.bind(endpoint, ec);
 
-          m_acceptor.listen(5, ec);
-
-          if(discoverable)
+  boost::asio::post(
+        m_networkContext, [this, discoverable]()
+        {
+          if(m_serverEnabled)
           {
-            m_socketUDP.open(boost::asio::ip::udp::v4(), ec);
-            if(ec)
-              assert(false);
+            boost::system::error_code ec;
+            const boost::asio::ip::tcp::endpoint endpoint(m_serverLocalHostOnly ? boost::asio::ip::address_v4::loopback() : boost::asio::ip::address_v4::any(), m_serverPort);
 
-            m_socketUDP.set_option(boost::asio::socket_base::reuse_address(true), ec);
-            if(ec)
-              assert(false);
+            m_acceptor.open(endpoint.protocol(), ec);
 
-            m_socketUDP.bind(boost::asio::ip::udp::endpoint(boost::asio::ip::address_v4::any(), defaultPort), ec);
-            if(ec)
-              assert(false);
+            m_acceptor.bind(endpoint, ec);
 
-            doReceive();
+            m_acceptor.listen(5, ec);
+
+            if(discoverable)
+            {
+              m_socketUDP.open(boost::asio::ip::udp::v4(), ec);
+              if(ec)
+                assert(false);
+
+              m_socketUDP.set_option(boost::asio::socket_base::reuse_address(true), ec);
+              if(ec)
+                assert(false);
+
+              m_socketUDP.bind(boost::asio::ip::udp::endpoint(boost::asio::ip::address_v4::any(), defaultPort), ec);
+              if(ec)
+                assert(false);
+
+              doReceive();
+            }
+
+            accept();
           }
 
-          accept();
-        }
+          handShakeSend();
+          handShakeRecv();
+          syncSensorState();
 
-        handShakeSend();
-        handShakeRecv();
-        syncSensorState();
-
-        m_networkContext.run();
-      });
+          m_networkContext.run();
+        });
 }
 
 void Simulator::stop()
