@@ -566,15 +566,26 @@ void Simulator::setPowerOn(bool powerOn)
   if(getSimModeUnlocked() == SimMode::Replica)
   {
     // Send request to master
-    send(SimulatorProtocol::Power(powerOn));
+    boost::asio::post(
+      m_networkContext, [this, powerOn]()
+      {
+        send(SimulatorProtocol::Power(powerOn));
+      });
   }
   else
   {
     if(m_stateData.powerOn != powerOn)
     {
       m_stateData.powerOn = powerOn;
-      send(SimulatorProtocol::Power(m_stateData.powerOn));
-      sendReplicas(SimulatorProtocol::Power(m_stateData.powerOn));
+
+      boost::asio::post(
+        m_networkContext, [this, powerOn=m_stateData.powerOn]()
+        {
+          // Cherry pick value
+          m_networkStateData.powerOn = powerOn;
+          send(SimulatorProtocol::Power(m_stateData.powerOn));
+          sendReplicas(SimulatorProtocol::Power(m_stateData.powerOn));
+        });
     }
   }
 }
@@ -582,18 +593,7 @@ void Simulator::setPowerOn(bool powerOn)
 void Simulator::togglePowerOn()
 {
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
-
-  if(getSimModeUnlocked() == SimMode::Replica)
-  {
-    // Send request to master
-    send(SimulatorProtocol::Power(!m_stateData.powerOn));
-  }
-  else
-  {
-    m_stateData.powerOn = !m_stateData.powerOn;
-    send(SimulatorProtocol::Power(m_stateData.powerOn));
-    sendReplicas(SimulatorProtocol::Power(m_stateData.powerOn));
-  }
+  setPowerOn(!m_stateData.powerOn);
 }
 
 std::pair<Simulator::Point, Simulator::Point> Simulator::getTrainExtents(const StateData &stateData_, const Train &train)
@@ -621,7 +621,11 @@ void Simulator::setTrainDirection(Train &train, bool reverse)
 
   if(getSimModeUnlocked() == SimMode::Replica && train.state.reverse != reverse)
   {
-    send(SimulatorProtocol::TrainRequestSetDirection(train.trainId, reverse));
+    boost::asio::post(
+      m_networkContext, [this, trainId=train.trainId, reverse]()
+      {
+        send(SimulatorProtocol::TrainRequestSetDirection(trainId, reverse));
+      });
     return;
   }
 
@@ -685,7 +689,11 @@ void Simulator::setTrainMode(Train &train, TrainState::Mode mode)
 
   if(getSimModeUnlocked() == SimMode::Replica && train.state.mode != mode)
   {
-    send(SimulatorProtocol::TrainRequestSetMode(train.trainId, mode));
+    boost::asio::post(
+      m_networkContext, [this, trainId=train.trainId, mode]()
+      {
+        send(SimulatorProtocol::TrainRequestSetMode(trainId, mode));
+      });
     return;
   }
 
@@ -720,7 +728,11 @@ void Simulator::applyTrainSpeedDelta(Train &train, float delta)
     const auto step = delta > 0 ?
                           SimulatorProtocol::TrainRequestChangeSpeed::IncreaseStep :
                           SimulatorProtocol::TrainRequestChangeSpeed::DecreaseStep;
-    send(SimulatorProtocol::TrainRequestChangeSpeed(train.trainId, step));
+    boost::asio::post(
+      m_networkContext, [this, trainId=train.trainId, step]()
+      {
+        send(SimulatorProtocol::TrainRequestChangeSpeed(trainId, step));
+      });
     return;
   }
 
@@ -734,8 +746,12 @@ void Simulator::stopTrainAndSetManual(Train &train)
 
   if(getSimModeUnlocked() == SimMode::Replica)
   {
-    const auto step = SimulatorProtocol::TrainRequestChangeSpeed::Stop;
-    send(SimulatorProtocol::TrainRequestChangeSpeed(train.trainId, step));
+    boost::asio::post(
+      m_networkContext, [this, trainId=train.trainId]()
+      {
+        const auto step = SimulatorProtocol::TrainRequestChangeSpeed::Stop;
+        send(SimulatorProtocol::TrainRequestChangeSpeed(trainId, step));
+      });
     return;
   }
 
@@ -1360,7 +1376,6 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
   case OpCode::RequestChannel:
   {
     const auto& m = static_cast<const RequestChannel&>(message);
-    std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
 
     if(staticData.sensorChannelMap.find(m.channel) == staticData.sensorChannelMap.end())
       break;
@@ -2514,7 +2529,6 @@ void Simulator::syncSensorState()
         }
       });
 
-  std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
   for(const std::shared_ptr<SimulatorConnection>& connection : m_connections)
   {
     if(connection->subscribedChannels.empty())
@@ -2628,7 +2642,6 @@ void Simulator::syncReplicaState()
   if(staticData.sensorChannelMap.empty())
     return;
 
-  std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
   Train *trainToSync = nullptr;
   {
     auto it = m_networkStateData.trains.find(mLastTrainSyncId);
@@ -5256,16 +5269,20 @@ bool Simulator::requestAddTrain(const std::string &name, const std::vector<Train
   if(getSimMode() != SimMode::Replica)
     return false;
 
-  QByteArray buf;
-  buf.reserve(100);
+  boost::asio::post(
+    m_networkContext, [this, name, vehicles, segmentIndex, token, startPos, placement, invertDir]()
+    {
+      QByteArray buf;
+      buf.reserve(100);
 
-  QDataStream stream(&buf, QIODeviceBase::WriteOnly);
-  stream.setByteOrder(QDataStream::LittleEndian);
-  stream << uint8_t(SimulatorProtocol::OpCode::TrainRequestAdd);
-  stream << uint16_t(0); // Size placeholder
-  serializeTrainAddRequest(stream, name, vehicles, segmentIndex, token, startPos, placement, invertDir);
+      QDataStream stream(&buf, QIODeviceBase::WriteOnly);
+      stream.setByteOrder(QDataStream::LittleEndian);
+      stream << uint8_t(SimulatorProtocol::OpCode::TrainRequestAdd);
+      stream << uint16_t(0); // Size placeholder
+      serializeTrainAddRequest(stream, name, vehicles, segmentIndex, token, startPos, placement, invertDir);
 
-  sendToMaster(buf);
+      sendToMaster(buf);
+    });
   return true;
 }
 
@@ -5277,7 +5294,11 @@ bool Simulator::removeTrainUser(quint32 trainId)
 
   if(getSimModeUnlocked() == SimMode::Replica)
   {
-    send(SimulatorProtocol::TrainRemoved(trainId, true));
+    boost::asio::post(
+      m_networkContext, [this, trainId]()
+      {
+        send(SimulatorProtocol::TrainRemoved(trainId, true));
+      });
     return true;
   }
   else
@@ -5305,7 +5326,11 @@ bool Simulator::removeTrain(quint32 trainId, bool removeWagons, quint32 suggeste
   if(getSimModeUnlocked() == SimMode::Master)
   {
     // TODO: suggest new active train
-    sendReplicas(SimulatorProtocol::TrainRemoved(trainId, false, suggestedTrainId));
+    boost::asio::post(
+      m_networkContext, [this, trainId, suggestedTrainId]()
+      {
+        sendReplicas(SimulatorProtocol::TrainRemoved(trainId, false, suggestedTrainId));
+      });
   }
 
   return true;
@@ -6112,7 +6137,11 @@ bool Simulator::splitTrain(Train &trainToSplit, const size_t vehicleIdx, const b
     const auto coupleOp = fwd ?
                               SimulatorProtocol::TrainRequestCoupleSplit::SplitFront :
                               SimulatorProtocol::TrainRequestCoupleSplit::SplitRear;
-    send(SimulatorProtocol::TrainRequestCoupleSplit(trainToSplit.trainId, vehicleIdx, coupleOp));
+    boost::asio::post(
+      m_networkContext, [this, trainId=trainToSplit.trainId, vehicleIdx, coupleOp]()
+      {
+        send(SimulatorProtocol::TrainRequestCoupleSplit(trainId, vehicleIdx, coupleOp));
+      });
     return true;
   }
 
@@ -6202,7 +6231,11 @@ bool Simulator::coupleTrain(Train &train, bool fwd, quint32& removedTrainIdOut)
     const auto coupleOp = fwd ?
                               SimulatorProtocol::TrainRequestCoupleSplit::CoupleFront :
                               SimulatorProtocol::TrainRequestCoupleSplit::CoupleRear;
-    send(SimulatorProtocol::TrainRequestCoupleSplit(train.trainId, 0, coupleOp));
+    boost::asio::post(
+      m_networkContext, [this, trainId=train.trainId, coupleOp]()
+      {
+        send(SimulatorProtocol::TrainRequestCoupleSplit(trainId, 0, coupleOp));
+      });
     return true;
   }
 
