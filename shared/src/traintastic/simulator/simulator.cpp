@@ -939,6 +939,8 @@ void Simulator::toggleTurnoutState(size_t segmentIndex, bool setUnknown)
 
 void Simulator::send(const SimulatorProtocol::Message& message)
 {
+  assert(isNetworkThread());
+
   for(const auto& connection : m_connections)
   {
     connection->send(message);
@@ -947,6 +949,8 @@ void Simulator::send(const SimulatorProtocol::Message& message)
 
 void Simulator::sendTo(size_t toConnId, const SimulatorProtocol::Message &message)
 {
+  assert(isNetworkThread());
+
   for(const auto& connection : m_connections)
   {
     if(toConnId != connection->connectionId())
@@ -961,6 +965,8 @@ void Simulator::sendTo(size_t toConnId, const SimulatorProtocol::Message &messag
 
 void Simulator::sendToReplica(size_t toConnId, const SimulatorProtocol::Message &message)
 {
+  assert(isNetworkThread());
+
   for(const auto& connection : m_repliacas)
   {
     if(toConnId != connection->connectionId())
@@ -975,6 +981,8 @@ void Simulator::sendToReplica(size_t toConnId, const SimulatorProtocol::Message 
 
 void Simulator::sendReplicas(const SimulatorProtocol::Message& message)
 {
+  assert(isNetworkThread());
+
   if(getSimModeUnlocked() != SimMode::Master)
     return;
 
@@ -986,6 +994,8 @@ void Simulator::sendReplicas(const SimulatorProtocol::Message& message)
 
 void Simulator::sendReplicas(QByteArray &buf)
 {
+  assert(isNetworkThread());
+
   if(getSimModeUnlocked() != SimMode::Master)
     return;
 
@@ -1000,6 +1010,8 @@ void Simulator::sendReplicas(QByteArray &buf)
 
 void Simulator::sendToMaster(QByteArray &buf)
 {
+  assert(isNetworkThread());
+
   if(getSimModeUnlocked() != SimMode::Replica)
     return;
 
@@ -1015,6 +1027,8 @@ void Simulator::sendToMaster(QByteArray &buf)
 
 void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromConnId)
 {
+  assert(isNetworkThread());
+
   using namespace SimulatorProtocol;
 
   const bool isReplica = getSimModeNetwork() == SimMode::Replica;
@@ -2273,6 +2287,8 @@ void Simulator::onReplicaRemoved(const std::shared_ptr<SimulatorConnection>& con
 
 void Simulator::accept()
 {
+  assert(isNetworkThread());
+
   m_acceptor.async_accept(
       [this](boost::system::error_code ec, boost::asio::ip::tcp::socket socket)
       {
@@ -2296,6 +2312,8 @@ constexpr char ReplicaRequestMessage[] = {'r', 'e', 'p', '?'};
 
 void Simulator::doReceive()
 {
+  assert(isNetworkThread());
+
   m_socketUDP.async_receive_from(
       boost::asio::buffer(m_udpBuffer),
       m_remoteEndpoint,
@@ -2340,6 +2358,8 @@ void Simulator::doReceive()
 
 void Simulator::doSendReplicaDiscover()
 {
+  assert(isNetworkThread());
+
   if(getSimModeNetwork() != SimMode::Replica)
     return;
 
@@ -2373,6 +2393,8 @@ void Simulator::doSendReplicaDiscover()
 
 void Simulator::doReceiveReplicaDiscover()
 {
+  assert(isNetworkThread());
+
   if(getSimModeNetwork() != SimMode::Replica)
     return;
 
@@ -2425,6 +2447,8 @@ void Simulator::doReceiveReplicaDiscover()
 
 void Simulator::tick()
 {
+  assert(isCoreThread());
+
   m_tickTimer.expires_after(tickRate);
   m_tickTimer.async_wait(
       [this](std::error_code ec)
@@ -2457,6 +2481,8 @@ void Simulator::tick()
 
 void Simulator::handShakeSend()
 {
+  assert(isNetworkThread());
+
   m_handShakeSendTimer.expires_after(handShakeRateSend);
   m_handShakeSendTimer.async_wait(
       [this](std::error_code ec)
@@ -2487,6 +2513,8 @@ void Simulator::handShakeSend()
 
 void Simulator::handShakeRecv()
 {
+  assert(isNetworkThread());
+
   m_handShakeRecvTimer.expires_after(handShakeRateRecv);
   m_handShakeRecvTimer.async_wait(
       [this](std::error_code ec)
@@ -2533,6 +2561,8 @@ void Simulator::handShakeRecv()
 
 void Simulator::syncSensorState()
 {
+  assert(isNetworkThread());
+
   if(getSimModeNetwork() == SimMode::Replica)
     return;
 
@@ -2646,6 +2676,8 @@ void Simulator::syncSensorState()
 
 void Simulator::syncReplicaState()
 {
+  assert(isNetworkThread());
+
   m_syncReplicaStateTimer.expires_after(syncReplicaRate);
   m_syncReplicaStateTimer.async_wait(
       [this](std::error_code ec)
@@ -2736,6 +2768,8 @@ void Simulator::syncReplicaState()
 
 void Simulator::syncReplicaTrainFull()
 {
+  assert(isNetworkThread());
+
   // Less often we send full train state
 
   m_syncReplicaTrainFullStateTimer.expires_after(syncReplicaFullRate);
@@ -2779,6 +2813,8 @@ void Simulator::syncReplicaTrainFull()
 
 void Simulator::garbageCollectSegmentState()
 {
+  assert(isCoreThread());
+
   m_garbageCollectTimer.expires_after(garbageCollectRate);
   m_garbageCollectTimer.async_wait(
       [this](std::error_code ec)
