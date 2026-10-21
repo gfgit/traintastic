@@ -532,6 +532,12 @@ void MainWindow::setToolBarVisible(bool val)
 
 void MainWindow::setMaster()
 {
+  if(!m_view->simulator())
+  {
+    QMessageBox::warning(this, tr("Invalid simulation"), tr("Please first load a simulation!"));
+    return;
+  }
+
   if(m_view->simulator()->getSimMode() == Simulator::SimMode::Master)
     return; // Already master
 
@@ -547,6 +553,12 @@ void MainWindow::setMaster()
 
 void MainWindow::setReplica()
 {
+  if(!m_view->simulator())
+  {
+    QMessageBox::warning(this, tr("Invalid simulation"), tr("Please first load a simulation!"));
+    return;
+  }
+
   if(m_view->simulator()->getSimMode() == Simulator::SimMode::Replica)
     return; // Already master
 
