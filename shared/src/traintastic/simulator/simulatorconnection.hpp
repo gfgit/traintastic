@@ -49,7 +49,12 @@ public:
   size_t m_lastSyncedChannelIdx = 0;
   size_t m_nextSyncBatchIdx = 0;
 
-  inline auto remoteEndpoint() { return m_socket.is_open() ? m_socket.remote_endpoint() : boost::asio::ip::tcp::endpoint(); }
+  inline auto remoteEndpoint()
+  {
+    boost::system::error_code ec;
+    auto result = m_socket.remote_endpoint(ec);
+    return !ec ? result : boost::asio::ip::tcp::endpoint();
+  }
 
 private:
   bool m_handShakeResponseReceived = true;
