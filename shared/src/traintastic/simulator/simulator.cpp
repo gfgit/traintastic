@@ -3242,7 +3242,7 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
       }
 
       if(train.state.betweenSignalsCount == 0)
-        train.state.otherPreviousSignalSpeed = MainSignal::SpecialSpeeds::NO_LIMIT;
+        train.state.previousSignalSpeed = MainSignal::SpecialSpeeds::NO_LIMIT;
 
       if(train.state.betweenSignalsCount <= 1)
         train.state.otherPreviousSignalSpeed = MainSignal::SpecialSpeeds::NO_LIMIT;
@@ -3276,7 +3276,7 @@ bool Simulator::updateVehiclePosition(Vehicle *vehicle, bool frontFace,
       // When entire train has passed speed release point, increase speed
       if(train.state.betweenSignalsCount == 0)
       {
-        train.state.otherPreviousSignalSpeed = MainSignal::SpecialSpeeds::NO_LIMIT;
+        train.state.previousSignalSpeed = MainSignal::SpecialSpeeds::NO_LIMIT;
 
         if(train.state.passedSignalSpeed != MainSignal::SpecialSpeeds::OVERRIDE_BRAKE)
           train.state.passedSignalSpeed = MainSignal::SpecialSpeeds::NO_LIMIT; // Keep OVERRIDE_BRAKE
