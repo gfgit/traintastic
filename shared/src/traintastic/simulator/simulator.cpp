@@ -1544,14 +1544,20 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
   }
   case OpCode::TrainSpeedFactorChanged:
   {
-    if(!isReplica)
-      break;
-
     const auto& m = static_cast<const TrainSpeedFactorChanged&>(message);
     boost::asio::post(
         m_coreContext, [this, m=m]()
         {
           std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+
+          if(getSimModeUnlocked() == SimMode::Replica)
+          {
+            // If replica, just set the value received
+            m_stateData.trainSpeedFactor = m.trainSpeedFactor;
+            return;
+          }
+
+          // If master propagate
           setTrainSpeedFactor(m.trainSpeedFactor);
         });
     break;
@@ -2136,8 +2142,9 @@ void Simulator::onConnectionRemoved(const size_t connId, const std::vector<uint1
       m_stateData.sensors[idx].encoding = SensorState::Encoding::CodeAbsent;
     }
 
-    // Also power off world
+    // Also power off world and reset train speed factor
     m_stateData.powerOn = false;
+    m_stateData.trainSpeedFactor = 1.0f;
 
     // Now remove all trains
     {
@@ -2711,10 +2718,12 @@ void Simulator::syncReplicaTrainFull()
         }
       });
 
+  // Refresh train speed factor periodically
+  sendReplicas(SimulatorProtocol::TrainSpeedFactorChanged(m_networkStateData.trainSpeedFactor));
+
   if(staticData.sensorChannelMap.empty())
     return;
 
-  std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
   Train *trainToSync = nullptr;
   {
     auto it = m_networkStateData.trains.find(mLastTrainSyncFullId);
@@ -5747,11 +5756,35 @@ bool Simulator::checkNextSignal(Train &train)
 
 void Simulator::setTrainSpeedFactor(float val)
 {
+  val = std::clamp(val, 1.0f, 7.0f); // 100% to 700%
+
   std::lock_guard<std::recursive_mutex> lock(m_stateMutex);
+  if(val == m_stateData.trainSpeedFactor)
+    return;
+
+  if(getSimModeUnlocked() == SimMode::Replica)
+  {
+    // Send to Master and DO NOT update our value
+    boost::asio::post(
+      m_networkContext, [this, factor=val]()
+      {
+        send(SimulatorProtocol::TrainSpeedFactorChanged(factor));
+      });
+    return;
+  }
+
   m_stateData.trainSpeedFactor = val;
 
   if(getSimModeUnlocked() == SimMode::Master)
-    sendReplicas(SimulatorProtocol::TrainSpeedFactorChanged(m_stateData.trainSpeedFactor));
+  {
+    boost::asio::post(
+      m_networkContext, [this, factor=m_stateData.trainSpeedFactor]()
+      {
+        // Cherry pick value
+        m_networkStateData.trainSpeedFactor = factor;
+        sendReplicas(SimulatorProtocol::TrainSpeedFactorChanged(factor));
+      });
+  }
 }
 
 void Simulator::loadTrains(const nlohmann::json &world)
