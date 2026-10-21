@@ -289,23 +289,28 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
     if(hasActiveTrain)
     {
       QString distanceToSignal = info.distanceToSignal < 0 ? QLatin1String("----") : QStringLiteral("%1 m").arg(info.distanceToSignal, 4, 'f', 1);
-      QString signalSpeed = info.signalSpeed < 0 ? QLatin1String("----") : QStringLiteral("%1 km/h").arg(info.signalSpeed / Simulator::SpeedKmHtoTick, 4, 'f', 1);
 
-      m_currentTrainInfo->setText(tr(" S: %1 km/h, T: %2 km/h, M: %3 km/h, D: %4, SS: %5 ") // space as margin
+      m_currentTrainInfo->setText(tr(" S: %1 km/h, T: %2 km/h, D: %3, SS: %4 PrL: %5 ") // space as margin
         .arg(info.speed / Simulator::SpeedKmHtoTick, 4, 'f', 1)
         .arg(info.targetSpeed / Simulator::SpeedKmHtoTick, 4, 'f', 1)
-        .arg(info.maxSpeed / Simulator::SpeedKmHtoTick, 4, 'f', 1)
-        .arg(distanceToSignal, signalSpeed));
+        .arg(distanceToSignal,
+             speedToText(info.passedSignalNextSpeed, false),
+             speedToText(info.passedSignalSpeed, false)));
 
       m_currentTrainInfo->setToolTip(tr("Speed: %1 km/h\n"
                                         "Target: %2 km/h\n"
                                         "Max: %3 km/h\n"
                                         "Distance to signal: %4 m\n"
-                                        "Signal Speed: %5 km/h")
+                                        "Signal Speed: %5 km/h\n"
+                                        "Prev Speed: %6 km/h\n"
+                                        "Old prev speed: %7 km/h")
         .arg(info.speed / Simulator::SpeedKmHtoTick, 4, 'f', 1)
         .arg(info.targetSpeed / Simulator::SpeedKmHtoTick, 4, 'f', 1)
         .arg(info.maxSpeed / Simulator::SpeedKmHtoTick, 4, 'f', 1)
-        .arg(distanceToSignal, signalSpeed));
+        .arg(distanceToSignal,
+             speedToText(info.passedSignalNextSpeed),
+             speedToText(info.passedSignalSpeed),
+             speedToText(info.previousSignalSpeed)));
     }
     else
     {

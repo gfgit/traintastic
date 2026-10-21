@@ -52,7 +52,10 @@ public:
     float targetSpeed = 0.0;
     float maxSpeed = 0.0;
     float distanceToSignal = -1.0;
-    float signalSpeed = -1.0;
+
+    uint16_t passedSignalSpeed     = Simulator::MainSignal::SpecialSpeeds::INVALID;
+    uint16_t passedSignalNextSpeed = Simulator::MainSignal::SpecialSpeeds::INVALID;
+    uint16_t previousSignalSpeed   = Simulator::MainSignal::SpecialSpeeds::INVALID;
   };
 
   Simulator* simulator() const;
@@ -251,5 +254,24 @@ private slots:
   void doSetCurrentTrainIndex(quint32 newTrainId);
   void doSetFollowTrain(quint32 newTrainId);
 };
+
+static inline QString speedToText(uint16_t speed, bool longStr = true)
+{
+  switch (speed)
+  {
+  case Simulator::MainSignal::SpecialSpeeds::INVALID:
+    return longStr ? SimulatorView::tr("INVALID") : SimulatorView::tr("---");
+  case Simulator::MainSignal::SpecialSpeeds::NO_LIMIT:
+    return longStr ? SimulatorView::tr("NO_LIMIT") : SimulatorView::tr("max");
+  case Simulator::MainSignal::SpecialSpeeds::VARIABLE_30_60_100:
+    return longStr ? SimulatorView::tr("30/60/100 km/h") : SimulatorView::tr("3/6/1");
+  case Simulator::MainSignal::SpecialSpeeds::OVERRIDE_BRAKE:
+    return longStr ? SimulatorView::tr("Short brake") : SimulatorView::tr("brk");
+  default:
+    break;
+  }
+
+  return SimulatorView::tr("%1 km/h").arg(speed);
+}
 
 #endif

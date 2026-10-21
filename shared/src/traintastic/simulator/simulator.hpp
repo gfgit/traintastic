@@ -336,8 +336,6 @@ public:
     std::string name;
     size_t ownerConnectionId = invalidIndex;
 
-    double maxSpeed = 0;
-
     using SpecialSpeeds = SimulatorProtocol::SignalSetState::SpecialSpeeds;
     uint16_t maxCurrentSpeed = SpecialSpeeds::INVALID;
     uint16_t maxNextSpeed = SpecialSpeeds::INVALID; // Next signal
@@ -514,9 +512,8 @@ public:
 
     uint16_t passedSignalSpeed = MainSignal::SpecialSpeeds::NO_LIMIT;
     uint16_t passedSignalNextSpeed = MainSignal::SpecialSpeeds::NO_LIMIT;
-    uint16_t previousSignalSpeed = MainSignal::SpecialSpeeds::NO_LIMIT;
+    uint16_t previousSignalSpeed = 30;
     uint16_t otherPreviousSignalSpeed = MainSignal::SpecialSpeeds::NO_LIMIT;
-
     uint8_t betweenSignalsCount = 0;
 
     bool reverse = false;
@@ -551,6 +548,15 @@ public:
         return false;
 
       return speed == 0.0f && targetSpeed == 0.0f;
+    }
+
+    inline void resetSignalSpeeds()
+    {
+      betweenSignalsCount = 0;
+      passedSignalSpeed = 30; // Initial 30 speed limit
+      passedSignalNextSpeed = MainSignal::SpecialSpeeds::INVALID;
+      previousSignalSpeed = MainSignal::SpecialSpeeds::NO_LIMIT;
+      otherPreviousSignalSpeed = MainSignal::SpecialSpeeds::NO_LIMIT;
     }
   };
 

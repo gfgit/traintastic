@@ -3165,25 +3165,6 @@ void SimulatorView::showItemTooltip(const Simulator::Point &point, QHelpEvent *e
       objType = tr("main signal");
       const Simulator::MainSignal &mainSignal = m_stateData.mainSignals.at(std::string(obj.signalName));
 
-      auto speedToText = [](uint16_t speed) -> QString
-      {
-        switch (speed)
-        {
-        case Simulator::MainSignal::SpecialSpeeds::INVALID:
-          return tr("INVALID");
-        case Simulator::MainSignal::SpecialSpeeds::NO_LIMIT:
-          return tr("NO_LIMIT");
-        case Simulator::MainSignal::SpecialSpeeds::VARIABLE_30_60_100:
-          return tr("30/60/100 km/h");
-        case Simulator::MainSignal::SpecialSpeeds::OVERRIDE_BRAKE:
-          return tr("Short brake");
-        default:
-          break;
-        }
-
-        return tr("%1 km/h").arg(speed);
-      };
-
       objDescr = tr("Name: <b>%1</b><br>"
                     "Addr: <b>%2</b><br>"
                     "Chan: <b>%3</b><br>"
@@ -3432,49 +3413,30 @@ void SimulatorView::tick(const Simulator::StateData &newStateData)
   {
     auto train = m_stateData.getTrainById(m_oldCurrentTrainId);
 
-    if(m_currentTrainInfo.speed != train->state.speed)
+    auto updateVar = [&currentTrainNeedsUpdate](auto &val, const auto &newVal)
     {
-      currentTrainNeedsUpdate = true;
-      m_currentTrainInfo.speed = train->state.speed;
-    }
+      if(val != newVal)
+      {
+        currentTrainNeedsUpdate = true;
+        val = newVal;
+      }
+    };
 
-    if(m_currentTrainInfo.targetSpeed != train->state.targetSpeed)
-    {
-      currentTrainNeedsUpdate = true;
-      m_currentTrainInfo.targetSpeed = train->state.targetSpeed;
-    }
-
-    if(m_currentTrainInfo.maxSpeed != train->speedMax)
-    {
-      currentTrainNeedsUpdate = true;
-      m_currentTrainInfo.maxSpeed = train->speedMax;
-    }
+    updateVar(m_currentTrainInfo.speed, train->state.speed);
+    updateVar(m_currentTrainInfo.targetSpeed, train->state.targetSpeed);
+    updateVar(m_currentTrainInfo.maxSpeed, train->state.speed);
+    updateVar(m_currentTrainInfo.previousSignalSpeed, train->state.previousSignalSpeed);
+    updateVar(m_currentTrainInfo.passedSignalSpeed, train->state.passedSignalSpeed);
 
     if(train->state.nextSignal.signal)
     {
-      if(m_currentTrainInfo.distanceToSignal != train->state.nextSignal.distance)
-      {
-        currentTrainNeedsUpdate = true;
-        m_currentTrainInfo.distanceToSignal = train->state.nextSignal.distance;
-      }
-
-      if(m_currentTrainInfo.signalSpeed != train->state.nextSignal.signal->maxSpeed)
-      {
-        currentTrainNeedsUpdate = true;
-
-        // Access our copy of signal TODO: use numeric IDs
-        const Simulator::MainSignal &s = m_stateData.mainSignals.at(train->state.nextSignal.signal->name);
-        m_currentTrainInfo.signalSpeed = s.maxSpeed;
-      }
+      updateVar(m_currentTrainInfo.distanceToSignal, train->state.nextSignal.distance);
+      updateVar(m_currentTrainInfo.passedSignalNextSpeed, train->state.nextSignal.signal->getCurrentSpeed(train->state.passedSignalNextSpeed));
     }
     else
     {
-      if(m_currentTrainInfo.distanceToSignal != -1.0 || m_currentTrainInfo.signalSpeed != -1.0)
-      {
-        currentTrainNeedsUpdate = true;
-        m_currentTrainInfo.distanceToSignal = -1.0;
-        m_currentTrainInfo.signalSpeed = -1.0;
-      }
+      updateVar(m_currentTrainInfo.distanceToSignal, -1.0);
+      updateVar(m_currentTrainInfo.passedSignalNextSpeed, train->state.passedSignalNextSpeed);
     }
   }
 
