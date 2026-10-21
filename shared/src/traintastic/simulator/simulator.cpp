@@ -5402,7 +5402,8 @@ bool Simulator::removeVehicle(Vehicle *vehicle)
   return true;
 }
 
-void Simulator::sendTrainFullRefreshReplica(SimulatorProtocol::OpCode op, Train *train, bool networkThread)
+void Simulator::sendTrainFullRefreshReplica(SimulatorProtocol::OpCode op,
+                                            Train *train, bool networkThread, bool isFull)
 {
   QByteArray buf;
   buf.reserve(100);
@@ -5411,7 +5412,7 @@ void Simulator::sendTrainFullRefreshReplica(SimulatorProtocol::OpCode op, Train 
   stream.setByteOrder(QDataStream::LittleEndian);
   stream << uint8_t(op);
   stream << uint16_t(0); // Size placeholder
-  serializeTrain(stream, *train, true, networkThread ? m_networkStateData : m_stateData);
+  serializeTrain(stream, *train, isFull, networkThread ? m_networkStateData : m_stateData);
 
   if(networkThread)
   {
@@ -5419,41 +5420,25 @@ void Simulator::sendTrainFullRefreshReplica(SimulatorProtocol::OpCode op, Train 
   }
   else
   {
+    std::vector<Vehicle> vehicles;
+    vehicles.reserve(train->vehicles.size());
+    for(const auto &item : train->vehicles)
+    {
+      const auto &vehicle = m_stateData.getVehicleById(item.vehicleId);
+      vehicles.push_back(*vehicle);
+    }
+
     boost::asio::post(
-        m_networkContext, [this, buf=buf, trainCopy=*train]()
+        m_networkContext, [this, buf=buf, trainCopy=*train, vehiclesCopy=std::move(vehicles)]()
         {
           // Cherry pick new state
           m_networkStateData.trains[trainCopy.trainId] = trainCopy;
 
-          // TODO: avoid another buf copy
-          QByteArray bufCopy = buf;
-          sendReplicas(bufCopy);
-        });
-  }
-}
-
-void Simulator::sendTrainStateRefreshReplica(Train *train, bool networkThread)
-{
-  QByteArray buf;
-  buf.reserve(100);
-
-  QDataStream stream(&buf, QIODeviceBase::WriteOnly);
-  stream.setByteOrder(QDataStream::LittleEndian);
-  stream << uint8_t(SimulatorProtocol::OpCode::TrainStateRefresh);
-  stream << uint16_t(0); // Size placeholder
-  serializeTrain(stream, *train, false, networkThread ? m_networkStateData : m_stateData);
-
-  if(networkThread)
-  {
-    sendReplicas(buf);
-  }
-  else
-  {
-    boost::asio::post(
-        m_networkContext, [this, buf=buf, trainCopy=*train]()
-        {
-          // Cherry pick new state
-          m_networkStateData.trains[trainCopy.trainId] = trainCopy;
+          // We also need to cherry pick vehicles
+          for(const auto &vehicle : vehiclesCopy)
+          {
+            m_networkStateData.vehicles[vehicle.vehicleId] = vehicle;
+          }
 
           // TODO: avoid another buf copy
           QByteArray bufCopy = buf;
