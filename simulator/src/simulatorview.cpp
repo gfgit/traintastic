@@ -2545,6 +2545,10 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
   {
     std::lock_guard<std::recursive_mutex> lock(m_simulator->stateMutex());
 
+    // Only use current Simulator core thread state since we are locking mutex
+    // NOTE: DO NOT MIX Simulator core thread state data references with SimulatorView state data references
+    const Simulator::StateData &stateDataRef = m_simulator->getStateDataRefUnlocked();
+
     Simulator::Vehicle *vehicle = m_simulator->getVehicleNear(idx, posInSeg, 5);
     if(vehicle && vehicle->activeTrainId != Simulator::invalidTrainId)
     {
@@ -2552,7 +2556,7 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
       m_trainUnderMouseVehicleIdx = Simulator::invalidIndex;
 
 
-      auto train = m_stateData.getTrainById(vehicle->activeTrainId);
+      auto train = stateDataRef.getTrainById(vehicle->activeTrainId);
       if(train)
       {
         trainName = QString::fromStdString(train->name);
@@ -2600,7 +2604,7 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
             if(vehicle->activeTrainId == otherVehicle->activeTrainId)
               return false;
 
-            auto otherTrain = m_stateData.getTrainById(otherVehicle->activeTrainId);
+            auto otherTrain = stateDataRef.getTrainById(otherVehicle->activeTrainId);
             if(!otherTrain)
               return false;
 
@@ -2754,7 +2758,7 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
 
         // NOTE: this might remove active train, if so set active train to trainToCouple
         quint32 removedTrainIdx = Simulator::invalidTrainId;
-        if(!m_simulator->coupleTrain(*trainToCouple, fwd, removedTrainIdx))
+        if(!m_simulator->coupleTrain(trainToCouple->trainId, fwd, removedTrainIdx))
         {
           // TODO: show error
         }
@@ -2774,7 +2778,7 @@ void SimulatorView::contextMenuEvent(QContextMenuEvent *e)
         bool fwd = result == splitFwdAct;
         if(trainToSplit->state.reverse)
           fwd = !fwd;
-        m_simulator->splitTrain(*trainToSplit, m_trainUnderMouseVehicleIdx, fwd, newTrainId);
+        m_simulator->splitTrain(trainToSplit->trainId, m_trainUnderMouseVehicleIdx, fwd, newTrainId);
       }
     }
   }

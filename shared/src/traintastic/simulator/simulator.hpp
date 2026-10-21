@@ -872,8 +872,8 @@ public:
                           bool canGoForward = true, bool canGoBackwards = true,
                           float *outDistance = nullptr);
 
-  bool splitTrain(Train &trainToSplit, const size_t vehicleIdx, const bool fwd, quint32 &trainIdOut);
-  bool coupleTrain(Train &train, bool fwd, quint32 &removedTrainIdOut);
+  bool splitTrain(quint32 trainToSplitId, const size_t vehicleIdx, const bool fwd, quint32 &trainIdOut);
+  bool coupleTrain(quint32 trainId, bool fwd, quint32 &removedTrainIdOut);
 
   void sendMasterFollowTrain(quint32 trainId);
 
@@ -892,6 +892,9 @@ public:
   inline SimMode getSimModeNetwork() const { return mNetworkSimMode; };
 
   inline SimMode getSimModeUnlocked() const { return mNetworkSimMode; };
+
+  // NOTE: only for special cases, do not use in general
+  inline const StateData& getStateDataRefUnlocked() const { return m_stateData; };
 
 private:
   friend struct TrainState;

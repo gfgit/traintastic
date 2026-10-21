@@ -1677,23 +1677,23 @@ void Simulator::receive(const SimulatorProtocol::Message& message, size_t fromCo
           {
           case TrainRequestCoupleSplit::CoupleFront:
           {
-            coupleTrain(*train, true, otherTrainId);
+            coupleTrain(train->trainId, true, otherTrainId);
             break;
           }
           case TrainRequestCoupleSplit::CoupleRear:
           {
-            coupleTrain(*train, false, otherTrainId);
+            coupleTrain(train->trainId, false, otherTrainId);
             break;
           }
           case TrainRequestCoupleSplit::SplitFront:
           {
-            splitTrain(*train, m.getVehicleIdx(),
+            splitTrain(train->trainId, m.getVehicleIdx(),
                        true, otherTrainId);
             break;
           }
           case TrainRequestCoupleSplit::SplitRear:
           {
-            splitTrain(*train, m.getVehicleIdx(),
+            splitTrain(train->trainId, m.getVehicleIdx(),
                        false, otherTrainId);
             break;
           }
@@ -6121,8 +6121,14 @@ Simulator::Vehicle *Simulator::getVehicleNear(size_t segmentIdx,
   return bestVehicle;
 }
 
-bool Simulator::splitTrain(Train &trainToSplit, const size_t vehicleIdx, const bool fwd, quint32 &trainIdOut)
+bool Simulator::splitTrain(quint32 trainToSplitId, const size_t vehicleIdx, const bool fwd, quint32 &trainIdOut)
 {
+  auto trainPtr = m_stateData.getTrainById(trainToSplitId);
+  if(!trainPtr)
+    return false;
+
+  Train &trainToSplit = *trainPtr;
+
   if(!trainToSplit.state.isManualAndStopped())
     return false; // Train must be Manual and stopped
 
@@ -6221,8 +6227,13 @@ bool Simulator::splitTrain(Train &trainToSplit, const size_t vehicleIdx, const b
   return true;
 }
 
-bool Simulator::coupleTrain(Train &train, bool fwd, quint32& removedTrainIdOut)
+bool Simulator::coupleTrain(quint32 trainId, bool fwd, quint32& removedTrainIdOut)
 {
+  auto trainPtr = m_stateData.getTrainById(trainId);
+  if(!trainPtr)
+    return false;
+
+  Train &train = *trainPtr;
   if(!train.state.isManualAndStopped() || train.vehicles.empty())
     return false; // Train must be Manual and stopped
 
