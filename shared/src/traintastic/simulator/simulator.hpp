@@ -833,6 +833,7 @@ public:
 
   void send(const SimulatorProtocol::Message& message);
   void sendTo(size_t toConnId, const SimulatorProtocol::Message& message);
+  void sendToReplica(size_t toConnId, const SimulatorProtocol::Message& message);
   void receive(const SimulatorProtocol::Message& message, size_t fromConnId);
   void receiveVariableSize(const SimulatorProtocol::Message& message, size_t fromConnId);
 
@@ -901,6 +902,9 @@ public:
 
   // NOTE: only for special cases, do not use in general
   inline const StateData& getStateDataRefUnlocked() const { return m_stateData; };
+
+  inline bool isCoreThread() const { return std::this_thread::get_id() == m_coreThread.get_id(); }
+  inline bool isNetworkThread() const { return std::this_thread::get_id() == m_coreThread.get_id(); }
 
 private:
   friend struct TrainState;

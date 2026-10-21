@@ -952,8 +952,25 @@ void Simulator::sendTo(size_t toConnId, const SimulatorProtocol::Message &messag
     if(toConnId != connection->connectionId())
       continue;
     connection->send(message);
-    break;
+    return;
   }
+
+  // Ensure valid toConnId
+  assert(false);
+}
+
+void Simulator::sendToReplica(size_t toConnId, const SimulatorProtocol::Message &message)
+{
+  for(const auto& connection : m_repliacas)
+  {
+    if(toConnId != connection->connectionId())
+      continue;
+    connection->send(message);
+    return;
+  }
+
+  // Ensure valid toConnId
+  assert(false);
 }
 
 void Simulator::sendReplicas(const SimulatorProtocol::Message& message)
@@ -2026,7 +2043,7 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message, s
             boost::asio::post(
                 m_networkContext, [this, fromConnId, token]()
                 {
-                  sendTo(fromConnId, SimulatorProtocol::TrainRequestAddReply(token, true));
+                  sendToReplica(fromConnId, SimulatorProtocol::TrainRequestAddReply(token, true));
                 });
             return;
           }
@@ -2040,7 +2057,7 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message, s
             boost::asio::post(
                 m_networkContext, [this, fromConnId, token]()
                 {
-                  sendTo(fromConnId, SimulatorProtocol::TrainRequestAddReply(token, true));
+                  sendToReplica(fromConnId, SimulatorProtocol::TrainRequestAddReply(token, true));
                 });
             return;
           }
@@ -2049,7 +2066,7 @@ void Simulator::receiveVariableSize(const SimulatorProtocol::Message& message, s
           boost::asio::post(
               m_networkContext, [this, fromConnId, token, trainId]()
               {
-                sendTo(fromConnId, SimulatorProtocol::TrainRequestAddReply(token, false, trainId));
+                sendToReplica(fromConnId, SimulatorProtocol::TrainRequestAddReply(token, false, trainId));
               });
         });
     break;
