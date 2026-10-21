@@ -2816,6 +2816,26 @@ void SimulatorView::setFollowTrainRotation(bool newFollowTrainRotation)
   emit uiOptionsChanged();
 }
 
+bool SimulatorView::isPowerOn() const
+{
+  if(!m_simulator)
+    return false;
+  return m_stateData.powerOn;
+}
+
+void SimulatorView::setPowerOn(bool newPowerOn)
+{
+  if(!m_simulator)
+    return;
+
+  if(m_stateData.powerOn == newPowerOn)
+    return;
+
+  // Keep a local copy to filter GUI calling us back with same values
+  m_stateData.powerOn = newPowerOn;
+  m_simulator->setPowerOn(m_stateData.powerOn);
+}
+
 bool SimulatorView::followActiveTrain() const
 {
   return m_followActiveTrain;

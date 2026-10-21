@@ -133,6 +133,9 @@ public:
   bool followTrainRotation() const;
   void setFollowTrainRotation(bool newFollowTrainRotation);
 
+  bool isPowerOn() const;
+  void setPowerOn(bool newPowerOn);
+
 signals:
   void tickActiveChanged(float value);
   void powerOnChanged(bool value);

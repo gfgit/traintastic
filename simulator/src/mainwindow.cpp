@@ -178,11 +178,9 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
       &QAction::toggled,
       [this](bool value)
       {
-        if(auto* simulator = m_view->simulator())
-        {
-          simulator->setPowerOn(value);
-        }
+        m_view->setPowerOn(value);
       });
+    connect(m_view, &SimulatorView::powerOnChanged, m_power, &QAction::setChecked);
 
     viewMenu->addSeparator();
     viewMenu->addAction(m_power);
@@ -333,7 +331,6 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags)
         m_tickActiveFilter.clear();
       }
     });
-  connect(m_view, &SimulatorView::powerOnChanged, m_power, &QAction::setChecked);
 }
 
 void MainWindow::load(const QString& filename, bool zoomToDefault)
